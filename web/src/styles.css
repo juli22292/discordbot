@@ -17,6 +17,9 @@
   --violet: #b39cff;
   --shadow: 0 18px 54px rgba(0, 0, 0, 0.34);
   --soft-shadow: 0 12px 32px rgba(0, 0, 0, 0.22);
+  --focus-ring: 0 0 0 4px rgba(119, 183, 255, 0.15);
+  --green-glow: 0 0 30px rgba(77, 219, 143, 0.18);
+  --blue-glow: 0 0 28px rgba(119, 183, 255, 0.18);
   font-family:
     Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 }
@@ -72,7 +75,9 @@ p {
 .app-shell {
   min-height: 100vh;
   background:
-    repeating-linear-gradient(90deg, rgba(255, 255, 255, 0.025) 0 1px, transparent 1px 80px),
+    linear-gradient(135deg, rgba(77, 219, 143, 0.1), transparent 32%),
+    linear-gradient(225deg, rgba(119, 183, 255, 0.1), transparent 34%),
+    repeating-linear-gradient(90deg, rgba(255, 255, 255, 0.03) 0 1px, transparent 1px 80px),
     repeating-linear-gradient(0deg, rgba(255, 255, 255, 0.018) 0 1px, transparent 1px 80px),
     transparent;
 }
@@ -236,12 +241,13 @@ p {
   align-items: center;
   gap: 7px;
   min-height: 28px;
-  padding: 5px 9px;
+  padding: 5px 10px;
   border: 1px solid var(--border-soft);
   border-radius: 999px;
   color: var(--muted-strong);
   background: rgba(34, 41, 54, 0.86);
   font-size: 12px;
+  font-weight: 760;
   white-space: nowrap;
 }
 
@@ -394,7 +400,9 @@ p {
   gap: 16px;
   padding: 14px 22px;
   border-bottom: 1px solid var(--border-soft);
-  background: rgba(11, 14, 19, 0.86);
+  background:
+    linear-gradient(180deg, rgba(21, 25, 34, 0.92), rgba(11, 14, 19, 0.82)),
+    rgba(11, 14, 19, 0.86);
   backdrop-filter: blur(16px);
 }
 
@@ -440,13 +448,14 @@ p {
   border-radius: 8px;
   color: var(--muted);
   background: transparent;
-  transition: color 160ms ease, background 160ms ease;
+  transition: color 160ms ease, background 160ms ease, transform 160ms ease;
 }
 
 .top-links button:hover,
 .top-links a:hover {
   color: var(--text);
   background: rgba(255, 255, 255, 0.06);
+  transform: translateY(-1px);
 }
 
 .user-chip {
@@ -506,7 +515,16 @@ p {
   padding: 14px;
   border: 1px solid var(--border-soft);
   border-radius: 8px;
-  background: rgba(9, 11, 16, 0.42);
+  background:
+    linear-gradient(145deg, rgba(255, 255, 255, 0.055), transparent 42%),
+    rgba(9, 11, 16, 0.48);
+  transition: transform 180ms ease, border-color 180ms ease, background 180ms ease;
+}
+
+.metric-card:hover,
+.status-tile:hover {
+  transform: translateY(-2px);
+  border-color: rgba(119, 183, 255, 0.25);
 }
 
 .metric-card span,
@@ -553,7 +571,8 @@ p {
   min-height: 192px;
   padding: 16px;
   overflow: hidden;
-  transition: transform 180ms ease, border-color 180ms ease, background 180ms ease;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.035);
+  transition: transform 180ms ease, border-color 180ms ease, background 180ms ease, box-shadow 180ms ease;
 }
 
 .guild-card::before {
@@ -569,6 +588,7 @@ p {
   transform: translateY(-3px);
   border-color: rgba(119, 183, 255, 0.32);
   background: rgba(26, 31, 42, 0.95);
+  box-shadow: var(--blue-glow), var(--soft-shadow);
 }
 
 .guild-card:hover::before {
@@ -662,13 +682,17 @@ p {
   padding: 9px 13px;
   border-radius: 8px;
   border: 1px solid transparent;
-  transition: transform 160ms ease, filter 160ms ease, background 160ms ease, border-color 160ms ease;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.16);
+  transition: transform 160ms ease, filter 160ms ease, background 160ms ease, border-color 160ms ease, box-shadow 160ms ease;
 }
 
 .primary-action {
   color: #06110b;
-  background: linear-gradient(135deg, #55e19a, #7ab8ff);
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.32), transparent 40%),
+    linear-gradient(135deg, #54df98, #75c4ff);
   font-weight: 800;
+  box-shadow: var(--green-glow), inset 0 1px 0 rgba(255, 255, 255, 0.42);
 }
 
 .primary-action:hover,
@@ -679,10 +703,30 @@ p {
   filter: brightness(1.04);
 }
 
+.primary-action:active,
+.secondary-action:active,
+.danger-action:active,
+.icon-button:active {
+  transform: translateY(0);
+  filter: brightness(0.98);
+}
+
+.primary-action:focus-visible,
+.secondary-action:focus-visible,
+.danger-action:focus-visible,
+.icon-button:focus-visible,
+.side-link:focus-visible,
+.guild-switcher-button:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring), inset 0 1px 0 rgba(255, 255, 255, 0.18);
+}
+
 .secondary-action {
   color: var(--text);
   border-color: var(--border-soft);
-  background: rgba(34, 41, 54, 0.88);
+  background:
+    linear-gradient(145deg, rgba(255, 255, 255, 0.07), transparent 44%),
+    rgba(34, 41, 54, 0.88);
 }
 
 .danger-action {
@@ -731,7 +775,7 @@ p {
   grid-template-columns: 280px minmax(0, 1fr);
   width: min(1440px, calc(100vw - 28px));
   margin: 0 auto;
-  gap: 22px;
+  gap: 20px;
   padding: 22px 0 72px;
 }
 
@@ -743,8 +787,11 @@ p {
   gap: 8px;
   max-height: calc(100vh - 98px);
   overflow-y: auto;
-  padding: 14px;
-  background: rgba(21, 25, 34, 0.92);
+  padding: 16px;
+  background:
+    linear-gradient(180deg, rgba(29, 35, 47, 0.96), rgba(17, 21, 29, 0.92)),
+    rgba(21, 25, 34, 0.92);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05), var(--soft-shadow);
 }
 
 .guild-switcher {
@@ -763,10 +810,13 @@ p {
   width: 100%;
   border: 1px solid var(--border-soft);
   border-radius: 8px;
-  padding: 9px 10px;
+  padding: 10px 11px;
   color: var(--text);
-  background: rgba(9, 11, 16, 0.8);
+  background:
+    linear-gradient(135deg, rgba(119, 183, 255, 0.12), transparent 42%),
+    rgba(9, 11, 16, 0.84);
   text-align: left;
+  transition: transform 160ms ease, border-color 160ms ease, background 160ms ease;
 }
 
 .guild-switcher-button span {
@@ -775,13 +825,22 @@ p {
   white-space: nowrap;
 }
 
+.guild-switcher-button:hover {
+  transform: translateY(-1px);
+  border-color: rgba(119, 183, 255, 0.36);
+  background:
+    linear-gradient(135deg, rgba(119, 183, 255, 0.18), transparent 42%),
+    rgba(13, 17, 25, 0.94);
+}
+
 .side-link {
+  position: relative;
   display: grid;
   grid-template-columns: auto 1fr auto;
   align-items: center;
   gap: 10px;
   min-height: 40px;
-  padding: 9px 10px;
+  padding: 10px 11px;
   border-radius: 8px;
   color: var(--muted);
   background: transparent;
@@ -792,11 +851,25 @@ p {
 .side-link.active,
 .side-link:hover:not(.disabled) {
   color: var(--text);
-  background: rgba(255, 255, 255, 0.065);
+  background:
+    linear-gradient(90deg, rgba(77, 219, 143, 0.16), transparent 88%),
+    rgba(255, 255, 255, 0.065);
 }
 
 .side-link:hover:not(.disabled) {
   transform: translateX(2px);
+}
+
+.side-link.active::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 9px;
+  bottom: 9px;
+  width: 3px;
+  border-radius: 999px;
+  background: var(--green);
+  box-shadow: 0 0 16px rgba(77, 219, 143, 0.55);
 }
 
 .side-link.active svg {
@@ -828,17 +901,25 @@ p {
 .guild-heading {
   flex-wrap: wrap;
   margin-bottom: 22px;
-  padding: 18px;
-  border: 1px solid var(--border-soft);
+  padding: 20px;
+  border: 1px solid rgba(119, 183, 255, 0.18);
   border-radius: 8px;
   background:
-    linear-gradient(135deg, rgba(119, 183, 255, 0.1), transparent 36%),
+    linear-gradient(135deg, rgba(119, 183, 255, 0.18), transparent 38%),
+    linear-gradient(315deg, rgba(77, 219, 143, 0.1), transparent 34%),
     rgba(21, 25, 34, 0.82);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05), var(--soft-shadow);
 }
 
 .guild-heading .guild-icon {
-  width: 58px;
-  height: 58px;
+  width: 64px;
+  height: 64px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.24);
+}
+
+.guild-heading h1 {
+  font-size: 42px;
 }
 
 .guild-heading-actions {
@@ -858,10 +939,47 @@ p {
 }
 
 .status-tile {
+  position: relative;
+  overflow: hidden;
   min-height: 108px;
   background:
     linear-gradient(145deg, rgba(255, 255, 255, 0.035), transparent),
     rgba(21, 25, 34, 0.78);
+}
+
+.status-tile::after {
+  content: "";
+  position: absolute;
+  inset: auto 14px 0 14px;
+  height: 2px;
+  border-radius: 999px 999px 0 0;
+  background: linear-gradient(90deg, var(--blue), transparent);
+  opacity: 0.65;
+}
+
+.status-tile.ok::after {
+  background: linear-gradient(90deg, var(--green), transparent);
+}
+
+.status-tile.warn::after {
+  background: linear-gradient(90deg, var(--amber), transparent);
+}
+
+.status-tile span {
+  width: 32px;
+  height: 32px;
+  display: grid;
+  place-items: center;
+  border-radius: 8px;
+  background: rgba(119, 183, 255, 0.1);
+}
+
+.status-tile.ok span {
+  background: rgba(77, 219, 143, 0.1);
+}
+
+.status-tile.warn span {
+  background: rgba(244, 189, 99, 0.1);
 }
 
 .panel,
@@ -871,7 +989,10 @@ p {
 }
 
 .panel {
-  background: rgba(21, 25, 34, 0.88);
+  background:
+    linear-gradient(145deg, rgba(255, 255, 255, 0.035), transparent 48%),
+    rgba(21, 25, 34, 0.9);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.035), var(--soft-shadow);
 }
 
 .panel-title {
@@ -892,7 +1013,7 @@ p {
   display: flex;
   justify-content: space-between;
   gap: 12px;
-  padding: 10px 0;
+  padding: 12px 0;
   border-bottom: 1px solid var(--border-soft);
 }
 
@@ -927,9 +1048,11 @@ textarea {
   min-height: 42px;
   border: 1px solid var(--border-soft);
   border-radius: 8px;
-  padding: 9px 11px;
+  padding: 10px 12px;
   color: var(--text);
-  background: rgba(9, 11, 16, 0.8);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.035), transparent),
+    rgba(9, 11, 16, 0.82);
   outline: none;
   transition: border-color 160ms ease, box-shadow 160ms ease, background 160ms ease;
 }
@@ -938,7 +1061,7 @@ input:focus,
 select:focus,
 textarea:focus {
   border-color: rgba(119, 183, 255, 0.72);
-  box-shadow: 0 0 0 4px rgba(119, 183, 255, 0.12);
+  box-shadow: var(--focus-ring);
   background: rgba(12, 15, 22, 0.92);
 }
 
