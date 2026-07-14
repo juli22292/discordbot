@@ -9,6 +9,13 @@
     "not_found_handling": "single-page-application",
     "run_worker_first": ["/api/*", "/logout"]
   },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "archive_bot_panel",
+      "database_id": "4aa0fbf6-ae11-4153-adce-4687d922db4b"
+    }
+  ],
   "vars": {
     "APP_URL": "https://discordbot.niteaccfort74.workers.dev",
     "DISCORD_REDIRECT_URI": "https://discordbot.niteaccfort74.workers.dev/api/auth/discord/callback",
