@@ -1,22 +1,33 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { createRoot } from "react-dom/client";
 import {
+  Activity,
   AlertTriangle,
+  ArrowRight,
+  BadgeCheck,
+  BarChart3,
   Bot,
   Check,
   ChevronRight,
   ClipboardList,
   Command,
+  Cpu,
+  Database,
+  Gauge,
   Home,
   KeyRound,
+  LayoutDashboard,
   Loader2,
   LogOut,
   Plus,
+  Radio,
   RefreshCw,
+  Rocket,
   Save,
   Server,
   Settings,
   Shield,
+  Sparkles,
   Trash2,
   Upload,
   UserRound
@@ -168,18 +179,78 @@ function App() {
 function LoginPage() {
   return (
     <main className="auth-page">
-      <section className="auth-panel">
-        <div className="brand-mark">
-          <Bot size={28} />
-        </div>
-        <h1>Archive Bot Webpanel</h1>
-        <p>Discord-Login fuer servergebundene Bot-Verwaltung.</p>
-        <a className="primary-action full" href="/api/auth/discord">
-          <KeyRound size={18} />
-          Mit Discord anmelden
-        </a>
+      <div className="grid-backdrop" aria-hidden="true" />
+      <section className="auth-layout">
+        <section className="auth-panel reveal-card">
+          <div className="brand-row">
+            <div className="brand-mark">
+              <Bot size={28} />
+            </div>
+            <span className="signal-pill">
+              <Radio size={14} />
+              Webpanel bereit
+            </span>
+          </div>
+          <div className="auth-copy">
+            <p className="eyebrow">
+              <Sparkles size={15} />
+              Archive Bot Control
+            </p>
+            <h1>Archive Bot Webpanel</h1>
+            <p>Server verwalten, Slash-Befehle steuern und das Bot-Profil pro Guild sauber synchronisieren.</p>
+          </div>
+          <a className="primary-action full hero-action" href="/api/auth/discord">
+            <KeyRound size={18} />
+            Mit Discord anmelden
+            <ArrowRight size={18} />
+          </a>
+          <div className="auth-status-strip" aria-label="Systemstatus">
+            <span>
+              <BadgeCheck size={15} />
+              OAuth aktiv
+            </span>
+            <span>
+              <Shield size={15} />
+              Guild isoliert
+            </span>
+          </div>
+        </section>
+        <AuthShowcase />
       </section>
     </main>
+  );
+}
+
+function AuthShowcase() {
+  const rows = [
+    { icon: <Command size={16} />, label: "Slash Sync", value: "bereit" },
+    { icon: <Database size={16} />, label: "Guild Settings", value: "gesichert" },
+    { icon: <Cpu size={16} />, label: "Bot Worker", value: "online" }
+  ];
+
+  return (
+    <section className="auth-showcase reveal-card delay-1" aria-label="Bot Status">
+      <div className="showcase-top">
+        <span className="window-dot" />
+        <span className="window-dot amber" />
+        <span className="window-dot green" />
+        <strong>Live Console</strong>
+      </div>
+      <div className="bot-radar" aria-hidden="true">
+        <Bot size={34} />
+        <span />
+        <span />
+      </div>
+      <div className="activity-stack">
+        {rows.map((row, index) => (
+          <div className="activity-row" style={{ "--delay": `${index * 120}ms` } as React.CSSProperties} key={row.label}>
+            <span className="activity-icon">{row.icon}</span>
+            <span>{row.label}</span>
+            <strong>{row.value}</strong>
+          </div>
+        ))}
+      </div>
+    </section>
   );
 }
 
@@ -202,6 +273,10 @@ function TopNav({ user }: { user?: User | null }) {
           Support
         </a>
       </nav>
+      <span className="nav-status">
+        <Activity size={14} />
+        Live
+      </span>
       <div className="user-chip">
         {user?.avatar ? <img src={user.avatar} alt="" /> : <UserRound size={18} />}
         <span>{user?.displayName || user?.username || "Discord"}</span>
@@ -216,14 +291,33 @@ function TopNav({ user }: { user?: User | null }) {
 function HomePage() {
   const me = useApi<{ user: User }>("/api/me", []);
   const guilds = useApi<{ guilds: GuildListItem[] }>("/api/guilds", []);
+  const guildList = guilds.data?.guilds ?? [];
+  const installedCount = guildList.filter((guild) => guild.botInstalled).length;
+  const missingCount = Math.max(guildList.length - installedCount, 0);
 
   return (
     <div className="app-shell">
       <TopNav user={me.data?.user} />
       <main className="content narrow">
-        <div className="page-heading">
+        <section className="home-hero reveal-card">
           <div>
-            <h1>Server</h1>
+            <p className="eyebrow">
+              <LayoutDashboard size={15} />
+              Dashboard
+            </p>
+            <h1>Wähle deinen Server</h1>
+            <p>Alle verwaltbaren Discord-Server an einem Ort, mit direktem Zugriff auf Bot-Profil, Commands und Audit-Log.</p>
+          </div>
+          <div className="metric-strip">
+            <MetricCard icon={<Server size={18} />} label="Server" value={guildList.length.toString()} />
+            <MetricCard icon={<BadgeCheck size={18} />} label="Installiert" value={installedCount.toString()} tone="ok" />
+            <MetricCard icon={<Rocket size={18} />} label="Einladen" value={missingCount.toString()} tone="warn" />
+          </div>
+        </section>
+
+        <div className="page-heading compact-heading">
+          <div>
+            <h2>Serverliste</h2>
             <p>Nur Guilds mit Verwaltungsrechten werden angezeigt.</p>
           </div>
           <button className="secondary-action" onClick={() => guilds.reload()}>
@@ -239,9 +333,12 @@ function HomePage() {
         )}
 
         <section className="guild-grid">
-          {guilds.data?.guilds.map((guild) => (
-            <article className="guild-card" key={guild.id}>
-              <GuildIcon guild={guild} />
+          {guilds.data?.guilds.map((guild, index) => (
+            <article className="guild-card reveal-card" style={{ "--delay": `${index * 65}ms` } as React.CSSProperties} key={guild.id}>
+              <div className="guild-card-top">
+                <GuildIcon guild={guild} />
+                <span className={guild.botInstalled ? "status-light ok" : "status-light warn"} />
+              </div>
               <div className="guild-card-body">
                 <h2>{guild.name}</h2>
                 <p>{guild.id}</p>
@@ -267,6 +364,16 @@ function HomePage() {
           ))}
         </section>
       </main>
+    </div>
+  );
+}
+
+function MetricCard({ icon, label, value, tone }: { icon: React.ReactNode; label: string; value: string; tone?: "ok" | "warn" }) {
+  return (
+    <div className={`metric-card ${tone ?? ""}`}>
+      <span>{icon}</span>
+      <strong>{value}</strong>
+      <small>{label}</small>
     </div>
   );
 }
@@ -327,7 +434,13 @@ function Dashboard({ path }: { path: string }) {
                   <h1>{detail.data.guild.name}</h1>
                   <p>{detail.data.guild.id}</p>
                 </div>
-                <span className="pill ok">{detail.data.guild.permission}</span>
+                <div className="guild-heading-actions">
+                  <span className="pill ok">{detail.data.guild.permission}</span>
+                  <span className="pill live">
+                    <Activity size={13} />
+                    Verbunden
+                  </span>
+                </div>
               </div>
               {section === "overview" && <OverviewPage guildId={guildId} initial={detail.data} />}
               {section === "profile" && <ProfilePage guildId={guildId} settings={detail.data.settings} onSaved={detail.reload} />}
@@ -414,6 +527,12 @@ function OverviewPage({ guildId, initial }: { guildId: string; initial: { guild:
 
   return (
     <section className="section-grid">
+      <div className="overview-tiles wide">
+        <StatusTile icon={<Bot size={19} />} label="Bot" value={initial.guild.botInstalled ? "Installiert" : "Fehlt"} tone={initial.guild.botInstalled ? "ok" : "warn"} />
+        <StatusTile icon={<Gauge size={19} />} label="Sprache" value={locale === "de" ? "Deutsch" : "English"} />
+        <StatusTile icon={<Shield size={19} />} label="Isolation" value="Guild-only" tone="ok" />
+        <StatusTile icon={<BarChart3 size={19} />} label="Sync" value={initial.settings.bot_avatar_sync_status} />
+      </div>
       <div className="panel">
         <div className="panel-title">
           <h2>Status</h2>
@@ -458,6 +577,16 @@ function OverviewPage({ guildId, initial }: { guildId: string; initial: { guild:
         </button>
       </div>
     </section>
+  );
+}
+
+function StatusTile({ icon, label, value, tone }: { icon: React.ReactNode; label: string; value: string; tone?: "ok" | "warn" }) {
+  return (
+    <div className={`status-tile ${tone ?? ""}`}>
+      <span>{icon}</span>
+      <small>{label}</small>
+      <strong>{value}</strong>
+    </div>
   );
 }
 
