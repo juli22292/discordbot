@@ -2,12 +2,12 @@
 
 ## Architektur
 
-Der Discord-Gateway-Bot bleibt ein separater Python-Prozess. Ein normaler Cloudflare Worker haelt keine dauerhafte Gateway-Verbindung zu Discord.
+Der Discord-Gateway-Bot bleibt ein separater Python-Prozess. Ein normaler Cloudflare Worker hält keine dauerhafte Gateway-Verbindung zu Discord.
 
 Die neue Web-Schicht liegt in `web/`:
 
 - Cloudflare Worker: OAuth2, Sessions, Dashboard-API, Guild-Autorisierung
-- React/Vite: Dashboard-Oberflaeche
+- React/Vite: Dashboard-Oberfläche
 - D1: Nutzer, Sessions, Guild-Einstellungen, Commands, Audit-Logs, Sync-Events
 - KV: OAuth-State und HMAC-Nonces
 - R2: validierte Guild-Medien wie Server-Avatar-Dateien
@@ -16,19 +16,19 @@ Die neue Web-Schicht liegt in `web/`:
 ## Wichtige Sicherheitsentscheidungen
 
 - Discord OAuth2 nutzt `identify` und `guilds`.
-- Access- und Refresh-Tokens werden nur serverseitig verschluesselt in D1 gespeichert.
+- Access- und Refresh-Tokens werden nur serverseitig verschlüsselt in D1 gespeichert.
 - Browser-Cookies sind `HttpOnly`, `SameSite=Lax` und in Produktion `Secure`.
-- Jede Dashboard-API prueft die aktuelle Discord-Guild-Mitgliedschaft und Admin-/Manage-Guild-Rechte.
+- Jede Dashboard-API prüft die aktuelle Discord-Guild-Mitgliedschaft und Admin-/Manage-Guild-Rechte.
 - Jede Guild-Einstellung verwendet die konkrete Guild-ID aus der Route.
 - Interne Bot-Endpunkte sind HMAC-signiert mit Zeitstempel und Nonce.
-- Dashboard-Aenderungen schreiben Audit-Logs und Sync-Events.
-- Das Webpanel funktioniert weiterhin mit Python-Bot-Snapshots. Fuer eine direkte Live-Pruefung, ob der Bot schon auf einer Guild ist, kann der Worker zusaetzlich `DISCORD_BOT_TOKEN` als Secret bekommen.
+- Dashboard-Änderungen schreiben Audit-Logs und Sync-Events.
+- Das Webpanel funktioniert weiterhin mit Python-Bot-Snapshots. Für eine direkte Live-Prüfung, ob der Bot schon auf einer Guild ist, kann der Worker zusätzlich `DISCORD_BOT_TOKEN` als Secret bekommen.
 
-Cloudflare Queues koennen spaeter fuer Push-basierte Bot-Jobs aktiviert werden. In dieser Version ist bewusst kein Queue-Consumer konfiguriert, weil der bestehende Python-Bot keinen dauerhaft erreichbaren HTTP-Consumer bereitstellt. Stattdessen pollt der Bot signiert und idempotent die D1-Sync-Events.
+Cloudflare Queues können später für Push-basierte Bot-Jobs aktiviert werden. In dieser Version ist bewusst kein Queue-Consumer konfiguriert, weil der bestehende Python-Bot keinen dauerhaft erreichbaren HTTP-Consumer bereitstellt. Stattdessen pollt der Bot signiert und idempotent die D1-Sync-Events.
 
 ## Discord Avatar
 
-Discords aktuelle Guild-Member-API unterstuetzt beim Endpoint `Modify Current Member` ein guild-spezifisches `avatar`-Feld. Der Worker validiert Uploads, speichert sie in R2 und der Python-Bot wendet den Avatar per Bot-Token auf `/guilds/{guild.id}/members/@me` an.
+Discords aktuelle Guild-Member-API unterstützt beim Endpoint `Modify Current Member` ein guild-spezifisches `avatar`-Feld. Der Worker validiert Uploads, speichert sie in R2 und der Python-Bot wendet den Avatar per Bot-Token auf `/guilds/{guild.id}/members/@me` an.
 
 ## Cloudflare-Ressourcen
 
@@ -56,7 +56,7 @@ wrangler secret put ENCRYPTION_KEY
 wrangler secret put INTERNAL_BOT_API_SECRET
 ```
 
-`DISCORD_BOT_TOKEN` ist optional, aber empfohlen. Damit erkennt die Serverliste sofort live ueber Discord, ob der Bot bereits auf einem Server ist. Ohne dieses Secret nutzt das Webpanel weiter den Snapshot, den der laufende Python-Bot an den Worker sendet.
+`DISCORD_BOT_TOKEN` ist optional, aber empfohlen. Damit erkennt die Serverliste sofort live über Discord, ob der Bot bereits auf einem Server ist. Ohne dieses Secret nutzt das Webpanel weiter den Snapshot, den der laufende Python-Bot an den Worker sendet.
 
 Im Python-Bot setzen:
 
@@ -67,7 +67,7 @@ WEBPANEL_SYNC_INTERVAL_SECONDS=30
 WEBPANEL_SNAPSHOT_INTERVAL_SECONDS=300
 ```
 
-Das Discord-Bot-Token bleibt beim Python-Bot und kann zusaetzlich als Cloudflare-Worker-Secret `DISCORD_BOT_TOKEN` gesetzt werden, damit der Worker den Installationsstatus direkt pruefen kann.
+Das Discord-Bot-Token bleibt beim Python-Bot und kann zusätzlich als Cloudflare-Worker-Secret `DISCORD_BOT_TOKEN` gesetzt werden, damit der Worker den Installationsstatus direkt prüfen kann.
 
 ## Lokale Entwicklung
 
@@ -112,7 +112,7 @@ npm run deploy
 Danach:
 
 1. Cloudflare Custom Domain verbinden.
-2. `APP_URL` und `DISCORD_REDIRECT_URI` in `wrangler.jsonc` fuer Produktion setzen.
+2. `APP_URL` und `DISCORD_REDIRECT_URI` in `wrangler.jsonc` für Produktion setzen.
 3. Im Discord Developer Portal beide Redirect URLs eintragen:
 
 ```text
@@ -130,11 +130,11 @@ Das Dashboard implementiert aktuell die produktiven Grundbereiche:
 - Login
 - Panel unter `/panel` mit Home/Guild-Auswahl
 - Bot-Einladung
-- Guild-Uebersicht
+- Guild-Übersicht
 - Bot-Nickname
 - Guild-Member-Avatar
 - Slash-Command-Konfiguration
-- Custom Commands ueber `/utility customcommand run <name>` und Prefix-Fallback
+- Custom Commands über `/utility customcommand run <name>` und Prefix-Fallback
 - Audit-Log
 
-Begruessung, Logging, Moderation und Gefahrenbereich sind in der Navigation deaktiviert, bis ihre Backend-Endpunkte vollstaendig umgesetzt sind.
+Begrüßung, Logging, Moderation und Gefahrenbereich sind in der Navigation deaktiviert, bis ihre Backend-Endpunkte vollständig umgesetzt sind.

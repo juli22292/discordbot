@@ -57,7 +57,7 @@ export async function encryptJson(value: unknown, secret: string): Promise<strin
 export async function decryptJson<T>(value: string, secret: string): Promise<T> {
   const [version, ivPart, ciphertextPart] = value.split(".");
   if (version !== "v1" || !ivPart || !ciphertextPart) {
-    throw new Error("Ungueltige verschluesselte Daten.");
+    throw new Error("Ungültige verschlüsselte Daten.");
   }
 
   const key = await aesKey(secret);
@@ -94,7 +94,7 @@ export async function verifyInternalBotRequest(
   const signature = request.headers.get("x-bot-signature") ?? "";
 
   if (!/^\d{10,13}$/.test(timestamp) || nonce.length < 16 || !/^[a-f0-9]{64}$/i.test(signature)) {
-    throw new Error("Interne Signatur fehlt oder ist ungueltig.");
+    throw new Error("Interne Signatur fehlt oder ist ungültig.");
   }
 
   const timestampMs = timestamp.length === 13 ? Number(timestamp) : Number(timestamp) * 1000;

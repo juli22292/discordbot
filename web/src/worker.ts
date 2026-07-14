@@ -117,7 +117,7 @@ async function readJsonBody<T>(c: HonoContext): Promise<T> {
   try {
     return (await c.req.json()) as T;
   } catch {
-    throw new HttpError(400, "invalid_json", "Der Request enthaelt kein gueltiges JSON.");
+    throw new HttpError(400, "invalid_json", "Der Request enthält kein gültiges JSON.");
   }
 }
 
@@ -129,7 +129,7 @@ async function signedInternalBody(c: HonoContext): Promise<unknown> {
   try {
     return JSON.parse(bodyText);
   } catch {
-    throw new HttpError(400, "invalid_json", "Der interne Request enthaelt kein gueltiges JSON.");
+    throw new HttpError(400, "invalid_json", "Der interne Request enthält kein gültiges JSON.");
   }
 }
 
@@ -602,7 +602,7 @@ app.get("/api/auth/discord/callback", async (c) => {
     sessionCookieValue = sessionId;
   }
 
-  const response = c.redirect(stateData.returnTo || "/home");
+  const response = c.redirect(stateData.returnTo || "/panel");
   response.headers.append("Set-Cookie", cookieHeader(SESSION_COOKIE, sessionCookieValue, c.env, ttl));
   response.headers.append("Set-Cookie", clearCookieHeader(OAUTH_STATE_COOKIE, c.env));
   return response;
@@ -679,7 +679,7 @@ app.get("/api/bot/invite/callback", async (c) => {
   }
 
   const stateData = await readEncryptedCookieState(c, state, "invite");
-  if (!stateData.guildId) throw new HttpError(400, "invite_state_invalid", "Die Bot-Einladung ist unvollstaendig.");
+  if (!stateData.guildId) throw new HttpError(400, "invite_state_invalid", "Die Bot-Einladung ist unvollständig.");
   const access = await requireGuildManagementAccess(c, stateData.guildId, { requireBot: false });
   const returnTo = stateData.returnTo || `/dashboard/${stateData.guildId}/overview`;
 
@@ -690,7 +690,7 @@ app.get("/api/bot/invite/callback", async (c) => {
   }
 
   if (!code) {
-    throw new HttpError(400, "invite_code_missing", "Discord hat die Bot-Einladung nicht bestaetigt.");
+    throw new HttpError(400, "invite_code_missing", "Discord hat die Bot-Einladung nicht bestätigt.");
   }
 
   await markBotInstalled(c.env, access.guild);
@@ -753,7 +753,7 @@ app.patch("/api/guilds/:guildId/profile", async (c) => {
 
 app.post("/api/guilds/:guildId/profile/avatar", async (c) => {
   if (!c.env.GUILD_MEDIA) {
-    throw new HttpError(503, "r2_not_configured", "R2 ist fuer Avatar-Uploads nicht konfiguriert.");
+    throw new HttpError(503, "r2_not_configured", "R2 ist für Avatar-Uploads nicht konfiguriert.");
   }
 
   const access = await requireGuildManagementAccess(c, c.req.param("guildId"));
@@ -876,7 +876,7 @@ app.patch("/api/guilds/:guildId/commands/:commandName", async (c) => {
   const access = await requireGuildManagementAccess(c, c.req.param("guildId"));
   const commandName = decodeURIComponent(c.req.param("commandName")).trim().toLowerCase();
   if (!/^[a-z0-9 _-]{1,80}$/.test(commandName)) {
-    throw new HttpError(400, "command_name_invalid", "Der Command-Name ist ungueltig.");
+    throw new HttpError(400, "command_name_invalid", "Der Command-Name ist ungültig.");
   }
 
   const data = commandConfigSchema.parse(await readJsonBody(c));
@@ -1304,7 +1304,7 @@ app.get("/api/internal/bot/media", async (c) => {
   if (!c.env.GUILD_MEDIA) throw new HttpError(503, "r2_not_configured", "R2 ist nicht konfiguriert.");
   const key = c.req.query("key");
   if (!key || key.includes("..") || !key.startsWith("guilds/")) {
-    throw new HttpError(400, "media_key_invalid", "Media-Key ist ungueltig.");
+    throw new HttpError(400, "media_key_invalid", "Media-Key ist ungültig.");
   }
 
   const object = await c.env.GUILD_MEDIA.get(key);

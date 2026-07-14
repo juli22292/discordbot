@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-export const snowflakeSchema = z.string().regex(/^\d{17,20}$/, "Ungueltige Discord-ID.");
+export const snowflakeSchema = z.string().regex(/^\d{17,20}$/, "Ungültige Discord-ID.");
 
 const snowflakeArraySchema = z.array(snowflakeSchema).max(100).default([]);
 
@@ -39,7 +39,7 @@ export const customCommandSchema = z.object({
     .string()
     .trim()
     .toLowerCase()
-    .regex(/^[a-z0-9_-]{1,32}$/, "Command-Namen duerfen nur a-z, 0-9, _ und - enthalten."),
+    .regex(/^[a-z0-9_-]{1,32}$/, "Command-Namen dürfen nur a-z, 0-9, _ und - enthalten."),
   description: z.string().trim().min(1).max(100),
   responseContent: z.string().trim().min(1).max(2000),
   enabled: z.boolean().default(true),
@@ -62,9 +62,9 @@ export function assertSameGuild(routeGuildId: string, rowGuildId: string): void 
 }
 
 export function safeRedirectPath(value: string | null | undefined): string {
-  if (!value) return "/home";
-  if (!value.startsWith("/") || value.startsWith("//")) return "/home";
-  if (value.startsWith("/api/")) return "/home";
+  if (!value) return "/panel";
+  if (!value.startsWith("/") || value.startsWith("//")) return "/panel";
+  if (value.startsWith("/api/")) return "/panel";
   return value;
 }
 

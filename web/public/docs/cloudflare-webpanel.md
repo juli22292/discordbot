@@ -1,6 +1,6 @@
 # Archive Bot Webpanel
 
-Die vollstaendige Betriebsdokumentation liegt im Repository unter `docs/cloudflare-webpanel.md`.
+Die vollständige Betriebsdokumentation liegt im Repository unter `docs/cloudflare-webpanel.md`.
 
 Kurzstart:
 

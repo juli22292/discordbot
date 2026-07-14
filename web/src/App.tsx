@@ -341,7 +341,7 @@ function HomePage() {
         {guilds.loading && <SkeletonGrid />}
         {guilds.error && <Notice tone="danger" text={guilds.error} />}
         {!guilds.loading && guilds.data?.guilds.length === 0 && (
-          <EmptyState title="Keine verwaltbaren Server" text="Discord hat fuer diesen Account keine passende Guild geliefert." />
+          <EmptyState title="Keine verwaltbaren Server" text="Discord hat für diesen Account keine passende Guild geliefert." />
         )}
 
         <section className="guild-grid">
@@ -413,7 +413,7 @@ function Dashboard({ path }: { path: string }) {
       <div className="app-shell">
         <TopNav user={me.data?.user} />
         <main className="content narrow">
-          <Notice tone="warning" text="Der Bot ist auf dieser Guild noch nicht bestaetigt. Nach der Einladung aktualisiert der laufende Bot diesen Status." />
+          <Notice tone="warning" text="Der Bot ist auf dieser Guild noch nicht bestätigt. Nach der Einladung aktualisiert der laufende Bot diesen Status." />
           <a
             className="primary-action inline"
             href={`/api/bot/invite?guildId=${guildId}&returnTo=${encodeURIComponent(`/dashboard/${guildId}/overview`)}`}
@@ -434,13 +434,13 @@ function Dashboard({ path }: { path: string }) {
       <div className="dashboard-layout">
         <aside className="sidebar">
           <GuildSwitcher guilds={guilds.data?.guilds ?? []} currentGuildId={guildId} />
-          <SideLink icon={<Server size={17} />} label="Uebersicht" section="overview" current={section} guildId={guildId} />
+          <SideLink icon={<Server size={17} />} label="Übersicht" section="overview" current={section} guildId={guildId} />
           <SideLink icon={<Bot size={17} />} label="Bot-Profil" section="profile" current={section} guildId={guildId} />
           <SideLink icon={<Command size={17} />} label="Slash-Befehle" section="commands" current={section} guildId={guildId} />
           <SideLink icon={<ClipboardList size={17} />} label="Custom Commands" section="custom-commands" current={section} guildId={guildId} />
           <SideLink icon={<Shield size={17} />} label="Audit-Log" section="audit-log" current={section} guildId={guildId} />
           <div className="sidebar-group-title">Geplant</div>
-          <DisabledSideItem label="Begruessung" />
+          <DisabledSideItem label="Begrüßung" />
           <DisabledSideItem label="Logging" />
           <DisabledSideItem label="Moderation" />
           <DisabledSideItem label="Gefahrenbereich" />
@@ -520,7 +520,7 @@ function DisabledSideItem({ label }: { label: string }) {
     <div className="side-link disabled">
       <Settings size={17} />
       {label}
-      <span>spaeter</span>
+      <span>später</span>
     </div>
   );
 }
@@ -626,7 +626,7 @@ function ProfilePage({ guildId, settings, onSaved }: { guildId: string; settings
         method: "PATCH",
         body: JSON.stringify({ nickname })
       });
-      setStatus("Nickname-Aenderung wurde fuer den Bot vorgemerkt.");
+      setStatus("Nickname-Änderung wurde für den Bot vorgemerkt.");
       onSaved();
     } catch (error) {
       setStatus(error instanceof Error ? error.message : "Speichern fehlgeschlagen.");
@@ -665,7 +665,7 @@ function ProfilePage({ guildId, settings, onSaved }: { guildId: string; settings
         </div>
         <label>
           Nickname auf dieser Guild
-          <input value={nickname} maxLength={32} onChange={(event) => setNickname(event.target.value)} placeholder="Leer lassen zum Zuruecksetzen" />
+          <input value={nickname} maxLength={32} onChange={(event) => setNickname(event.target.value)} placeholder="Leer lassen zum Zurücksetzen" />
         </label>
         <ActionStatus status={status} />
         <button className="primary-action inline" onClick={saveNickname} disabled={saving}>
@@ -829,7 +829,7 @@ function CustomCommandsPage({ guildId }: { guildId: string }) {
         </div>
         {commands.loading && <LoadingBlock />}
         {commands.error && <Notice tone="danger" text={commands.error} />}
-        {commands.data?.customCommands.length === 0 && <EmptyState title="Keine Custom Commands" text="Erstelle den ersten Command fuer diese Guild." />}
+        {commands.data?.customCommands.length === 0 && <EmptyState title="Keine Custom Commands" text="Erstelle den ersten Command für diese Guild." />}
         <div className="custom-list">
           {commands.data?.customCommands.map((command) => (
             <EditableCustomCommand key={command.id} guildId={guildId} command={command} onChanged={commands.reload} />
@@ -912,7 +912,7 @@ function EditableCustomCommand({ guildId, command, onChanged }: { guildId: strin
       await api(`/api/guilds/${guildId}/custom-commands/${command.id}`, { method: "DELETE" });
       await onChanged();
     } catch (error) {
-      setStatus(error instanceof Error ? error.message : "Loeschen fehlgeschlagen.");
+      setStatus(error instanceof Error ? error.message : "Löschen fehlgeschlagen.");
     }
   }
 
@@ -932,7 +932,7 @@ function EditableCustomCommand({ guildId, command, onChanged }: { guildId: strin
         </button>
         <button className="danger-action inline" onClick={remove}>
           <Trash2 size={16} />
-          Loeschen
+          Löschen
         </button>
       </div>
     </article>

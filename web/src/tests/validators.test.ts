@@ -49,8 +49,9 @@ describe("guild-isolated validation", () => {
 
   it("prevents open redirects", () => {
     expect(safeRedirectPath("/home")).toBe("/home");
-    expect(safeRedirectPath("https://evil.test")).toBe("/home");
-    expect(safeRedirectPath("//evil.test")).toBe("/home");
-    expect(safeRedirectPath("/api/auth/discord")).toBe("/home");
+    expect(safeRedirectPath("/panel")).toBe("/panel");
+    expect(safeRedirectPath("https://evil.test")).toBe("/panel");
+    expect(safeRedirectPath("//evil.test")).toBe("/panel");
+    expect(safeRedirectPath("/api/auth/discord")).toBe("/panel");
   });
 });
