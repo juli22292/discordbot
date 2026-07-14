@@ -1,0 +1,32 @@
+{
+  "name": "archive-bot-webpanel",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev",
+    "build": "vite build",
+    "typecheck": "tsc --noEmit",
+    "lint": "tsc --noEmit",
+    "test": "vitest run",
+    "deploy": "wrangler deploy",
+    "db:migrate:local": "wrangler d1 migrations apply archive_bot_panel --local",
+    "db:migrate:prod": "wrangler d1 migrations apply archive_bot_panel --remote"
+  },
+  "dependencies": {
+    "@vitejs/plugin-react": "^4.4.1",
+    "hono": "^4.7.10",
+    "lucide-react": "^0.468.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "zod": "^3.25.28"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^5.20260714.1",
+    "@types/react": "^18.3.3",
+    "@types/react-dom": "^18.3.0",
+    "typescript": "^5.8.3",
+    "vite": "^6.0.1",
+    "vitest": "^2.1.8",
+    "wrangler": "^4.23.0"
+  }
+}
