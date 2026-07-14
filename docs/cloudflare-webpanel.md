@@ -22,7 +22,7 @@ Die neue Web-Schicht liegt in `web/`:
 - Jede Guild-Einstellung verwendet die konkrete Guild-ID aus der Route.
 - Interne Bot-Endpunkte sind HMAC-signiert mit Zeitstempel und Nonce.
 - Dashboard-Aenderungen schreiben Audit-Logs und Sync-Events.
-- Das Webpanel benoetigt kein Discord-Bot-Token, solange der Python-Bot Snapshots und Sync-Events verarbeitet.
+- Das Webpanel funktioniert weiterhin mit Python-Bot-Snapshots. Fuer eine direkte Live-Pruefung, ob der Bot schon auf einer Guild ist, kann der Worker zusaetzlich `DISCORD_BOT_TOKEN` als Secret bekommen.
 
 Cloudflare Queues koennen spaeter fuer Push-basierte Bot-Jobs aktiviert werden. In dieser Version ist bewusst kein Queue-Consumer konfiguriert, weil der bestehende Python-Bot keinen dauerhaft erreichbaren HTTP-Consumer bereitstellt. Stattdessen pollt der Bot signiert und idempotent die D1-Sync-Events.
 
@@ -50,10 +50,13 @@ Im Worker setzen:
 ```bash
 wrangler secret put DISCORD_CLIENT_ID
 wrangler secret put DISCORD_CLIENT_SECRET
+wrangler secret put DISCORD_BOT_TOKEN
 wrangler secret put SESSION_SECRET
 wrangler secret put ENCRYPTION_KEY
 wrangler secret put INTERNAL_BOT_API_SECRET
 ```
+
+`DISCORD_BOT_TOKEN` ist optional, aber empfohlen. Damit erkennt die Serverliste sofort live ueber Discord, ob der Bot bereits auf einem Server ist. Ohne dieses Secret nutzt das Webpanel weiter den Snapshot, den der laufende Python-Bot an den Worker sendet.
 
 Im Python-Bot setzen:
 
@@ -64,7 +67,7 @@ WEBPANEL_SYNC_INTERVAL_SECONDS=30
 WEBPANEL_SNAPSHOT_INTERVAL_SECONDS=300
 ```
 
-Das Discord-Bot-Token bleibt beim Python-Bot.
+Das Discord-Bot-Token bleibt beim Python-Bot und kann zusaetzlich als Cloudflare-Worker-Secret `DISCORD_BOT_TOKEN` gesetzt werden, damit der Worker den Installationsstatus direkt pruefen kann.
 
 ## Lokale Entwicklung
 

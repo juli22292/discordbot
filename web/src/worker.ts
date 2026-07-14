@@ -14,6 +14,7 @@ import {
   discordGuildIconUrl,
   discordOAuthAuthorizeUrl,
   exchangeDiscordCode,
+  fetchDiscordBotGuild,
   fetchDiscordGuilds,
   fetchDiscordUser,
   refreshDiscordToken
@@ -321,6 +322,57 @@ async function upsertGuildFromDiscord(env: Env, guild: DiscordGuild): Promise<Gu
   return { id, discord_guild_id: guild.id, name: guild.name, icon, bot_joined_at: null };
 }
 
+async function refreshBotPresence(env: Env, guild: GuildRow): Promise<GuildRow> {
+  if (!env.DISCORD_BOT_TOKEN?.trim()) return guild;
+
+  let botGuild: Awaited<ReturnType<typeof fetchDiscordBotGuild>>;
+  try {
+    botGuild = await fetchDiscordBotGuild(env, guild.discord_guild_id);
+  } catch (error) {
+    console.warn("Discord Bot-Presence-Check fehlgeschlagen", error);
+    return guild;
+  }
+
+  if (!hasDb(env)) {
+    return {
+      ...guild,
+      bot_joined_at: botGuild ? guild.bot_joined_at ?? nowIso() : null
+    };
+  }
+
+  const db = requireDb(env);
+  const timestamp = nowIso();
+
+  if (botGuild) {
+    const joinedAt = guild.bot_joined_at ?? timestamp;
+    await db.prepare(
+      `UPDATE guilds
+          SET bot_joined_at = COALESCE(bot_joined_at, ?),
+              bot_removed_at = NULL,
+              last_seen_at = ?,
+              updated_at = ?
+        WHERE id = ?`
+    )
+      .bind(timestamp, timestamp, timestamp, guild.id)
+      .run();
+    return { ...guild, bot_joined_at: joinedAt };
+  }
+
+  if (guild.bot_joined_at) {
+    await db.prepare(
+      `UPDATE guilds
+          SET bot_joined_at = NULL,
+              bot_removed_at = ?,
+              updated_at = ?
+        WHERE id = ?`
+    )
+      .bind(timestamp, timestamp, guild.id)
+      .run();
+  }
+
+  return { ...guild, bot_joined_at: null };
+}
+
 async function getFreshGuilds(c: HonoContext, session: ActiveSession): Promise<DiscordGuild[]> {
   try {
     return await fetchDiscordGuilds(session.tokenData);
@@ -343,7 +395,7 @@ async function requireGuildManagementAccess(
     throw new HttpError(403, "guild_access_denied", "Du darfst diese Guild nicht verwalten.");
   }
 
-  const guild = await upsertGuildFromDiscord(c.env, userGuild);
+  const guild = await refreshBotPresence(c.env, await upsertGuildFromDiscord(c.env, userGuild));
   if (options.requireBot && !guild.bot_joined_at) {
     throw new HttpError(409, "bot_not_in_guild", "Der Bot ist auf dieser Guild noch nicht installiert.");
   }
@@ -548,7 +600,7 @@ app.get("/api/guilds", async (c) => {
   const items = [];
 
   for (const discordGuild of manageable) {
-    const guild = await upsertGuildFromDiscord(c.env, discordGuild);
+    const guild = await refreshBotPresence(c.env, await upsertGuildFromDiscord(c.env, discordGuild));
     items.push({
       id: discordGuild.id,
       name: discordGuild.name,
@@ -566,19 +618,13 @@ app.get("/api/guilds", async (c) => {
 app.get("/api/bot/invite", async (c) => {
   const guildId = c.req.query("guildId");
   if (!guildId) throw new HttpError(400, "guild_required", "Es fehlt eine Guild-ID.");
-  await requireGuildManagementAccess(c, guildId, { requireBot: false });
+  const access = await requireGuildManagementAccess(c, guildId, { requireBot: false });
 
-  const state = randomToken(32);
-  const encryptedState = await encryptedCookieState(c.env, {
-    kind: "invite",
-    state,
-    guildId,
-    expiresAt: Date.now() + 10 * 60 * 1000
-  });
+  if (access.guild.botJoinedAt) {
+    return c.redirect(`/dashboard/${guildId}/overview?bot=installed`);
+  }
 
-  const response = c.redirect(discordBotInviteUrl(c.env, guildId, state));
-  response.headers.append("Set-Cookie", cookieHeader(OAUTH_STATE_COOKIE, encryptedState, c.env, 600));
-  return response;
+  return c.redirect(discordBotInviteUrl(c.env, guildId));
 });
 
 app.get("/api/bot/invite/callback", async (c) => {

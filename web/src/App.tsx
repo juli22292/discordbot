@@ -355,7 +355,7 @@ function HomePage() {
                   <ChevronRight size={16} />
                 </button>
               ) : (
-                <a className="secondary-action" href={`/api/bot/invite?guildId=${guild.id}`}>
+                <a className="secondary-action" href={`/api/bot/invite?guildId=${guild.id}`} target="_blank" rel="noreferrer">
                   <Plus size={16} />
                   Einladen
                 </a>
@@ -397,7 +397,7 @@ function Dashboard({ path }: { path: string }) {
         <TopNav user={me.data?.user} />
         <main className="content narrow">
           <Notice tone="warning" text="Der Bot ist auf dieser Guild noch nicht bestaetigt. Nach der Einladung aktualisiert der laufende Bot diesen Status." />
-          <a className="primary-action inline" href={`/api/bot/invite?guildId=${guildId}`}>
+          <a className="primary-action inline" href={`/api/bot/invite?guildId=${guildId}`} target="_blank" rel="noreferrer">
             <Plus size={16} />
             Bot einladen
           </a>
