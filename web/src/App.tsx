@@ -405,7 +405,6 @@ function Dashboard({ path }: { path: string }) {
   const guildId = parts[1];
   const section = parts[2] ?? "overview";
   const me = useApi<{ user: User }>("/api/me", []);
-  const guilds = useApi<{ guilds: GuildListItem[] }>("/api/guilds", [guildId]);
   const detail = useApi<{ guild: GuildDetail; settings: SettingsRow }>(`/api/guilds/${guildId}`, [guildId]);
 
   if (detail.error?.includes("noch nicht installiert")) {
@@ -433,7 +432,7 @@ function Dashboard({ path }: { path: string }) {
       <TopNav user={me.data?.user} />
       <div className="dashboard-layout">
         <aside className="sidebar">
-          <GuildSwitcher guilds={guilds.data?.guilds ?? []} currentGuildId={guildId} />
+          <GuildSwitcher currentGuild={detail.data?.guild ?? null} currentGuildId={guildId} />
           <SideLink icon={<Server size={17} />} label="Übersicht" section="overview" current={section} guildId={guildId} />
           <SideLink icon={<Bot size={17} />} label="Bot-Profil" section="profile" current={section} guildId={guildId} />
           <SideLink icon={<Command size={17} />} label="Slash-Befehle" section="commands" current={section} guildId={guildId} />
@@ -477,20 +476,15 @@ function Dashboard({ path }: { path: string }) {
   );
 }
 
-function GuildSwitcher({ guilds, currentGuildId }: { guilds: GuildListItem[]; currentGuildId: string }) {
+function GuildSwitcher({ currentGuild, currentGuildId }: { currentGuild: GuildDetail | null; currentGuildId: string }) {
   return (
-    <label className="guild-switcher">
+    <div className="guild-switcher">
       <span>Guild</span>
-      <select value={currentGuildId} onChange={(event) => navigate(`/dashboard/${event.target.value}/overview`)}>
-        {guilds
-          .filter((guild) => guild.botInstalled)
-          .map((guild) => (
-            <option key={guild.id} value={guild.id}>
-              {guild.name}
-            </option>
-          ))}
-      </select>
-    </label>
+      <button className="guild-switcher-button" onClick={() => navigate("/panel")}>
+        <span>{currentGuild?.name ?? currentGuildId}</span>
+        <ChevronRight size={16} />
+      </button>
+    </div>
   );
 }
 

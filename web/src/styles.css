@@ -754,6 +754,27 @@ p {
   color: var(--muted);
 }
 
+.guild-switcher-button {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  min-height: 42px;
+  width: 100%;
+  border: 1px solid var(--border-soft);
+  border-radius: 8px;
+  padding: 9px 10px;
+  color: var(--text);
+  background: rgba(9, 11, 16, 0.8);
+  text-align: left;
+}
+
+.guild-switcher-button span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .side-link {
   display: grid;
   grid-template-columns: auto 1fr auto;

@@ -16,11 +16,69 @@ interface DiscordBotGuild {
   icon?: string | null;
 }
 
+interface DiscordRateLimitBody {
+  message?: string;
+  retry_after?: number;
+  global?: boolean;
+}
+
+export class DiscordApiError extends Error {
+  constructor(
+    public readonly status: number,
+    message: string,
+    public readonly retryAfterMs: number | null = null
+  ) {
+    super(message);
+  }
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function retryAfterMs(response: Response, bodyText: string): number | null {
+  const header = response.headers.get("Retry-After");
+  if (header) {
+    const seconds = Number(header);
+    if (Number.isFinite(seconds) && seconds >= 0) return Math.ceil(seconds * 1000);
+  }
+
+  try {
+    const body = JSON.parse(bodyText) as DiscordRateLimitBody;
+    if (typeof body.retry_after === "number" && Number.isFinite(body.retry_after) && body.retry_after >= 0) {
+      return Math.ceil(body.retry_after * 1000);
+    }
+  } catch {
+    return null;
+  }
+
+  return null;
+}
+
+async function discordRequest(path: string, init: RequestInit, retries = 2): Promise<Response> {
+  let lastError: DiscordApiError | null = null;
+
+  for (let attempt = 0; attempt <= retries; attempt += 1) {
+    const response = await fetch(`${DISCORD_API}${path}`, init);
+    if (response.status !== 429) return response;
+
+    const text = await response.text();
+    const waitMs = retryAfterMs(response, text);
+    lastError = new DiscordApiError(response.status, `Discord API 429: Rate Limit. Bitte gleich erneut versuchen.`, waitMs);
+
+    if (attempt < retries) {
+      await sleep(Math.min((waitMs ?? 1000) + 150, 5000));
+    }
+  }
+
+  throw lastError ?? new DiscordApiError(429, "Discord API 429: Rate Limit. Bitte gleich erneut versuchen.");
+}
+
 async function discordFetch<T>(path: string, init: RequestInit): Promise<T> {
-  const response = await fetch(`${DISCORD_API}${path}`, init);
+  const response = await discordRequest(path, init);
   if (!response.ok) {
     const text = await response.text();
-    throw new Error(`Discord API ${response.status}: ${text.slice(0, 300)}`);
+    throw new DiscordApiError(response.status, `Discord API ${response.status}: ${text.slice(0, 300)}`);
   }
   return response.json<T>();
 }
@@ -90,7 +148,7 @@ export async function fetchDiscordBotGuild(env: Env, guildId: string): Promise<D
   const botToken = env.DISCORD_BOT_TOKEN?.trim();
   if (!botToken) return null;
 
-  const response = await fetch(`${DISCORD_API}/guilds/${guildId}`, {
+  const response = await discordRequest(`/guilds/${guildId}`, {
     headers: { Authorization: `Bot ${botToken}` }
   });
 

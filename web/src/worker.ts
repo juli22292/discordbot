@@ -9,6 +9,7 @@ import {
 import { decryptJson, encryptJson, randomToken, verifyInternalBotRequest } from "./server/crypto";
 import { all, asJson, first, newId, nowIso, parseJson } from "./server/db";
 import {
+  DiscordApiError,
   discordAvatarUrl,
   discordBotInviteUrl,
   discordGuildIconUrl,
@@ -406,6 +407,10 @@ async function getFreshGuilds(c: HonoContext, session: ActiveSession): Promise<D
   try {
     return await fetchDiscordGuilds(session.tokenData);
   } catch (error) {
+    if (error instanceof DiscordApiError && error.status === 429) {
+      throw new HttpError(429, "discord_rate_limited", "Discord begrenzt gerade kurz die Anfragen. Bitte in ein paar Sekunden erneut aktualisieren.");
+    }
+
     throw new HttpError(502, "discord_unavailable", error instanceof Error ? error.message : "Discord ist nicht erreichbar.");
   }
 }

@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { discordBotInviteUrl, fetchDiscordBotGuild } from "../server/discord";
+import { discordBotInviteUrl, fetchDiscordBotGuild, fetchDiscordGuilds } from "../server/discord";
 import type { Env } from "../server/types";
 
 const originalFetch = globalThis.fetch;
@@ -67,6 +67,26 @@ describe("Discord bot helpers", () => {
     );
 
     expect(guild?.id).toBe("987654321098765432");
+  });
+
+  it("retries Discord 429 responses before failing the request", async () => {
+    let calls = 0;
+    globalThis.fetch = vi.fn(async () => {
+      calls += 1;
+      if (calls === 1) {
+        return new Response(JSON.stringify({ message: "rate limited", retry_after: 0, global: false }), {
+          status: 429,
+          headers: { "Content-Type": "application/json", "Retry-After": "0" }
+        });
+      }
+
+      return new Response(JSON.stringify([]), {
+        headers: { "Content-Type": "application/json" }
+      });
+    }) as typeof fetch;
+
+    await expect(fetchDiscordGuilds({ accessToken: "token", tokenType: "Bearer", scope: "guilds", expiresAt: Date.now() + 1000 })).resolves.toEqual([]);
+    expect(calls).toBe(2);
   });
 
   it("treats missing bot guild access as not installed", async () => {
