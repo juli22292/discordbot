@@ -10,14 +10,16 @@ afterEach(() => {
 });
 
 describe("Discord bot helpers", () => {
-  it("builds callback-less bot invite URLs", () => {
+  it("builds callback-enabled bot invite URLs", () => {
     const url = new URL(
       discordBotInviteUrl(
         {
           DISCORD_CLIENT_ID: "123456789012345678",
+          APP_URL: "https://panel.example",
           BOT_INVITE_PERMISSIONS: "8"
         } as Env,
-        "987654321098765432"
+        "987654321098765432",
+        "secure-state"
       )
     );
 
@@ -27,6 +29,22 @@ describe("Discord bot helpers", () => {
     expect(url.searchParams.get("scope")).toBe("bot applications.commands");
     expect(url.searchParams.get("guild_id")).toBe("987654321098765432");
     expect(url.searchParams.get("disable_guild_select")).toBe("true");
+    expect(url.searchParams.get("response_type")).toBe("code");
+    expect(url.searchParams.get("redirect_uri")).toBe("https://panel.example/api/bot/invite/callback");
+    expect(url.searchParams.get("state")).toBe("secure-state");
+  });
+
+  it("keeps invite URLs callback-less when no state is provided", () => {
+    const url = new URL(
+      discordBotInviteUrl(
+        {
+          DISCORD_CLIENT_ID: "123456789012345678",
+          APP_URL: "https://panel.example"
+        } as Env,
+        "987654321098765432"
+      )
+    );
+
     expect(url.searchParams.has("response_type")).toBe(false);
     expect(url.searchParams.has("redirect_uri")).toBe(false);
     expect(url.searchParams.has("state")).toBe(false);

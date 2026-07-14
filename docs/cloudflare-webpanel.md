@@ -113,16 +113,22 @@ Danach:
 
 1. Cloudflare Custom Domain verbinden.
 2. `APP_URL` und `DISCORD_REDIRECT_URI` in `wrangler.jsonc` fuer Produktion setzen.
-3. Discord Developer Portal Redirect URL aktualisieren.
+3. Im Discord Developer Portal beide Redirect URLs eintragen:
+
+```text
+https://discordbot.niteaccfort74.workers.dev/api/auth/discord/callback
+https://discordbot.niteaccfort74.workers.dev/api/bot/invite/callback
+```
+
 4. Python-Bot mit `WEBPANEL_INTERNAL_API_URL` und `INTERNAL_BOT_API_SECRET` starten.
-5. In `/home` pruefen, ob Bot-Snapshots eintreffen und installierte Guilds verwaltbar sind.
+5. In `/panel` pruefen, ob Bot-Snapshots eintreffen und installierte Guilds verwaltbar sind.
 
 ## Noch bewusst nicht als fertiges Modul markiert
 
 Das Dashboard implementiert aktuell die produktiven Grundbereiche:
 
 - Login
-- Home/Guild-Auswahl
+- Panel unter `/panel` mit Home/Guild-Auswahl
 - Bot-Einladung
 - Guild-Uebersicht
 - Bot-Nickname

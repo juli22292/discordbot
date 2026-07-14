@@ -41,6 +41,7 @@ type GuildListItem = {
   owner: boolean;
   permission: string;
   botInstalled: boolean;
+  botInstallStatus?: "installed" | "missing" | "unknown";
   botJoinedAt: string | null;
 };
 
@@ -49,6 +50,7 @@ type GuildDetail = {
   name: string;
   icon: string | null;
   botInstalled: boolean;
+  botInstallStatus?: "installed" | "missing" | "unknown";
   permission: string;
 };
 
@@ -103,6 +105,13 @@ function navigate(path: string) {
   window.dispatchEvent(new PopStateEvent("popstate"));
 }
 
+function safeClientReturnTo(value: string | null | undefined): string {
+  if (!value || !value.startsWith("/") || value.startsWith("//") || value.startsWith("/api/") || value.startsWith("/login")) {
+    return "/panel";
+  }
+  return value;
+}
+
 function usePath() {
   const [path, setPath] = useState(window.location.pathname + window.location.search);
   useEffect(() => {
@@ -129,7 +138,8 @@ async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
   const data = contentType.includes("application/json") ? ((await response.json()) as ApiError & T) : null;
 
   if (response.status === 401) {
-    navigate("/login");
+    const returnTo = safeClientReturnTo(window.location.pathname + window.location.search);
+    navigate(`/login?returnTo=${encodeURIComponent(returnTo)}`);
     throw new Error("Bitte erneut anmelden.");
   }
 
@@ -171,12 +181,14 @@ function App() {
   const cleanPath = path.split("?")[0];
 
   if (cleanPath === "/login" || cleanPath === "/") return <LoginPage />;
-  if (cleanPath === "/home") return <HomePage />;
+  if (cleanPath === "/home" || cleanPath === "/panel") return <HomePage />;
   if (cleanPath.startsWith("/dashboard/")) return <Dashboard path={cleanPath} />;
   return <LoginPage />;
 }
 
 function LoginPage() {
+  const returnTo = safeClientReturnTo(new URLSearchParams(window.location.search).get("returnTo"));
+
   return (
     <main className="auth-page">
       <div className="grid-backdrop" aria-hidden="true" />
@@ -199,7 +211,7 @@ function LoginPage() {
             <h1>Archive Bot Webpanel</h1>
             <p>Server verwalten, Slash-Befehle steuern und das Bot-Profil pro Guild sauber synchronisieren.</p>
           </div>
-          <a className="primary-action full hero-action" href="/api/auth/discord">
+          <a className="primary-action full hero-action" href={`/api/auth/discord?returnTo=${encodeURIComponent(returnTo)}`}>
             <KeyRound size={18} />
             Mit Discord anmelden
             <ArrowRight size={18} />
@@ -257,14 +269,14 @@ function AuthShowcase() {
 function TopNav({ user }: { user?: User | null }) {
   return (
     <header className="top-nav">
-      <button className="brand-link" onClick={() => navigate("/home")}>
+      <button className="brand-link" onClick={() => navigate("/panel")}>
         <Bot size={22} />
         <span>Archive Bot</span>
       </button>
       <nav className="top-links">
-        <button onClick={() => navigate("/home")}>
+        <button onClick={() => navigate("/panel")}>
           <Home size={17} />
-          Home
+          Panel
         </button>
         <a href="/docs/cloudflare-webpanel.md" target="_blank" rel="noreferrer">
           Dokumentation
@@ -292,7 +304,7 @@ function HomePage() {
   const me = useApi<{ user: User }>("/api/me", []);
   const guilds = useApi<{ guilds: GuildListItem[] }>("/api/guilds", []);
   const guildList = guilds.data?.guilds ?? [];
-  const installedCount = guildList.filter((guild) => guild.botInstalled).length;
+  const installedCount = guildList.filter((guild) => guild.botInstalled || guild.botInstallStatus === "installed").length;
   const missingCount = Math.max(guildList.length - installedCount, 0);
 
   return (
@@ -337,7 +349,7 @@ function HomePage() {
             <article className="guild-card reveal-card" style={{ "--delay": `${index * 65}ms` } as React.CSSProperties} key={guild.id}>
               <div className="guild-card-top">
                 <GuildIcon guild={guild} />
-                <span className={guild.botInstalled ? "status-light ok" : "status-light warn"} />
+                <span className={guild.botInstallStatus === "unknown" ? "status-light unknown" : guild.botInstalled ? "status-light ok" : "status-light warn"} />
               </div>
               <div className="guild-card-body">
                 <h2>{guild.name}</h2>
@@ -345,7 +357,7 @@ function HomePage() {
                 <div className="status-row">
                   <span className="pill">{guild.permission}</span>
                   <span className={guild.botInstalled ? "pill ok" : "pill warn"}>
-                    {guild.botInstalled ? "Bot installiert" : "Bot fehlt"}
+                    {guild.botInstalled ? "Bot installiert" : guild.botInstallStatus === "unknown" ? "Status prüfen" : "Bot fehlt"}
                   </span>
                 </div>
               </div>
@@ -355,7 +367,12 @@ function HomePage() {
                   <ChevronRight size={16} />
                 </button>
               ) : (
-                <a className="secondary-action" href={`/api/bot/invite?guildId=${guild.id}`} target="_blank" rel="noreferrer">
+                <a
+                  className="secondary-action"
+                  href={`/api/bot/invite?guildId=${guild.id}&returnTo=${encodeURIComponent(`/dashboard/${guild.id}/overview`)}`}
+                  target="_blank"
+                  rel="noreferrer"
+                >
                   <Plus size={16} />
                   Einladen
                 </a>
@@ -397,7 +414,12 @@ function Dashboard({ path }: { path: string }) {
         <TopNav user={me.data?.user} />
         <main className="content narrow">
           <Notice tone="warning" text="Der Bot ist auf dieser Guild noch nicht bestaetigt. Nach der Einladung aktualisiert der laufende Bot diesen Status." />
-          <a className="primary-action inline" href={`/api/bot/invite?guildId=${guildId}`} target="_blank" rel="noreferrer">
+          <a
+            className="primary-action inline"
+            href={`/api/bot/invite?guildId=${guildId}&returnTo=${encodeURIComponent(`/dashboard/${guildId}/overview`)}`}
+            target="_blank"
+            rel="noreferrer"
+          >
             <Plus size={16} />
             Bot einladen
           </a>

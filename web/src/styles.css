@@ -630,6 +630,11 @@ p {
   box-shadow: 0 0 0 5px rgba(77, 219, 143, 0.12);
 }
 
+.status-light.unknown {
+  background: var(--blue);
+  box-shadow: 0 0 0 5px rgba(119, 183, 255, 0.12);
+}
+
 .pill.ok {
   color: var(--green);
   border-color: rgba(77, 219, 143, 0.35);

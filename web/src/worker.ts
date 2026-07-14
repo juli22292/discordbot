@@ -94,6 +94,8 @@ interface OAuthStateData {
   expiresAt: number;
 }
 
+type BotInstallStatus = "installed" | "missing" | "unknown";
+
 function json(c: HonoContext, data: unknown, status = 200): Response {
   return c.json(data, status as 200);
 }
@@ -137,6 +139,11 @@ function publicUser(session: ActiveSession): SessionUser {
 
 function hasDb(env: Env): boolean {
   return Boolean((env as { DB?: D1Database }).DB);
+}
+
+function botInstallStatus(env: Env, guild: Pick<GuildRow, "bot_joined_at">): BotInstallStatus {
+  if (guild.bot_joined_at) return "installed";
+  return env.DISCORD_BOT_TOKEN?.trim() ? "missing" : "unknown";
 }
 
 function requireDb(env: Env): D1Database {
@@ -371,6 +378,28 @@ async function refreshBotPresence(env: Env, guild: GuildRow): Promise<GuildRow> 
   }
 
   return { ...guild, bot_joined_at: null };
+}
+
+async function markBotInstalled(env: Env, guild: GuildAccess["guild"]): Promise<void> {
+  if (!hasDb(env)) return;
+
+  const timestamp = nowIso();
+  await requireDb(env).prepare(
+    `UPDATE guilds
+        SET bot_joined_at = COALESCE(bot_joined_at, ?),
+            bot_removed_at = NULL,
+            last_seen_at = ?,
+            updated_at = ?
+      WHERE id = ?`
+  )
+    .bind(timestamp, timestamp, timestamp, guild.id)
+    .run();
+}
+
+function addQueryParam(path: string, key: string, value: string): string {
+  const url = new URL(path, "https://archive-bot.local");
+  url.searchParams.set(key, value);
+  return `${url.pathname}${url.search}`;
 }
 
 async function getFreshGuilds(c: HonoContext, session: ActiveSession): Promise<DiscordGuild[]> {
@@ -608,6 +637,7 @@ app.get("/api/guilds", async (c) => {
       owner: Boolean(discordGuild.owner),
       permission: permissionLabel(discordGuild),
       botInstalled: Boolean(guild.bot_joined_at),
+      botInstallStatus: botInstallStatus(c.env, guild),
       botJoinedAt: guild.bot_joined_at
     });
   }
@@ -624,10 +654,25 @@ app.get("/api/bot/invite", async (c) => {
     return c.redirect(`/dashboard/${guildId}/overview?bot=installed`);
   }
 
-  return c.redirect(discordBotInviteUrl(c.env, guildId));
+  const state = randomToken(32);
+  const requestedReturnTo = c.req.query("returnTo");
+  const returnTo = requestedReturnTo ? safeRedirectPath(requestedReturnTo) : `/dashboard/${guildId}/overview`;
+  const encryptedState = await encryptedCookieState(c.env, {
+    kind: "invite",
+    state,
+    guildId,
+    returnTo,
+    expiresAt: Date.now() + 10 * 60 * 1000
+  });
+
+  const response = c.redirect(discordBotInviteUrl(c.env, guildId, state));
+  response.headers.append("Set-Cookie", cookieHeader(OAUTH_STATE_COOKIE, encryptedState, c.env, 600));
+  return response;
 });
 
 app.get("/api/bot/invite/callback", async (c) => {
+  const inviteError = c.req.query("error");
+  const code = c.req.query("code");
   const state = c.req.query("state");
   if (!state) {
     throw new HttpError(400, "invite_state_invalid", "Die Bot-Einladung konnte nicht sicher validiert werden.");
@@ -635,9 +680,22 @@ app.get("/api/bot/invite/callback", async (c) => {
 
   const stateData = await readEncryptedCookieState(c, state, "invite");
   if (!stateData.guildId) throw new HttpError(400, "invite_state_invalid", "Die Bot-Einladung ist unvollstaendig.");
-  await requireGuildManagementAccess(c, stateData.guildId, { requireBot: false });
+  const access = await requireGuildManagementAccess(c, stateData.guildId, { requireBot: false });
+  const returnTo = stateData.returnTo || `/dashboard/${stateData.guildId}/overview`;
 
-  const response = c.redirect(`/dashboard/${stateData.guildId}/overview?invite=pending`);
+  if (inviteError) {
+    const response = c.redirect(addQueryParam(returnTo, "invite", "cancelled"));
+    response.headers.append("Set-Cookie", clearCookieHeader(OAUTH_STATE_COOKIE, c.env));
+    return response;
+  }
+
+  if (!code) {
+    throw new HttpError(400, "invite_code_missing", "Discord hat die Bot-Einladung nicht bestaetigt.");
+  }
+
+  await markBotInstalled(c.env, access.guild);
+
+  const response = c.redirect(addQueryParam(returnTo, "invite", "done"));
   response.headers.append("Set-Cookie", clearCookieHeader(OAUTH_STATE_COOKIE, c.env));
   return response;
 });
@@ -651,6 +709,7 @@ app.get("/api/guilds/:guildId", async (c) => {
       name: access.guild.name,
       icon: access.guild.icon,
       botInstalled: Boolean(access.guild.botJoinedAt),
+      botInstallStatus: access.guild.botJoinedAt ? "installed" : "missing",
       permission: permissionLabel(access.userGuild)
     },
     settings
