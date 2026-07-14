@@ -6,7 +6,8 @@
   "assets": {
     "binding": "ASSETS",
     "directory": "./dist/client",
-    "not_found_handling": "single-page-application"
+    "not_found_handling": "single-page-application",
+    "run_worker_first": ["/api/*", "/logout"]
   },
   "vars": {
     "APP_URL": "https://discordbot.niteaccfort74.workers.dev",
