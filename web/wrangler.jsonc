@@ -8,29 +8,6 @@
     "directory": "./dist/client",
     "not_found_handling": "single-page-application"
   },
-  "d1_databases": [
-    {
-      "binding": "DB",
-      "database_name": "archive_bot_panel",
-      "database_id": "replace-with-d1-database-id",
-      "migrations_dir": "migrations"
-    }
-  ],
-  "kv_namespaces": [
-    {
-      "binding": "OAUTH_STATE",
-      "id": "replace-with-oauth-kv-id",
-      "preview_id": "replace-with-oauth-kv-preview-id"
-    },
-    {
-      "binding": "BOT_EVENT_NONCES",
-      "id": "replace-with-bot-nonce-kv-id",
-      "preview_id": "replace-with-bot-nonce-kv-preview-id"
-    }
-  ],
-  "triggers": {
-    "crons": ["*/30 * * * *"]
-  },
   "vars": {
     "APP_URL": "https://discordbot.niteaccfort74.workers.dev",
     "DISCORD_REDIRECT_URI": "https://discordbot.niteaccfort74.workers.dev/api/auth/discord/callback",
