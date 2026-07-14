@@ -77,6 +77,22 @@ interface SettingsRow {
   bot_avatar_sync_error: string | null;
 }
 
+interface CookieSessionData {
+  kind: "session";
+  id: string;
+  user: SessionUser;
+  tokenData: TokenData;
+  expiresAt: string;
+}
+
+interface OAuthStateData {
+  kind: "login" | "invite";
+  state: string;
+  returnTo?: string;
+  guildId?: string;
+  expiresAt: number;
+}
+
 function json(c: HonoContext, data: unknown, status = 200): Response {
   return c.json(data, status as 200);
 }
@@ -118,14 +134,87 @@ function publicUser(session: ActiveSession): SessionUser {
   return session.user;
 }
 
+function hasDb(env: Env): boolean {
+  return Boolean((env as { DB?: D1Database }).DB);
+}
+
+function requireDb(env: Env): D1Database {
+  if (!hasDb(env)) {
+    throw new HttpError(
+      503,
+      "database_not_configured",
+      "Die Datenbank ist noch nicht verbunden. Bitte in Cloudflare das D1-Binding DB anlegen."
+    );
+  }
+
+  return env.DB;
+}
+
+async function encryptedCookieState(env: Env, data: OAuthStateData): Promise<string> {
+  requireEnv(env, "ENCRYPTION_KEY");
+  return encryptJson(data, env.ENCRYPTION_KEY);
+}
+
+async function readEncryptedCookieState(c: HonoContext, expectedState: string, expectedKind: OAuthStateData["kind"]): Promise<OAuthStateData> {
+  requireEnv(c.env, "ENCRYPTION_KEY");
+  const cookies = parseCookies(c.req.header("Cookie") ?? null);
+  const cookieState = cookies.get(OAUTH_STATE_COOKIE);
+
+  if (!cookieState) {
+    throw new HttpError(400, "oauth_state_missing", "Der Login-State fehlt. Bitte erneut anmelden.");
+  }
+
+  let stateData: OAuthStateData;
+
+  try {
+    stateData = await decryptJson<OAuthStateData>(cookieState, c.env.ENCRYPTION_KEY);
+  } catch {
+    throw new HttpError(400, "oauth_state_invalid", "Der Login-State konnte nicht gelesen werden. Bitte erneut anmelden.");
+  }
+
+  if (
+    stateData.kind !== expectedKind ||
+    stateData.state !== expectedState ||
+    stateData.expiresAt < Date.now()
+  ) {
+    throw new HttpError(400, "oauth_state_invalid", "Discord-Login konnte nicht sicher validiert werden.");
+  }
+
+  return stateData;
+}
+
 async function getSession(c: HonoContext): Promise<ActiveSession | null> {
   requireEnv(c.env, "ENCRYPTION_KEY");
   const cookies = parseCookies(c.req.header("Cookie") ?? null);
   const sessionId = cookies.get(SESSION_COOKIE);
   if (!sessionId) return null;
 
+  if (sessionId.startsWith("v1.")) {
+    try {
+      const cookieSession = await decryptJson<CookieSessionData>(sessionId, c.env.ENCRYPTION_KEY);
+
+      if (cookieSession.kind !== "session" || cookieSession.expiresAt <= nowIso()) {
+        return null;
+      }
+
+      if (cookieSession.tokenData.expiresAt <= Date.now()) {
+        return null;
+      }
+
+      return {
+        id: cookieSession.id,
+        user: cookieSession.user,
+        tokenData: cookieSession.tokenData,
+        expiresAt: cookieSession.expiresAt
+      };
+    } catch {
+      return null;
+    }
+  }
+
+  const db = requireDb(c.env);
   const row = await first<SessionRow>(
-    c.env.DB.prepare(
+    db.prepare(
       `SELECT s.id, s.user_id, s.expires_at, s.encrypted_token_data,
               u.discord_user_id, u.username, u.display_name, u.avatar
          FROM sessions s
@@ -140,7 +229,7 @@ async function getSession(c: HonoContext): Promise<ActiveSession | null> {
   if (tokenData.expiresAt < Date.now() + 60_000) {
     tokenData = await refreshDiscordToken(c.env, tokenData);
     const encrypted = await encryptJson(tokenData, c.env.ENCRYPTION_KEY);
-    await c.env.DB.prepare("UPDATE sessions SET encrypted_token_data = ?, updated_at = ? WHERE id = ?")
+    await db.prepare("UPDATE sessions SET encrypted_token_data = ?, updated_at = ? WHERE id = ?")
       .bind(encrypted, nowIso(), row.id)
       .run();
   }
@@ -166,14 +255,15 @@ async function requireSession(c: HonoContext): Promise<ActiveSession> {
 }
 
 async function upsertUser(env: Env, user: Awaited<ReturnType<typeof fetchDiscordUser>>): Promise<string> {
+  const db = requireDb(env);
   const existing = await first<{ id: string }>(
-    env.DB.prepare("SELECT id FROM users WHERE discord_user_id = ?").bind(user.id)
+    db.prepare("SELECT id FROM users WHERE discord_user_id = ?").bind(user.id)
   );
   const timestamp = nowIso();
   const avatar = discordAvatarUrl(user);
 
   if (existing) {
-    await env.DB.prepare(
+    await db.prepare(
       `UPDATE users
           SET username = ?, display_name = ?, avatar = ?, last_login_at = ?, updated_at = ?
         WHERE id = ?`
@@ -184,7 +274,7 @@ async function upsertUser(env: Env, user: Awaited<ReturnType<typeof fetchDiscord
   }
 
   const id = newId("usr");
-  await env.DB.prepare(
+  await db.prepare(
     `INSERT INTO users (id, discord_user_id, username, display_name, avatar, last_login_at, created_at, updated_at)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
   )
@@ -194,23 +284,34 @@ async function upsertUser(env: Env, user: Awaited<ReturnType<typeof fetchDiscord
 }
 
 async function upsertGuildFromDiscord(env: Env, guild: DiscordGuild): Promise<GuildRow> {
+  if (!hasDb(env)) {
+    return {
+      id: guild.id,
+      discord_guild_id: guild.id,
+      name: guild.name,
+      icon: discordGuildIconUrl(guild),
+      bot_joined_at: null
+    };
+  }
+
+  const db = requireDb(env);
   const timestamp = nowIso();
   const icon = discordGuildIconUrl(guild);
   const existing = await first<GuildRow>(
-    env.DB.prepare(
+    db.prepare(
       "SELECT id, discord_guild_id, name, icon, bot_joined_at FROM guilds WHERE discord_guild_id = ?"
     ).bind(guild.id)
   );
 
   if (existing) {
-    await env.DB.prepare("UPDATE guilds SET name = ?, icon = ?, updated_at = ? WHERE id = ?")
+    await db.prepare("UPDATE guilds SET name = ?, icon = ?, updated_at = ? WHERE id = ?")
       .bind(guild.name, icon, timestamp, existing.id)
       .run();
     return { ...existing, name: guild.name, icon };
   }
 
   const id = newId("gld");
-  await env.DB.prepare(
+  await db.prepare(
     `INSERT INTO guilds (id, discord_guild_id, name, icon, created_at, updated_at)
      VALUES (?, ?, ?, ?, ?, ?)`
   )
@@ -261,8 +362,9 @@ async function requireGuildManagementAccess(
 }
 
 async function ensureSettings(env: Env, guildId: string): Promise<SettingsRow> {
+  const db = requireDb(env);
   const existing = await first<SettingsRow>(
-    env.DB.prepare(
+    db.prepare(
       `SELECT id, guild_id, locale, timezone, bot_nickname, bot_avatar_media_key,
               bot_avatar_sync_status, bot_avatar_sync_error
          FROM guild_settings
@@ -274,7 +376,7 @@ async function ensureSettings(env: Env, guildId: string): Promise<SettingsRow> {
 
   const id = newId("set");
   const timestamp = nowIso();
-  await env.DB.prepare(
+  await db.prepare(
     `INSERT INTO guild_settings (id, guild_id, locale, timezone, created_at, updated_at)
      VALUES (?, ?, 'de', 'Europe/Berlin', ?, ?)`
   )
@@ -302,7 +404,8 @@ async function audit(
   oldValue: unknown,
   newValue: unknown
 ): Promise<void> {
-  await env.DB.prepare(
+  const db = requireDb(env);
+  await db.prepare(
     `INSERT INTO audit_logs (id, guild_id, actor_discord_user_id, action, target, old_value, new_value, created_at)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
   )
@@ -316,9 +419,10 @@ async function enqueueSyncEvent(
   action: string,
   payload: unknown
 ): Promise<string> {
+  const db = requireDb(env);
   const eventId = newId("evt");
   const timestamp = nowIso();
-  await env.DB.prepare(
+  await db.prepare(
     `INSERT INTO sync_events (id, guild_id, action, payload, status, attempts, max_attempts, created_at, updated_at)
      VALUES (?, ?, ?, ?, 'pending', 0, 5, ?, ?)`
   )
@@ -359,48 +463,66 @@ app.get("/api/auth/discord", async (c) => {
   requireEnv(c.env, "DISCORD_CLIENT_SECRET");
   const state = randomToken(32);
   const returnTo = safeRedirectPath(c.req.query("returnTo"));
-  await c.env.OAUTH_STATE.put(`login:${state}`, JSON.stringify({ returnTo, createdAt: nowIso() }), {
-    expirationTtl: 600
+  const encryptedState = await encryptedCookieState(c.env, {
+    kind: "login",
+    state,
+    returnTo,
+    expiresAt: Date.now() + 10 * 60 * 1000
   });
 
   const response = c.redirect(discordOAuthAuthorizeUrl(c.env, state));
-  response.headers.append("Set-Cookie", cookieHeader(OAUTH_STATE_COOKIE, state, c.env, 600));
+  response.headers.append("Set-Cookie", cookieHeader(OAUTH_STATE_COOKIE, encryptedState, c.env, 600));
   return response;
 });
 
 app.get("/api/auth/discord/callback", async (c) => {
   const code = c.req.query("code");
   const state = c.req.query("state");
-  const cookies = parseCookies(c.req.header("Cookie") ?? null);
-  const cookieState = cookies.get(OAUTH_STATE_COOKIE);
 
-  if (!code || !state || cookieState !== state) {
+  if (!code || !state) {
     throw new HttpError(400, "oauth_state_invalid", "Discord-Login konnte nicht sicher validiert werden.");
   }
 
-  const stateDataRaw = await c.env.OAUTH_STATE.get(`login:${state}`);
-  if (!stateDataRaw) throw new HttpError(400, "oauth_state_expired", "Der Login ist abgelaufen. Bitte erneut starten.");
-  await c.env.OAUTH_STATE.delete(`login:${state}`);
-
-  const stateData = parseJson<{ returnTo: string }>(stateDataRaw, { returnTo: "/home" });
+  const stateData = await readEncryptedCookieState(c, state, "login");
   const tokenData = await exchangeDiscordCode(c.env, code);
   const user = await fetchDiscordUser(tokenData);
-  const userId = await upsertUser(c.env, user);
   const sessionId = randomToken(32);
   const ttl = sessionTtl(c.env);
   const expiresAt = new Date(Date.now() + ttl * 1000).toISOString();
-  const encrypted = await encryptJson(tokenData, c.env.ENCRYPTION_KEY);
+  const sessionUser: SessionUser = {
+    id: user.id,
+    discordUserId: user.id,
+    username: user.username,
+    displayName: user.global_name ?? null,
+    avatar: discordAvatarUrl(user)
+  };
+  let sessionCookieValue = await encryptJson(
+    {
+      kind: "session",
+      id: sessionId,
+      user: sessionUser,
+      tokenData,
+      expiresAt
+    } satisfies CookieSessionData,
+    c.env.ENCRYPTION_KEY
+  );
   const timestamp = nowIso();
 
-  await c.env.DB.prepare(
-    `INSERT INTO sessions (id, user_id, encrypted_token_data, expires_at, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?)`
-  )
-    .bind(sessionId, userId, encrypted, expiresAt, timestamp, timestamp)
-    .run();
+  if (hasDb(c.env)) {
+    const db = requireDb(c.env);
+    const userId = await upsertUser(c.env, user);
+    const encrypted = await encryptJson(tokenData, c.env.ENCRYPTION_KEY);
+    await db.prepare(
+      `INSERT INTO sessions (id, user_id, encrypted_token_data, expires_at, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?)`
+    )
+      .bind(sessionId, userId, encrypted, expiresAt, timestamp, timestamp)
+      .run();
+    sessionCookieValue = sessionId;
+  }
 
   const response = c.redirect(stateData.returnTo || "/home");
-  response.headers.append("Set-Cookie", cookieHeader(SESSION_COOKIE, sessionId, c.env, ttl));
+  response.headers.append("Set-Cookie", cookieHeader(SESSION_COOKIE, sessionCookieValue, c.env, ttl));
   response.headers.append("Set-Cookie", clearCookieHeader(OAUTH_STATE_COOKIE, c.env));
   return response;
 });
@@ -408,8 +530,8 @@ app.get("/api/auth/discord/callback", async (c) => {
 async function logoutResponse(c: HonoContext): Promise<Response> {
   const cookies = parseCookies(c.req.header("Cookie") ?? null);
   const sessionId = cookies.get(SESSION_COOKIE);
-  if (sessionId) {
-    await c.env.DB.prepare("DELETE FROM sessions WHERE id = ?").bind(sessionId).run();
+  if (sessionId && !sessionId.startsWith("v1.") && hasDb(c.env)) {
+    await requireDb(c.env).prepare("DELETE FROM sessions WHERE id = ?").bind(sessionId).run();
   }
   const response = c.redirect("/login");
   response.headers.append("Set-Cookie", clearCookieHeader(SESSION_COOKIE, c.env));
@@ -447,27 +569,26 @@ app.get("/api/bot/invite", async (c) => {
   await requireGuildManagementAccess(c, guildId, { requireBot: false });
 
   const state = randomToken(32);
-  await c.env.OAUTH_STATE.put(`invite:${state}`, JSON.stringify({ guildId, createdAt: nowIso() }), {
-    expirationTtl: 600
+  const encryptedState = await encryptedCookieState(c.env, {
+    kind: "invite",
+    state,
+    guildId,
+    expiresAt: Date.now() + 10 * 60 * 1000
   });
 
   const response = c.redirect(discordBotInviteUrl(c.env, guildId, state));
-  response.headers.append("Set-Cookie", cookieHeader(OAUTH_STATE_COOKIE, state, c.env, 600));
+  response.headers.append("Set-Cookie", cookieHeader(OAUTH_STATE_COOKIE, encryptedState, c.env, 600));
   return response;
 });
 
 app.get("/api/bot/invite/callback", async (c) => {
   const state = c.req.query("state");
-  const cookies = parseCookies(c.req.header("Cookie") ?? null);
-  if (!state || cookies.get(OAUTH_STATE_COOKIE) !== state) {
+  if (!state) {
     throw new HttpError(400, "invite_state_invalid", "Die Bot-Einladung konnte nicht sicher validiert werden.");
   }
 
-  const stateDataRaw = await c.env.OAUTH_STATE.get(`invite:${state}`);
-  if (!stateDataRaw) throw new HttpError(400, "invite_state_expired", "Die Bot-Einladung ist abgelaufen.");
-  await c.env.OAUTH_STATE.delete(`invite:${state}`);
-
-  const stateData = parseJson<{ guildId: string }>(stateDataRaw, { guildId: "" });
+  const stateData = await readEncryptedCookieState(c, state, "invite");
+  if (!stateData.guildId) throw new HttpError(400, "invite_state_invalid", "Die Bot-Einladung ist unvollstaendig.");
   await requireGuildManagementAccess(c, stateData.guildId, { requireBot: false });
 
   const response = c.redirect(`/dashboard/${stateData.guildId}/overview?invite=pending`);
