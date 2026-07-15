@@ -947,22 +947,36 @@ p {
   border: 2px solid var(--surface);
   border-radius: 50%;
   background: var(--amber);
-  box-shadow: 0 0 0 5px rgba(244, 189, 99, 0.12);
+  box-shadow: 0 0 0 5px rgba(244, 189, 99, 0.12), 0 0 16px rgba(244, 189, 99, 0.28);
+  animation: statusPulse 2.2s ease-in-out infinite;
+}
+
+.status-light::after {
+  content: "";
+  position: absolute;
+  inset: -7px;
+  border-radius: inherit;
+  border: 1px solid currentColor;
+  opacity: 0.32;
+  animation: statusRing 2.2s ease-out infinite;
 }
 
 .status-light.ok {
+  color: var(--green);
   background: var(--green);
-  box-shadow: 0 0 0 5px rgba(77, 219, 143, 0.12);
+  box-shadow: 0 0 0 5px rgba(77, 219, 143, 0.12), 0 0 16px rgba(77, 219, 143, 0.34);
 }
 
 .status-light.unknown {
+  color: var(--blue);
   background: var(--blue);
-  box-shadow: 0 0 0 5px rgba(119, 183, 255, 0.12);
+  box-shadow: 0 0 0 5px rgba(119, 183, 255, 0.12), 0 0 16px rgba(119, 183, 255, 0.32);
 }
 
 .status-light.missing {
-  background: #8a8f99;
-  box-shadow: 0 0 0 5px rgba(138, 143, 153, 0.12);
+  color: var(--red);
+  background: var(--red);
+  box-shadow: 0 0 0 5px rgba(255, 116, 116, 0.12), 0 0 18px rgba(255, 116, 116, 0.36);
 }
 
 .pill.ok {
@@ -1661,6 +1675,30 @@ textarea {
   100% {
     opacity: 0;
     transform: scale(1.25);
+  }
+}
+
+@keyframes statusPulse {
+  0%,
+  100% {
+    transform: scale(1);
+    filter: brightness(1);
+  }
+  50% {
+    transform: scale(1.08);
+    filter: brightness(1.18);
+  }
+}
+
+@keyframes statusRing {
+  0% {
+    opacity: 0.34;
+    transform: scale(0.72);
+  }
+  70%,
+  100% {
+    opacity: 0;
+    transform: scale(1.35);
   }
 }
 
