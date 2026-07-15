@@ -250,6 +250,7 @@ function App() {
   const cleanPath = path.split("?")[0];
 
   if (cleanPath === "/login" || cleanPath === "/") return <LoginPage />;
+  if (cleanPath === "/dokumentation") return <DocumentationPage />;
   if (cleanPath === "/home" || cleanPath === "/panel") return <HomePage />;
   if (cleanPath.startsWith("/dashboard/")) return <Dashboard path={cleanPath} />;
   return <LoginPage />;
@@ -347,9 +348,10 @@ function TopNav({ user }: { user?: User | null }) {
           <Home size={17} />
           Panel
         </button>
-        <a href="/docs/cloudflare-webpanel.md" target="_blank" rel="noreferrer">
+        <button onClick={() => navigate("/dokumentation")}>
+          <ClipboardList size={17} />
           Dokumentation
-        </a>
+        </button>
         <a href="https://discord.com/developers/docs/intro" target="_blank" rel="noreferrer">
           Support
         </a>
@@ -358,14 +360,131 @@ function TopNav({ user }: { user?: User | null }) {
         <Activity size={14} />
         Live
       </span>
-      <div className="user-chip">
-        {user?.avatar ? <img src={user.avatar} alt="" /> : <UserRound size={18} />}
-        <span>{user?.displayName || user?.username || "Discord"}</span>
-        <a className="icon-button" href="/logout" title="Abmelden">
-          <LogOut size={17} />
-        </a>
-      </div>
+      {user && (
+        <div className="user-chip">
+          {user.avatar ? <img src={user.avatar} alt="" /> : <UserRound size={18} />}
+          <span>{user.displayName || user.username}</span>
+          <a className="icon-button" href="/logout" title="Abmelden">
+            <LogOut size={17} />
+          </a>
+        </div>
+      )}
     </header>
+  );
+}
+
+function DocumentationPage() {
+  const docHighlights = [
+    { icon: <Server size={18} />, title: "Server auswählen", text: "Alle verwaltbaren Discord-Server erscheinen gesammelt im Panel." },
+    { icon: <Bot size={18} />, title: "Bot prüfen", text: "Du siehst sofort, ob der Bot installiert ist oder noch eingeladen werden muss." },
+    { icon: <Command size={18} />, title: "Befehle steuern", text: "Slash-Befehle und Custom Commands lassen sich pro Server vorbereiten und verwalten." },
+    { icon: <Shield size={18} />, title: "Sicher getrennt", text: "Jede Guild bleibt sauber isoliert, damit Einstellungen nicht auf andere Server rutschen." }
+  ];
+  const docSections = [
+    {
+      eyebrow: "Start",
+      title: "Panel öffnen",
+      text: "Melde dich mit Discord an und wähle danach den Server aus, den du verwalten möchtest. Server ohne Bot werden grau angezeigt und haben einen roten Einladen-Button."
+    },
+    {
+      eyebrow: "Verwaltung",
+      title: "Bot-Profil bearbeiten",
+      text: "Im Bot-Profil kannst du den serverbezogenen Namen und später weitere sichtbare Bot-Details einstellen. Änderungen werden direkt der aktuellen Guild zugeordnet."
+    },
+    {
+      eyebrow: "Commands",
+      title: "Befehle organisieren",
+      text: "Slash-Befehle und Custom Commands sind im Panel getrennt. So bleibt klar, welche Funktionen vom Bot kommen und welche Antworten du selbst anlegst."
+    },
+    {
+      eyebrow: "Protokoll",
+      title: "Audit-Log prüfen",
+      text: "Wichtige Aktionen werden nachvollziehbar gesammelt, damit du später sehen kannst, was am Server-Panel geändert wurde."
+    }
+  ];
+
+  return (
+    <div className="app-shell">
+      <TopNav />
+      <main className="docs-page">
+        <section className="docs-hero">
+          <div className="docs-hero-copy">
+            <p className="eyebrow">
+              <Sparkles size={15} />
+              Archive Bot Hilfe
+            </p>
+            <h1>Dokumentation</h1>
+            <p>Eine kurze, saubere Übersicht für das Webpanel: anmelden, Server wählen, Bot einladen und die wichtigsten Bereiche verstehen.</p>
+            <div className="docs-actions">
+              <button className="primary-action" onClick={() => navigate("/panel")}>
+                <LayoutDashboard size={17} />
+                Zum Panel
+              </button>
+              <button className="secondary-action" onClick={() => navigate("/login?returnTo=%2Fpanel")}>
+                <KeyRound size={17} />
+                Anmelden
+              </button>
+            </div>
+          </div>
+          <div className="docs-status-board" aria-label="Dokumentationsübersicht">
+            <div className="docs-status-top">
+              <span />
+              <strong>Webpanel Guide</strong>
+              <BadgeCheck size={18} />
+            </div>
+            <div className="docs-status-list">
+              <div>
+                <span>01</span>
+                <strong>Discord Login</strong>
+                <small>Account verbinden</small>
+              </div>
+              <div>
+                <span>02</span>
+                <strong>Guild wählen</strong>
+                <small>Server öffnen</small>
+              </div>
+              <div>
+                <span>03</span>
+                <strong>Bot verwalten</strong>
+                <small>Funktionen steuern</small>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section className="docs-highlight-grid">
+          {docHighlights.map((item) => (
+            <article className="docs-highlight" key={item.title}>
+              <span>{item.icon}</span>
+              <h2>{item.title}</h2>
+              <p>{item.text}</p>
+            </article>
+          ))}
+        </section>
+
+        <section className="docs-manual">
+          <div className="docs-manual-heading">
+            <p className="eyebrow">
+              <ClipboardList size={15} />
+              Bedienung
+            </p>
+            <h2>So nutzt du das Panel</h2>
+          </div>
+          <div className="docs-steps">
+            {docSections.map((item, index) => (
+              <article className="docs-step" key={item.title}>
+                <span>{String(index + 1).padStart(2, "0")}</span>
+                <div>
+                  <small>{item.eyebrow}</small>
+                  <h3>{item.title}</h3>
+                  <p>{item.text}</p>
+                </div>
+              </article>
+            ))}
+          </div>
+        </section>
+      </main>
+    </div>
   );
 }
 
