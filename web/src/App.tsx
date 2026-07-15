@@ -808,10 +808,12 @@ function OverviewPage({ guildId, initial }: { guildId: string; initial: { guild:
           </label>
         </div>
         <ActionStatus status={status} />
-        <button className="primary-action inline" onClick={save} disabled={saving}>
-          {saving ? <Loader2 className="spin" size={16} /> : <Save size={16} />}
-          Speichern
-        </button>
+        <div className="form-actions">
+          <button className="primary-action inline" onClick={save} disabled={saving}>
+            {saving ? <Loader2 className="spin" size={16} /> : <Save size={16} />}
+            Speichern
+          </button>
+        </div>
       </div>
     </section>
   );
@@ -883,10 +885,12 @@ function ProfilePage({ guildId, settings, onSaved }: { guildId: string; settings
           <input value={nickname} maxLength={32} onChange={(event) => setNickname(event.target.value)} placeholder="Leer lassen zum Zurücksetzen" />
         </label>
         <ActionStatus status={status} />
-        <button className="primary-action inline" onClick={saveNickname} disabled={saving}>
-          {saving ? <Loader2 className="spin" size={16} /> : <Save size={16} />}
-          Nickname speichern
-        </button>
+        <div className="form-actions">
+          <button className="primary-action inline" onClick={saveNickname} disabled={saving}>
+            {saving ? <Loader2 className="spin" size={16} /> : <Save size={16} />}
+            Nickname speichern
+          </button>
+        </div>
       </div>
 
       <div className="panel">
@@ -902,10 +906,12 @@ function ProfilePage({ guildId, settings, onSaved }: { guildId: string; settings
         </label>
         {file && <p className="muted">{file.name} - {Math.round(file.size / 1024)} KiB</p>}
         {settings.bot_avatar_sync_error && <Notice tone="danger" text={settings.bot_avatar_sync_error} />}
-        <button className="secondary-action inline" onClick={uploadAvatar} disabled={!file || saving}>
-          <Upload size={16} />
-          Avatar hochladen
-        </button>
+        <div className="form-actions">
+          <button className="secondary-action inline" onClick={uploadAvatar} disabled={!file || saving}>
+            <Upload size={16} />
+            Avatar hochladen
+          </button>
+        </div>
       </div>
     </section>
   );

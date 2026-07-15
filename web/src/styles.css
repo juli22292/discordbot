@@ -1009,11 +1009,12 @@ p {
 
 .primary-action {
   color: #06110b;
+  border-color: rgba(77, 219, 143, 0.42);
   background:
-    linear-gradient(135deg, rgba(255, 255, 255, 0.32), transparent 40%),
-    linear-gradient(135deg, #54df98, #75c4ff);
+    linear-gradient(135deg, rgba(255, 255, 255, 0.24), transparent 42%),
+    linear-gradient(135deg, #58e29a, #24b96f);
   font-weight: 800;
-  box-shadow: var(--green-glow), inset 0 1px 0 rgba(255, 255, 255, 0.42);
+  box-shadow: 0 0 28px rgba(77, 219, 143, 0.18), inset 0 1px 0 rgba(255, 255, 255, 0.34);
 }
 
 .primary-action:hover,
@@ -1380,6 +1381,13 @@ p {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 14px;
+}
+
+.form-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 16px;
 }
 
 label {
