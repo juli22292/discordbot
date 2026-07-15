@@ -1071,10 +1071,12 @@ function CustomCommandsPage({ guildId }: { guildId: string }) {
         </div>
         <CommandEditor draft={draft} onChange={setDraft} />
         <ActionStatus status={status} />
-        <button className="primary-action inline" onClick={create}>
-          <Plus size={16} />
-          Erstellen
-        </button>
+        <div className="form-actions">
+          <button className="primary-action inline" onClick={create}>
+            <Plus size={16} />
+            Erstellen
+          </button>
+        </div>
       </div>
 
       <div className="panel">
