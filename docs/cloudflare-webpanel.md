@@ -116,8 +116,8 @@ Danach:
 3. Im Discord Developer Portal beide Redirect URLs eintragen:
 
 ```text
-https://discordbot.niteaccfort74.workers.dev/api/auth/discord/callback
-https://discordbot.niteaccfort74.workers.dev/api/bot/invite/callback
+https://bot.carrothd.de/api/auth/discord/callback
+https://bot.carrothd.de/api/bot/invite/callback
 ```
 
 4. Python-Bot mit `WEBPANEL_INTERNAL_API_URL` und `INTERNAL_BOT_API_SECRET` starten.
