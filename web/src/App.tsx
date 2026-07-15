@@ -17,6 +17,7 @@ import {
   Home,
   KeyRound,
   LayoutDashboard,
+  LifeBuoy,
   Loader2,
   LogOut,
   Plus,
@@ -27,6 +28,7 @@ import {
   Server,
   Settings,
   Shield,
+  ShieldCheck,
   Sparkles,
   Trash2,
   Upload,
@@ -251,6 +253,7 @@ function App() {
 
   if (cleanPath === "/login" || cleanPath === "/") return <LoginPage />;
   if (cleanPath === "/dokumentation") return <DocumentationPage />;
+  if (cleanPath === "/datenschutz") return <PrivacyPage />;
   if (cleanPath === "/home" || cleanPath === "/panel") return <HomePage />;
   if (cleanPath.startsWith("/dashboard/")) return <Dashboard path={cleanPath} />;
   return <LoginPage />;
@@ -389,7 +392,12 @@ function TopNav({ user }: { user?: User | null }) {
           <ClipboardList size={17} />
           Dokumentation
         </button>
+        <button onClick={() => navigate("/datenschutz")}>
+          <ShieldCheck size={17} />
+          Datenschutz
+        </button>
         <a href="https://discord.com/developers/docs/intro" target="_blank" rel="noreferrer">
+          <LifeBuoy size={17} />
           Support
         </a>
       </nav>
@@ -509,6 +517,121 @@ function DocumentationPage() {
           </div>
           <div className="docs-steps">
             {docSections.map((item, index) => (
+              <article className="docs-step" key={item.title}>
+                <span>{String(index + 1).padStart(2, "0")}</span>
+                <div>
+                  <small>{item.eyebrow}</small>
+                  <h3>{item.title}</h3>
+                  <p>{item.text}</p>
+                </div>
+              </article>
+            ))}
+          </div>
+        </section>
+      </main>
+    </div>
+  );
+}
+
+function PrivacyPage() {
+  const privacyHighlights = [
+    { icon: <KeyRound size={18} />, title: "Discord Login", text: "Die Anmeldung läuft über Discord OAuth. Das Panel nutzt die Anmeldung nur, um deinen Account und deine verwaltbaren Server zu erkennen." },
+    { icon: <Database size={18} />, title: "Guild-Daten", text: "Gespeichert werden nur Daten, die für Serververwaltung, Einstellungen, Commands und Audit-Log gebraucht werden." },
+    { icon: <ShieldCheck size={18} />, title: "Geschützte Sitzungen", text: "Sessions und sensible Tokens werden serverseitig geschützt und nicht offen im Browser angezeigt." },
+    { icon: <Activity size={18} />, title: "Keine Werbung", text: "Das Webpanel ist ein Verwaltungsbereich und enthält keine Werbe- oder Marketingfunktionen." }
+  ];
+  const privacySections = [
+    {
+      eyebrow: "Anmeldung",
+      title: "Welche Discord-Daten genutzt werden",
+      text: "Beim Login werden deine Discord-ID, dein Nutzername, dein Anzeigename und dein Avatar genutzt. Dazu kommen die Server, auf denen du passende Verwaltungsrechte hast."
+    },
+    {
+      eyebrow: "Server",
+      title: "Was pro Guild gespeichert wird",
+      text: "Das Panel speichert serverbezogene Einstellungen wie Sprache, Zeitzone, Bot-Profil, Command-Konfigurationen und technische Sync-Statuswerte."
+    },
+    {
+      eyebrow: "Sicherheit",
+      title: "Wie sensible Daten behandelt werden",
+      text: "Discord-Tokens, Session-Daten und interne Bot-Schlüssel werden als Secrets oder verschlüsselte Daten behandelt. Sie werden nicht öffentlich auf der Webseite ausgegeben."
+    },
+    {
+      eyebrow: "Kontrolle",
+      title: "Abmelden und Zugriff begrenzen",
+      text: "Du kannst dich jederzeit abmelden. Das Panel zeigt nur Server an, für die dein Discord-Account ausreichende Rechte besitzt."
+    }
+  ];
+
+  return (
+    <div className="app-shell">
+      <TopNav />
+      <main className="docs-page">
+        <section className="docs-hero">
+          <div className="docs-hero-copy">
+            <p className="eyebrow">
+              <ShieldCheck size={15} />
+              EclipseBot Datenschutz
+            </p>
+            <h1>Datenschutz</h1>
+            <p>Eine klare Übersicht, welche Daten das Webpanel braucht, warum sie verwendet werden und wie der Zugriff auf deine Discord-Server begrenzt wird.</p>
+            <div className="docs-actions">
+              <button className="primary-action" onClick={() => navigate("/panel")}>
+                <LayoutDashboard size={17} />
+                Zum Panel
+              </button>
+              <button className="secondary-action" onClick={() => navigate("/dokumentation")}>
+                <ClipboardList size={17} />
+                Dokumentation
+              </button>
+            </div>
+          </div>
+          <div className="docs-status-board" aria-label="Datenschutzübersicht">
+            <div className="docs-status-top">
+              <span />
+              <strong>Privacy Check</strong>
+              <ShieldCheck size={18} />
+            </div>
+            <div className="docs-status-list">
+              <div>
+                <span>01</span>
+                <strong>OAuth Login</strong>
+                <small>Discord bestätigt dich</small>
+              </div>
+              <div>
+                <span>02</span>
+                <strong>Guild Rechte</strong>
+                <small>Nur verwaltbare Server</small>
+              </div>
+              <div>
+                <span>03</span>
+                <strong>Panel Daten</strong>
+                <small>Nur für Bot-Verwaltung</small>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section className="docs-highlight-grid">
+          {privacyHighlights.map((item) => (
+            <article className="docs-highlight" key={item.title}>
+              <span>{item.icon}</span>
+              <h2>{item.title}</h2>
+              <p>{item.text}</p>
+            </article>
+          ))}
+        </section>
+
+        <section className="docs-manual">
+          <div className="docs-manual-heading">
+            <p className="eyebrow">
+              <ShieldCheck size={15} />
+              Übersicht
+            </p>
+            <h2>Was im Panel passiert</h2>
+          </div>
+          <div className="docs-steps">
+            {privacySections.map((item, index) => (
               <article className="docs-step" key={item.title}>
                 <span>{String(index + 1).padStart(2, "0")}</span>
                 <div>
