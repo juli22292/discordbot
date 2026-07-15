@@ -595,9 +595,64 @@ p {
   opacity: 1;
 }
 
+.guild-card.missing {
+  border-color: rgba(255, 255, 255, 0.11);
+  background:
+    linear-gradient(145deg, rgba(255, 255, 255, 0.045), transparent 48%),
+    rgba(8, 9, 12, 0.78);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+
+.guild-card.missing::before {
+  background: linear-gradient(145deg, rgba(255, 255, 255, 0.08), transparent 46%);
+  opacity: 0.45;
+}
+
+.guild-card.missing:hover {
+  border-color: rgba(255, 255, 255, 0.22);
+  background:
+    linear-gradient(145deg, rgba(255, 255, 255, 0.06), transparent 48%),
+    rgba(14, 15, 19, 0.92);
+  box-shadow: 0 18px 42px rgba(0, 0, 0, 0.28);
+}
+
+.guild-card.missing .guild-icon {
+  filter: grayscale(1);
+  opacity: 0.64;
+}
+
+.guild-card.missing h2,
+.guild-card.missing p {
+  color: rgba(234, 238, 245, 0.72);
+}
+
 .guild-card > * {
   position: relative;
   z-index: 1;
+}
+
+.guild-card-quick-action {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  z-index: 2;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  border-radius: 8px;
+  color: rgba(234, 238, 245, 0.86);
+  background: rgba(19, 20, 24, 0.74);
+  transition: transform 160ms ease, border-color 160ms ease, background 160ms ease, color 160ms ease;
+}
+
+.guild-card-quick-action:hover {
+  transform: translateY(-1px);
+  border-color: rgba(77, 219, 143, 0.48);
+  color: var(--green);
+  background: rgba(25, 29, 35, 0.94);
 }
 
 .guild-card .primary-action,
@@ -655,9 +710,25 @@ p {
   box-shadow: 0 0 0 5px rgba(119, 183, 255, 0.12);
 }
 
+.status-light.missing {
+  background: #8a8f99;
+  box-shadow: 0 0 0 5px rgba(138, 143, 153, 0.12);
+}
+
 .pill.ok {
   color: var(--green);
   border-color: rgba(77, 219, 143, 0.35);
+}
+
+.pill.neutral {
+  color: var(--blue);
+  border-color: rgba(119, 183, 255, 0.34);
+}
+
+.pill.missing {
+  color: rgba(234, 238, 245, 0.68);
+  border-color: rgba(255, 255, 255, 0.16);
+  background: rgba(255, 255, 255, 0.045);
 }
 
 .pill.warn {
@@ -874,6 +945,32 @@ p {
 
 .side-link.active svg {
   color: var(--green);
+}
+
+.side-link-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.side-badge {
+  justify-self: end;
+  padding: 3px 7px;
+  border: 1px solid rgba(119, 183, 255, 0.22);
+  border-radius: 999px;
+  color: rgba(194, 209, 230, 0.78);
+  background: rgba(119, 183, 255, 0.08);
+  font-size: 10px;
+  font-weight: 760;
+  line-height: 1;
+  text-transform: uppercase;
+}
+
+.side-link.active .side-badge {
+  color: var(--green);
+  border-color: rgba(77, 219, 143, 0.34);
+  background: rgba(77, 219, 143, 0.1);
 }
 
 .side-link.disabled {
@@ -1144,6 +1241,88 @@ textarea {
   color: var(--text);
 }
 
+.planned-page {
+  display: grid;
+  gap: 16px;
+}
+
+.planned-hero {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 16px;
+  align-items: center;
+  min-height: 158px;
+  padding: 20px;
+  border: 1px solid rgba(119, 183, 255, 0.18);
+  border-radius: 8px;
+  background:
+    linear-gradient(135deg, rgba(119, 183, 255, 0.14), transparent 42%),
+    rgba(21, 25, 34, 0.88);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04), var(--soft-shadow);
+}
+
+.planned-hero.danger {
+  border-color: rgba(255, 116, 116, 0.24);
+  background:
+    linear-gradient(135deg, rgba(255, 116, 116, 0.12), transparent 42%),
+    rgba(21, 25, 34, 0.88);
+}
+
+.planned-icon {
+  display: grid;
+  place-items: center;
+  width: 54px;
+  height: 54px;
+  border: 1px solid rgba(119, 183, 255, 0.22);
+  border-radius: 8px;
+  color: var(--blue);
+  background: rgba(119, 183, 255, 0.1);
+}
+
+.planned-hero.danger .planned-icon {
+  color: var(--red);
+  border-color: rgba(255, 116, 116, 0.26);
+  background: rgba(255, 116, 116, 0.09);
+}
+
+.planned-hero h2 {
+  margin: 10px 0 6px;
+  font-size: 30px;
+}
+
+.planned-hero p,
+.planned-card p {
+  color: var(--muted);
+}
+
+.planned-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.planned-card {
+  min-height: 150px;
+  padding: 16px;
+  border: 1px solid var(--border-soft);
+  border-radius: 8px;
+  background:
+    linear-gradient(145deg, rgba(255, 255, 255, 0.035), transparent 46%),
+    rgba(21, 25, 34, 0.78);
+}
+
+.planned-card span {
+  color: var(--blue);
+  font-size: 12px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.planned-card h3 {
+  margin: 10px 0 6px;
+  font-size: 19px;
+}
+
 .notice {
   display: flex;
   align-items: flex-start;
@@ -1275,6 +1454,10 @@ textarea {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 
+  .planned-grid {
+    grid-template-columns: 1fr;
+  }
+
   .sidebar {
     position: static;
     max-height: none;
@@ -1324,7 +1507,8 @@ textarea {
   .metric-strip,
   .overview-tiles,
   .form-grid,
-  .guild-card {
+  .guild-card,
+  .planned-hero {
     grid-template-columns: 1fr;
   }
 

@@ -100,6 +100,75 @@ type ApiError = {
   error?: { code?: string; message?: string };
 };
 
+const plannedSections = [
+  {
+    section: "welcome",
+    label: "Begrüßung",
+    headline: "Begrüßung",
+    description: "Willkommensnachrichten, Startrollen und erste Schritte für neue Mitglieder.",
+    items: [
+      { kicker: "Nachricht", title: "Willkommenskarte", text: "Eigener Text, Server-Icon und Platzhalter für neue Mitglieder." },
+      { kicker: "Kanal", title: "Zielkanal", text: "Separater Kanal für Begrüßung, Regeln oder Onboarding." },
+      { kicker: "Rollen", title: "Startrollen", text: "Optionale Rollen, die später automatisch vergeben werden können." }
+    ]
+  },
+  {
+    section: "logging",
+    label: "Logging",
+    headline: "Logging",
+    description: "Saubere Ereignis-Logs für Nachrichten, Rollen, Channels und wichtige Bot-Aktionen.",
+    items: [
+      { kicker: "Events", title: "Log-Kategorien", text: "Nachrichten, Moderation, Rollen und Serveränderungen getrennt schalten." },
+      { kicker: "Kanäle", title: "Log-Ziele", text: "Für jede Kategorie ein eigener Discord-Kanal." },
+      { kicker: "Filter", title: "Ausnahmen", text: "Rollen, Kanäle und Aktionen vom Logging ausnehmen." }
+    ]
+  },
+  {
+    section: "moderation",
+    label: "Moderation",
+    headline: "Moderation",
+    description: "Moderations-Werkzeuge mit klaren Regeln, Rollenrechten und nachvollziehbaren Aktionen.",
+    items: [
+      { kicker: "Aktionen", title: "Warns und Timeouts", text: "Moderationsaktionen zentral steuern und später im Audit-Log sehen." },
+      { kicker: "Regeln", title: "Auto-Moderation", text: "Spam, Links und problematische Inhalte serverweit begrenzen." },
+      { kicker: "Rollen", title: "Team-Rechte", text: "Moderator- und Admin-Rollen gezielt für Tools freigeben." }
+    ]
+  },
+  {
+    section: "danger-zone",
+    label: "Gefahrenbereich",
+    headline: "Gefahrenbereich",
+    description: "Kritische Aktionen mit deutlicher Bestätigung und Schutz vor versehentlichem Löschen.",
+    items: [
+      { kicker: "Reset", title: "Guild-Daten zurücksetzen", text: "Serverdaten später kontrolliert und nachvollziehbar löschen." },
+      { kicker: "Sync", title: "Bot neu synchronisieren", text: "Rollen, Kanäle und Commands frisch vom Discord-Server laden." },
+      { kicker: "Schutz", title: "Bestätigungspflicht", text: "Gefährliche Aktionen erst nach klarer Bestätigung ausführen." }
+    ],
+    tone: "danger"
+  }
+] as const;
+
+type PlannedSection = (typeof plannedSections)[number];
+
+function plannedIcon(section: string, size = 17) {
+  switch (section) {
+    case "welcome":
+      return <Sparkles size={size} />;
+    case "logging":
+      return <Settings size={size} />;
+    case "moderation":
+      return <Shield size={size} />;
+    case "danger-zone":
+      return <AlertTriangle size={size} />;
+    default:
+      return <Settings size={size} />;
+  }
+}
+
+function getPlannedSection(section: string) {
+  return plannedSections.find((item) => item.section === section);
+}
+
 function navigate(path: string) {
   window.history.pushState({}, "", path);
   window.dispatchEvent(new PopStateEvent("popstate"));
@@ -346,29 +415,60 @@ function HomePage() {
 
         <section className="guild-grid">
           {guilds.data?.guilds.map((guild, index) => (
-            <article className="guild-card reveal-card" style={{ "--delay": `${index * 65}ms` } as React.CSSProperties} key={guild.id}>
+            <article
+              className={`guild-card ${guild.botInstalled || guild.botInstallStatus === "installed" ? "installed" : guild.botInstallStatus === "unknown" ? "unknown" : "missing"} reveal-card`}
+              style={{ "--delay": `${index * 65}ms` } as React.CSSProperties}
+              key={guild.id}
+            >
+              {!(guild.botInstalled || guild.botInstallStatus === "installed") && (
+                <a
+                  className="guild-card-quick-action"
+                  href={`/api/bot/invite?guildId=${guild.id}&returnTo=${encodeURIComponent(`/dashboard/${guild.id}/overview`)}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  aria-label={`Bot auf ${guild.name} einladen`}
+                >
+                  <Plus size={19} />
+                </a>
+              )}
               <div className="guild-card-top">
                 <GuildIcon guild={guild} />
-                <span className={guild.botInstallStatus === "unknown" ? "status-light unknown" : guild.botInstalled ? "status-light ok" : "status-light warn"} />
+                <span
+                  className={
+                    guild.botInstallStatus === "unknown"
+                      ? "status-light unknown"
+                      : guild.botInstalled || guild.botInstallStatus === "installed"
+                        ? "status-light ok"
+                        : "status-light missing"
+                  }
+                />
               </div>
               <div className="guild-card-body">
                 <h2>{guild.name}</h2>
                 <p>{guild.id}</p>
                 <div className="status-row">
                   <span className="pill">{guild.permission}</span>
-                  <span className={guild.botInstalled ? "pill ok" : "pill warn"}>
-                    {guild.botInstalled ? "Bot installiert" : guild.botInstallStatus === "unknown" ? "Status prüfen" : "Bot fehlt"}
+                  <span
+                    className={
+                      guild.botInstalled || guild.botInstallStatus === "installed"
+                        ? "pill ok"
+                        : guild.botInstallStatus === "unknown"
+                          ? "pill neutral"
+                          : "pill missing"
+                    }
+                  >
+                    {guild.botInstalled || guild.botInstallStatus === "installed" ? "Bot installiert" : guild.botInstallStatus === "unknown" ? "Status prüfen" : "Bot fehlt"}
                   </span>
                 </div>
               </div>
-              {guild.botInstalled ? (
+              {guild.botInstalled || guild.botInstallStatus === "installed" ? (
                 <button className="primary-action" onClick={() => navigate(`/dashboard/${guild.id}/overview`)}>
                   Verwalten
                   <ChevronRight size={16} />
                 </button>
               ) : (
                 <a
-                  className="secondary-action"
+                  className="secondary-action invite-action"
                   href={`/api/bot/invite?guildId=${guild.id}&returnTo=${encodeURIComponent(`/dashboard/${guild.id}/overview`)}`}
                   target="_blank"
                   rel="noreferrer"
@@ -404,6 +504,7 @@ function Dashboard({ path }: { path: string }) {
   const parts = path.split("/").filter(Boolean);
   const guildId = parts[1];
   const section = parts[2] ?? "overview";
+  const plannedSection = getPlannedSection(section);
   const me = useApi<{ user: User }>("/api/me", []);
   const detail = useApi<{ guild: GuildDetail; settings: SettingsRow }>(`/api/guilds/${guildId}`, [guildId]);
 
@@ -439,10 +540,17 @@ function Dashboard({ path }: { path: string }) {
           <SideLink icon={<ClipboardList size={17} />} label="Custom Commands" section="custom-commands" current={section} guildId={guildId} />
           <SideLink icon={<Shield size={17} />} label="Audit-Log" section="audit-log" current={section} guildId={guildId} />
           <div className="sidebar-group-title">Geplant</div>
-          <DisabledSideItem label="Begrüßung" />
-          <DisabledSideItem label="Logging" />
-          <DisabledSideItem label="Moderation" />
-          <DisabledSideItem label="Gefahrenbereich" />
+          {plannedSections.map((item) => (
+            <SideLink
+              icon={plannedIcon(item.section)}
+              label={item.label}
+              section={item.section}
+              current={section}
+              guildId={guildId}
+              badge="geplant"
+              key={item.section}
+            />
+          ))}
         </aside>
         <main className="dashboard-main">
           {detail.loading && <LoadingBlock />}
@@ -468,6 +576,7 @@ function Dashboard({ path }: { path: string }) {
               {section === "commands" && <CommandsPage guildId={guildId} />}
               {section === "custom-commands" && <CustomCommandsPage guildId={guildId} />}
               {section === "audit-log" && <AuditLogPage guildId={guildId} />}
+              {plannedSection && <PlannedPage section={plannedSection} />}
             </>
           )}
         </main>
@@ -493,29 +602,22 @@ function SideLink({
   label,
   section,
   current,
-  guildId
+  guildId,
+  badge
 }: {
   icon: React.ReactNode;
   label: string;
   section: string;
   current: string;
   guildId: string;
+  badge?: string;
 }) {
   return (
     <button className={`side-link ${current === section ? "active" : ""}`} onClick={() => navigate(`/dashboard/${guildId}/${section}`)}>
       {icon}
-      {label}
+      <span className="side-link-label">{label}</span>
+      {badge && <span className="side-badge">{badge}</span>}
     </button>
-  );
-}
-
-function DisabledSideItem({ label }: { label: string }) {
-  return (
-    <div className="side-link disabled">
-      <Settings size={17} />
-      {label}
-      <span>später</span>
-    </div>
   );
 }
 
@@ -953,6 +1055,32 @@ function AuditLogPage({ guildId }: { guildId: string }) {
             <span>{entry.target}</span>
             <span>{entry.actorDiscordUserId}</span>
             <time>{new Date(entry.createdAt).toLocaleString("de-DE")}</time>
+          </article>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function PlannedPage({ section }: { section: PlannedSection }) {
+  const isDanger = "tone" in section && section.tone === "danger";
+
+  return (
+    <section className="planned-page">
+      <div className={`planned-hero ${isDanger ? "danger" : ""}`}>
+        <div className="planned-icon">{plannedIcon(section.section, 24)}</div>
+        <div>
+          <span className="pill neutral">Geplant</span>
+          <h2>{section.headline}</h2>
+          <p>{section.description}</p>
+        </div>
+      </div>
+      <div className="planned-grid">
+        {section.items.map((item) => (
+          <article className="planned-card" key={item.title}>
+            <span>{item.kicker}</span>
+            <h3>{item.title}</h3>
+            <p>{item.text}</p>
           </article>
         ))}
       </div>
