@@ -258,6 +258,30 @@ function App() {
 
 function LoginPage() {
   const returnTo = safeClientReturnTo(new URLSearchParams(window.location.search).get("returnTo"));
+  const [sessionUser, setSessionUser] = useState<User | null>(null);
+  const [checkingSession, setCheckingSession] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function checkSession() {
+      try {
+        const response = await fetch("/api/me", { credentials: "include" });
+        if (!response.ok) return;
+        const data = (await response.json()) as { user: User };
+        if (!cancelled) setSessionUser(data.user);
+      } catch {
+        if (!cancelled) setSessionUser(null);
+      } finally {
+        if (!cancelled) setCheckingSession(false);
+      }
+    }
+
+    void checkSession();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   return (
     <main className="auth-page">
@@ -281,11 +305,24 @@ function LoginPage() {
             <h1>EclipseBot Webpanel</h1>
             <p>Server verwalten, Slash-Befehle steuern und das Bot-Profil pro Guild sauber synchronisieren.</p>
           </div>
-          <a className="primary-action full hero-action" href={`/api/auth/discord?returnTo=${encodeURIComponent(returnTo)}`}>
-            <KeyRound size={18} />
-            Mit Discord anmelden
-            <ArrowRight size={18} />
-          </a>
+          {checkingSession ? (
+            <button className="primary-action full hero-action" disabled>
+              <Loader2 className="spin" size={18} />
+              Anmeldung prüfen
+            </button>
+          ) : sessionUser ? (
+            <button className="primary-action full hero-action" onClick={() => navigate(returnTo)}>
+              <LayoutDashboard size={18} />
+              Zu deinem Dashboard
+              <ArrowRight size={18} />
+            </button>
+          ) : (
+            <a className="primary-action full hero-action" href={`/api/auth/discord?returnTo=${encodeURIComponent(returnTo)}`}>
+              <KeyRound size={18} />
+              Mit Discord anmelden
+              <ArrowRight size={18} />
+            </a>
+          )}
           <div className="auth-status-strip" aria-label="Systemstatus">
             <span>
               <BadgeCheck size={15} />
