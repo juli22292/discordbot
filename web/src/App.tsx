@@ -276,9 +276,9 @@ function LoginPage() {
           <div className="auth-copy">
             <p className="eyebrow">
               <Sparkles size={15} />
-              Archive Bot Control
+              EclipseBot Control
             </p>
-            <h1>Archive Bot Webpanel</h1>
+            <h1>EclipseBot Webpanel</h1>
             <p>Server verwalten, Slash-Befehle steuern und das Bot-Profil pro Guild sauber synchronisieren.</p>
           </div>
           <a className="primary-action full hero-action" href={`/api/auth/discord?returnTo=${encodeURIComponent(returnTo)}`}>
@@ -341,7 +341,7 @@ function TopNav({ user }: { user?: User | null }) {
     <header className="top-nav">
       <button className="brand-link" onClick={() => navigate("/panel")}>
         <Bot size={22} />
-        <span>Archive Bot</span>
+        <span>EclipseBot</span>
       </button>
       <nav className="top-links">
         <button onClick={() => navigate("/panel")}>
@@ -411,7 +411,7 @@ function DocumentationPage() {
           <div className="docs-hero-copy">
             <p className="eyebrow">
               <Sparkles size={15} />
-              Archive Bot Hilfe
+              EclipseBot Hilfe
             </p>
             <h1>Dokumentation</h1>
             <p>Eine kurze, saubere Übersicht für das Webpanel: anmelden, Server wählen, Bot einladen und die wichtigsten Bereiche verstehen.</p>
