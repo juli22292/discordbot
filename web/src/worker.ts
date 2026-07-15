@@ -31,7 +31,8 @@ import {
   safeRedirectPath,
   settingsSchema,
   snowflakeSchema,
-  validationError
+  validationError,
+  welcomeSettingsSchema
 } from "./server/validators";
 
 type AppBindings = { Bindings: Env };
@@ -77,6 +78,37 @@ interface SettingsRow {
   bot_avatar_media_key: string | null;
   bot_avatar_sync_status: string;
   bot_avatar_sync_error: string | null;
+}
+
+interface WelcomeSettingsRow {
+  guild_id: string;
+  enabled: number;
+  channel_id: string | null;
+  message: string | null;
+  embed_configuration: string;
+  auto_role_id: string | null;
+}
+
+interface WelcomeEmbedConfig {
+  useEmbed: boolean;
+  title: string;
+  description: string;
+  color: string;
+  imageMode: "banner" | "thumbnail" | "none";
+  imageMediaKey: string | null;
+  imageUrl: string | null;
+  mentionMember: boolean;
+  allowEveryone: boolean;
+  allowedRoleIds: string[];
+  showGeneratedCard: boolean;
+}
+
+interface WelcomeSettingsResponse {
+  enabled: boolean;
+  channelId: string | null;
+  message: string;
+  autoRoleId: string | null;
+  embed: WelcomeEmbedConfig;
 }
 
 interface CookieSessionData {
@@ -507,6 +539,86 @@ async function ensureSettings(env: Env, guildId: string): Promise<SettingsRow> {
   };
 }
 
+const DEFAULT_WELCOME_SETTINGS = welcomeSettingsSchema.parse({
+  enabled: false,
+  channelId: null,
+  message: "Willkommen {member_mention}! Schön, dass du auf **{server}** bist.",
+  autoRoleId: null,
+  embed: {
+    useEmbed: true,
+    title: "Willkommen auf {server}",
+    description: "{member_mention}, mach es dir gemütlich. Du bist unser **{member_count}. Mitglied**.",
+    color: "#4ddb8f",
+    imageMode: "banner",
+    imageMediaKey: null,
+    imageUrl: null,
+    mentionMember: true,
+    allowEveryone: false,
+    allowedRoleIds: [],
+    showGeneratedCard: true
+  }
+}) satisfies WelcomeSettingsResponse;
+
+function normalizeWelcomeSettings(row: WelcomeSettingsRow | null | undefined): WelcomeSettingsResponse {
+  const storedEmbed = parseJson<Partial<WelcomeEmbedConfig>>(row?.embed_configuration, {});
+  const mergedEmbed = welcomeSettingsSchema.parse({
+    ...DEFAULT_WELCOME_SETTINGS,
+    enabled: Boolean(row?.enabled),
+    channelId: row?.channel_id ?? null,
+    message: row?.message ?? DEFAULT_WELCOME_SETTINGS.message,
+    autoRoleId: row?.auto_role_id ?? null,
+    embed: {
+      ...DEFAULT_WELCOME_SETTINGS.embed,
+      ...storedEmbed
+    }
+  }).embed;
+
+  return {
+    enabled: Boolean(row?.enabled),
+    channelId: row?.channel_id ?? null,
+    message: row?.message ?? DEFAULT_WELCOME_SETTINGS.message,
+    autoRoleId: row?.auto_role_id ?? null,
+    embed: mergedEmbed
+  };
+}
+
+async function ensureWelcomeSettings(env: Env, guildId: string): Promise<WelcomeSettingsResponse> {
+  const db = requireDb(env);
+  const existing = await first<WelcomeSettingsRow>(
+    db.prepare(
+      `SELECT guild_id, enabled, channel_id, message, embed_configuration, auto_role_id
+         FROM welcome_settings
+        WHERE guild_id = ?`
+    ).bind(guildId)
+  );
+
+  if (existing) return normalizeWelcomeSettings(existing);
+
+  const timestamp = nowIso();
+  await db.prepare(
+    `INSERT INTO welcome_settings (guild_id, enabled, channel_id, message, embed_configuration, auto_role_id, created_at, updated_at)
+     VALUES (?, 0, NULL, ?, ?, NULL, ?, ?)`
+  )
+    .bind(guildId, DEFAULT_WELCOME_SETTINGS.message, asJson(DEFAULT_WELCOME_SETTINGS.embed), timestamp, timestamp)
+    .run();
+
+  return DEFAULT_WELCOME_SETTINGS;
+}
+
+function mediaPreviewUrl(discordGuildId: string, mediaKey: string): string {
+  return `/api/guilds/${discordGuildId}/media?key=${encodeURIComponent(mediaKey)}`;
+}
+
+async function assertGuildMedia(env: Env, guildId: string, mediaKey: string | null | undefined): Promise<void> {
+  if (!mediaKey) return;
+  const row = await first<{ id: string }>(
+    requireDb(env).prepare("SELECT id FROM guild_media WHERE guild_id = ? AND media_key = ?").bind(guildId, mediaKey)
+  );
+  if (!row) {
+    throw new HttpError(400, "media_not_found", "Das ausgewählte Begrüßungsbild gehört nicht zu dieser Guild.");
+  }
+}
+
 async function audit(
   env: Env,
   guildId: string,
@@ -857,6 +969,166 @@ app.get("/api/guilds/:guildId/roles", async (c) => {
     ).bind(access.guild.id)
   );
   return json(c, { roles });
+});
+
+app.get("/api/guilds/:guildId/media", async (c) => {
+  if (!c.env.GUILD_MEDIA) {
+    throw new HttpError(503, "r2_not_configured", "R2 ist nicht konfiguriert.");
+  }
+
+  const access = await requireGuildManagementAccess(c, c.req.param("guildId"));
+  const key = c.req.query("key");
+
+  if (!key || key.includes("..") || !key.startsWith(`guilds/${access.guild.discordGuildId}/`)) {
+    throw new HttpError(400, "media_key_invalid", "Media-Key ist ungültig.");
+  }
+
+  await assertGuildMedia(c.env, access.guild.id, key);
+  const object = await c.env.GUILD_MEDIA.get(key);
+  if (!object) throw new HttpError(404, "media_not_found", "Medium nicht gefunden.");
+
+  return new Response(object.body, {
+    headers: {
+      "Content-Type": object.httpMetadata?.contentType ?? "application/octet-stream",
+      "Cache-Control": "private, max-age=60"
+    }
+  });
+});
+
+app.get("/api/guilds/:guildId/welcome", async (c) => {
+  const access = await requireGuildManagementAccess(c, c.req.param("guildId"));
+  const welcome = await ensureWelcomeSettings(c.env, access.guild.id);
+  return json(c, { welcome });
+});
+
+app.put("/api/guilds/:guildId/welcome", async (c) => {
+  const access = await requireGuildManagementAccess(c, c.req.param("guildId"));
+  const data = welcomeSettingsSchema.parse(await readJsonBody(c));
+  const oldValue = await ensureWelcomeSettings(c.env, access.guild.id);
+
+  if (data.enabled && !data.channelId) {
+    throw new HttpError(400, "welcome_channel_required", "Bitte wähle einen Zielkanal für die Begrüßung aus.");
+  }
+
+  if (data.channelId) {
+    const channel = await first<{ can_send: number }>(
+      c.env.DB.prepare("SELECT can_send FROM guild_channels WHERE guild_id = ? AND discord_channel_id = ?")
+        .bind(access.guild.id, data.channelId)
+    );
+    if (!channel) throw new HttpError(400, "welcome_channel_invalid", "Dieser Kanal wurde im Bot-Snapshot nicht gefunden.");
+    if (!channel.can_send) throw new HttpError(400, "welcome_channel_forbidden", "Der Bot kann in diesem Kanal nicht schreiben.");
+  }
+
+  if (data.autoRoleId) {
+    const role = await first<{ bot_can_manage: number }>(
+      c.env.DB.prepare("SELECT bot_can_manage FROM guild_roles WHERE guild_id = ? AND discord_role_id = ?")
+        .bind(access.guild.id, data.autoRoleId)
+    );
+    if (!role) throw new HttpError(400, "welcome_role_invalid", "Diese Startrolle wurde im Bot-Snapshot nicht gefunden.");
+    if (!role.bot_can_manage) throw new HttpError(400, "welcome_role_forbidden", "Der Bot kann diese Startrolle nicht vergeben.");
+  }
+
+  const roleRows = await all<{ id: string }>(
+    c.env.DB.prepare("SELECT discord_role_id AS id FROM guild_roles WHERE guild_id = ?").bind(access.guild.id)
+  );
+  const validRoleIds = new Set(roleRows.map((role) => role.id));
+  const allowedRoleIds = data.embed.allowedRoleIds.filter((roleId) => validRoleIds.has(roleId));
+  const saved: WelcomeSettingsResponse = {
+    ...data,
+    embed: {
+      ...data.embed,
+      allowedRoleIds
+    }
+  };
+
+  await assertGuildMedia(c.env, access.guild.id, saved.embed.imageMediaKey);
+
+  const timestamp = nowIso();
+  await c.env.DB.prepare(
+    `INSERT INTO welcome_settings (guild_id, enabled, channel_id, message, embed_configuration, auto_role_id, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+     ON CONFLICT(guild_id) DO UPDATE SET
+       enabled = excluded.enabled,
+       channel_id = excluded.channel_id,
+       message = excluded.message,
+       embed_configuration = excluded.embed_configuration,
+       auto_role_id = excluded.auto_role_id,
+       updated_at = excluded.updated_at`
+  )
+    .bind(
+      access.guild.id,
+      saved.enabled ? 1 : 0,
+      saved.channelId,
+      saved.message,
+      asJson(saved.embed),
+      saved.autoRoleId,
+      timestamp,
+      timestamp
+    )
+    .run();
+
+  const eventId = await enqueueSyncEvent(c.env, access.guild, "welcome_settings.upsert", {
+    discordGuildId: access.guild.discordGuildId,
+    settings: saved
+  });
+
+  await audit(c.env, access.guild.id, access.session.user.discordUserId, "welcome.update", "welcome_settings", oldValue, saved);
+  return json(c, { ok: true, eventId, welcome: saved });
+});
+
+app.post("/api/guilds/:guildId/welcome/image", async (c) => {
+  if (!c.env.GUILD_MEDIA) {
+    throw new HttpError(503, "r2_not_configured", "R2 ist für Begrüßungsbilder nicht konfiguriert.");
+  }
+
+  const access = await requireGuildManagementAccess(c, c.req.param("guildId"));
+  const form = await c.req.formData();
+  const file = form.get("image");
+
+  if (!(file instanceof File)) {
+    throw new HttpError(400, "welcome_image_missing", "Bitte lade eine Bilddatei hoch.");
+  }
+
+  const allowedTypes = new Set(["image/png", "image/jpeg", "image/gif", "image/webp"]);
+  if (!allowedTypes.has(file.type)) {
+    throw new HttpError(400, "welcome_image_type_invalid", "Erlaubt sind PNG, JPEG, GIF und WebP.");
+  }
+
+  const maxBytes = 4 * 1024 * 1024;
+  if (file.size > maxBytes) {
+    throw new HttpError(400, "welcome_image_too_large", "Das Bild darf maximal 4 MiB groß sein.");
+  }
+
+  const mediaId = newId("med");
+  const extension = file.type.split("/")[1]?.replace("jpeg", "jpg") ?? "img";
+  const mediaKey = `guilds/${access.guild.discordGuildId}/welcome/${mediaId}.${extension}`;
+  const bytes = await file.arrayBuffer();
+
+  await c.env.GUILD_MEDIA.put(mediaKey, bytes, {
+    httpMetadata: { contentType: file.type },
+    customMetadata: { guildId: access.guild.discordGuildId, kind: "welcome" }
+  });
+
+  await c.env.DB.prepare(
+    `INSERT INTO guild_media (id, guild_id, media_key, mime_type, size_bytes, created_by_discord_user_id, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?)`
+  )
+    .bind(mediaId, access.guild.id, mediaKey, file.type, file.size, access.session.user.discordUserId, nowIso())
+    .run();
+
+  await audit(c.env, access.guild.id, access.session.user.discordUserId, "welcome.image.upload", "guild_media", null, {
+    mediaKey,
+    mimeType: file.type,
+    sizeBytes: file.size
+  });
+
+  return json(c, {
+    ok: true,
+    mediaKey,
+    mediaUrl: mediaPreviewUrl(access.guild.discordGuildId, mediaKey),
+    mimeType: file.type,
+    sizeBytes: file.size
+  });
 });
 
 app.get("/api/guilds/:guildId/commands", async (c) => {

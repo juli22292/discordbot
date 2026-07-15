@@ -4,6 +4,7 @@ import {
   Activity,
   AlertTriangle,
   ArrowRight,
+  AtSign,
   BadgeCheck,
   BarChart3,
   Bot,
@@ -15,11 +16,14 @@ import {
   Database,
   Gauge,
   Home,
+  Hash,
   KeyRound,
   LayoutDashboard,
   LifeBuoy,
   Loader2,
   LogOut,
+  MessageSquare,
+  Palette,
   Plus,
   Radio,
   RefreshCw,
@@ -32,6 +36,7 @@ import {
   Sparkles,
   Trash2,
   Upload,
+  UserPlus,
   UserRound
 } from "lucide-react";
 import "./styles.css";
@@ -90,6 +95,42 @@ type CustomCommand = {
   cooldownSeconds: number;
   syncStatus: string;
   syncError: string | null;
+};
+
+type ChannelOption = {
+  id: string;
+  name: string;
+  type: string;
+  categoryName: string | null;
+  canSend: boolean;
+};
+
+type RoleOption = {
+  id: string;
+  name: string;
+  color: number;
+  managed: boolean;
+  botCanManage: boolean;
+};
+
+type WelcomeSettings = {
+  enabled: boolean;
+  channelId: string | null;
+  message: string;
+  autoRoleId: string | null;
+  embed: {
+    useEmbed: boolean;
+    title: string;
+    description: string;
+    color: string;
+    imageMode: "banner" | "thumbnail" | "none";
+    imageMediaKey: string | null;
+    imageUrl: string | null;
+    mentionMember: boolean;
+    allowEveryone: boolean;
+    allowedRoleIds: string[];
+    showGeneratedCard: boolean;
+  };
 };
 
 type User = {
@@ -884,8 +925,9 @@ function Dashboard({ path }: { path: string }) {
           <SideLink icon={<Command size={17} />} label="Slash-Befehle" section="commands" current={section} guildId={guildId} />
           <SideLink icon={<ClipboardList size={17} />} label="Custom Commands" section="custom-commands" current={section} guildId={guildId} />
           <SideLink icon={<Shield size={17} />} label="Audit-Log" section="audit-log" current={section} guildId={guildId} />
+          <SideLink icon={<Sparkles size={17} />} label="Begrüßung" section="welcome" current={section} guildId={guildId} />
           <div className="sidebar-group-title">Geplant</div>
-          {plannedSections.map((item) => (
+          {plannedSections.filter((item) => item.section !== "welcome").map((item) => (
             <SideLink
               icon={plannedIcon(item.section)}
               label={item.label}
@@ -921,7 +963,8 @@ function Dashboard({ path }: { path: string }) {
               {section === "commands" && <CommandsPage guildId={guildId} />}
               {section === "custom-commands" && <CustomCommandsPage guildId={guildId} />}
               {section === "audit-log" && <AuditLogPage guildId={guildId} />}
-              {plannedSection && <PlannedPage section={plannedSection} />}
+              {section === "welcome" && <WelcomePage guildId={guildId} />}
+              {plannedSection && section !== "welcome" && <PlannedPage section={plannedSection} />}
             </>
           )}
         </main>
@@ -1139,6 +1182,366 @@ function ProfilePage({ guildId, settings, onSaved }: { guildId: string; settings
           </button>
         </div>
       </div>
+    </section>
+  );
+}
+
+const DEFAULT_WELCOME_DRAFT: WelcomeSettings = {
+  enabled: false,
+  channelId: null,
+  message: "Willkommen {member_mention}! Schön, dass du auf **{server}** bist.",
+  autoRoleId: null,
+  embed: {
+    useEmbed: true,
+    title: "Willkommen auf {server}",
+    description: "{member_mention}, mach es dir gemütlich. Du bist unser **{member_count}. Mitglied**.",
+    color: "#4DDB8F",
+    imageMode: "banner",
+    imageMediaKey: null,
+    imageUrl: null,
+    mentionMember: true,
+    allowEveryone: false,
+    allowedRoleIds: [],
+    showGeneratedCard: true
+  }
+};
+
+function replaceTemplateTokens(value: string) {
+  const replacements: Record<string, string> = {
+    "{member}": "Niteacfort74",
+    "{member_name}": "Niteacfort74",
+    "{member_mention}": "@Niteacfort74",
+    "{server}": "Eclipse Community",
+    "{member_count}": "128",
+    "{account_created}": "vor 2 Jahren",
+    "{joined_at}": "gerade eben"
+  };
+
+  return Object.entries(replacements).reduce((text, [token, replacement]) => text.split(token).join(replacement), value);
+}
+
+function roleColor(role: RoleOption) {
+  return role.color ? `#${role.color.toString(16).padStart(6, "0")}` : "#7b8494";
+}
+
+function WelcomePage({ guildId }: { guildId: string }) {
+  const welcome = useApi<{ welcome: WelcomeSettings }>(`/api/guilds/${guildId}/welcome`, [guildId]);
+  const channels = useApi<{ channels: ChannelOption[] }>(`/api/guilds/${guildId}/channels`, [guildId]);
+  const roles = useApi<{ roles: RoleOption[] }>(`/api/guilds/${guildId}/roles`, [guildId]);
+  const [draft, setDraft] = useState<WelcomeSettings>(DEFAULT_WELCOME_DRAFT);
+  const [file, setFile] = useState<File | null>(null);
+  const [status, setStatus] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [uploading, setUploading] = useState(false);
+
+  useEffect(() => {
+    if (welcome.data?.welcome) setDraft(welcome.data.welcome);
+  }, [welcome.data]);
+
+  const textChannels = useMemo(
+    () =>
+      (channels.data?.channels ?? []).filter((channel) =>
+        channel.canSend && ["text", "news", "forum", "public_thread", "private_thread"].includes(channel.type)
+      ),
+    [channels.data]
+  );
+  const manageableRoles = useMemo(
+    () => (roles.data?.roles ?? []).filter((role) => role.botCanManage && !role.managed),
+    [roles.data]
+  );
+  const mentionRoles = useMemo(
+    () => (roles.data?.roles ?? []).filter((role) => draft.embed.allowedRoleIds.includes(role.id)),
+    [roles.data, draft.embed.allowedRoleIds]
+  );
+  const imageUrl = draft.embed.imageMediaKey ? `/api/guilds/${guildId}/media?key=${encodeURIComponent(draft.embed.imageMediaKey)}` : draft.embed.imageUrl;
+
+  function updateEmbed(value: Partial<WelcomeSettings["embed"]>) {
+    setDraft((current) => ({ ...current, embed: { ...current.embed, ...value } }));
+  }
+
+  function appendMessage(token: string) {
+    setDraft((current) => ({
+      ...current,
+      message: `${current.message}${current.message && !current.message.endsWith(" ") ? " " : ""}${token}`
+    }));
+  }
+
+  function toggleRole(roleId: string) {
+    const selected = draft.embed.allowedRoleIds.includes(roleId);
+    updateEmbed({
+      allowedRoleIds: selected
+        ? draft.embed.allowedRoleIds.filter((id) => id !== roleId)
+        : [...draft.embed.allowedRoleIds, roleId]
+    });
+  }
+
+  async function uploadImage() {
+    if (!file) return;
+    setUploading(true);
+    setStatus(null);
+    const formData = new FormData();
+    formData.set("image", file);
+    try {
+      const response = await api<{ mediaKey: string; mediaUrl: string }>(`/api/guilds/${guildId}/welcome/image`, {
+        method: "POST",
+        body: formData
+      });
+      updateEmbed({ imageMediaKey: response.mediaKey, imageUrl: null, imageMode: draft.embed.imageMode === "none" ? "banner" : draft.embed.imageMode });
+      setFile(null);
+      setStatus("Begrüßungsbild hochgeladen. Danach bitte speichern.");
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : "Upload fehlgeschlagen.");
+    } finally {
+      setUploading(false);
+    }
+  }
+
+  async function save() {
+    setSaving(true);
+    setStatus(null);
+    try {
+      const response = await api<{ welcome: WelcomeSettings }>(`/api/guilds/${guildId}/welcome`, {
+        method: "PUT",
+        body: JSON.stringify(draft)
+      });
+      setDraft(response.welcome);
+      setStatus("Begrüßung gespeichert und zur Bot-Synchronisierung vorgemerkt.");
+      await welcome.reload();
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : "Speichern fehlgeschlagen.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <section className="welcome-page">
+      <div className="welcome-hero">
+        <div>
+          <p className="eyebrow">
+            <Sparkles size={15} />
+            Welcome Studio
+          </p>
+          <h2>Begrüßung</h2>
+          <p>Neue Mitglieder landen mit eigener Nachricht, optionalem Embed, Bild, Startrolle und kontrollierten Mentions direkt sauber im richtigen Kanal.</p>
+        </div>
+        <label className="welcome-switch">
+          <input type="checkbox" checked={draft.enabled} onChange={(event) => setDraft({ ...draft, enabled: event.target.checked })} />
+          <span>{draft.enabled ? "Aktiv" : "Inaktiv"}</span>
+        </label>
+      </div>
+
+      {(welcome.loading || channels.loading || roles.loading) && <LoadingBlock />}
+      {(welcome.error || channels.error || roles.error) && <Notice tone="danger" text={welcome.error || channels.error || roles.error || "Fehler beim Laden."} />}
+
+      {!welcome.loading && (
+        <div className="welcome-grid">
+          <div className="welcome-editor">
+            <section className="panel">
+              <div className="panel-title">
+                <h2>Nachricht & Ziel</h2>
+                <span className={draft.enabled ? "pill ok" : "pill"}>{draft.enabled ? "sendet" : "pausiert"}</span>
+              </div>
+              <div className="form-grid">
+                <label>
+                  Zielkanal
+                  <select value={draft.channelId ?? ""} onChange={(event) => setDraft({ ...draft, channelId: event.target.value || null })}>
+                    <option value="">Kanal auswählen</option>
+                    {textChannels.map((channel) => (
+                      <option value={channel.id} key={channel.id}>
+                        #{channel.name}{channel.categoryName ? ` - ${channel.categoryName}` : ""}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label>
+                  Startrolle
+                  <select value={draft.autoRoleId ?? ""} onChange={(event) => setDraft({ ...draft, autoRoleId: event.target.value || null })}>
+                    <option value="">Keine Startrolle</option>
+                    {manageableRoles.map((role) => (
+                      <option value={role.id} key={role.id}>
+                        {role.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="wide">
+                  Nachricht
+                  <textarea
+                    value={draft.message}
+                    maxLength={2000}
+                    onChange={(event) => setDraft({ ...draft, message: event.target.value })}
+                    placeholder="Willkommen {member_mention}! Schön, dass du auf {server} bist."
+                  />
+                </label>
+                <div className="token-bar wide" aria-label="Platzhalter und Mentions">
+                  <button type="button" className="secondary-action inline" onClick={() => appendMessage("{member_mention}")}>
+                    <AtSign size={15} />
+                    Mitglied
+                  </button>
+                  <button type="button" className="secondary-action inline" onClick={() => appendMessage("{server}")}>
+                    <Server size={15} />
+                    Server
+                  </button>
+                  <button type="button" className="secondary-action inline" onClick={() => appendMessage("{member_count}")}>
+                    <Hash size={15} />
+                    Anzahl
+                  </button>
+                  <button type="button" className="secondary-action inline" onClick={() => appendMessage("@everyone")}>
+                    <AtSign size={15} />
+                    @everyone
+                  </button>
+                  <button type="button" className="secondary-action inline" onClick={() => appendMessage("@here")}>
+                    <Radio size={15} />
+                    @here
+                  </button>
+                </div>
+              </div>
+            </section>
+
+            <section className="panel">
+              <div className="panel-title">
+                <h2>Embed & Bild</h2>
+                <Palette size={18} />
+              </div>
+              <div className="form-grid">
+                <label className="toggle">
+                  <input type="checkbox" checked={draft.embed.useEmbed} onChange={(event) => updateEmbed({ useEmbed: event.target.checked })} />
+                  Embed anzeigen
+                </label>
+                <label className="toggle">
+                  <input type="checkbox" checked={draft.embed.showGeneratedCard} onChange={(event) => updateEmbed({ showGeneratedCard: event.target.checked })} />
+                  Fallback-Karte erzeugen
+                </label>
+                <label>
+                  Titel
+                  <input value={draft.embed.title} maxLength={256} onChange={(event) => updateEmbed({ title: event.target.value })} />
+                </label>
+                <label>
+                  Farbe
+                  <input type="color" value={draft.embed.color} onChange={(event) => updateEmbed({ color: event.target.value.toUpperCase() })} />
+                </label>
+                <label className="wide">
+                  Beschreibung
+                  <textarea value={draft.embed.description} maxLength={4000} onChange={(event) => updateEmbed({ description: event.target.value })} />
+                </label>
+                <label>
+                  Bildmodus
+                  <select value={draft.embed.imageMode} onChange={(event) => updateEmbed({ imageMode: event.target.value as WelcomeSettings["embed"]["imageMode"] })}>
+                    <option value="banner">Großes Banner</option>
+                    <option value="thumbnail">Kleines Thumbnail</option>
+                    <option value="none">Kein Bild</option>
+                  </select>
+                </label>
+                <label>
+                  Bilddatei
+                  <input type="file" accept="image/png,image/jpeg,image/gif,image/webp" onChange={(event) => setFile(event.target.files?.[0] ?? null)} />
+                </label>
+                <div className="form-actions wide">
+                  <button className="secondary-action inline" onClick={uploadImage} disabled={!file || uploading}>
+                    {uploading ? <Loader2 className="spin" size={16} /> : <Upload size={16} />}
+                    Bild hochladen
+                  </button>
+                  {draft.embed.imageMediaKey && (
+                    <button className="secondary-action inline" onClick={() => updateEmbed({ imageMediaKey: null, imageUrl: null })}>
+                      <Trash2 size={16} />
+                      Bild entfernen
+                    </button>
+                  )}
+                </div>
+              </div>
+            </section>
+
+            <section className="panel">
+              <div className="panel-title">
+                <h2>Mentions</h2>
+                <MessageSquare size={18} />
+              </div>
+              <div className="mention-grid">
+                <label className="toggle">
+                  <input type="checkbox" checked={draft.embed.mentionMember} onChange={(event) => updateEmbed({ mentionMember: event.target.checked })} />
+                  Mitglied darf gepingt werden
+                </label>
+                <label className="toggle">
+                  <input type="checkbox" checked={draft.embed.allowEveryone} onChange={(event) => updateEmbed({ allowEveryone: event.target.checked })} />
+                  @everyone und @here erlauben
+                </label>
+              </div>
+              <div className="role-picker">
+                {manageableRoles.length === 0 ? (
+                  <p className="muted">Keine vergebbaren Rollen im Snapshot gefunden.</p>
+                ) : (
+                  manageableRoles.map((role) => (
+                    <button
+                      type="button"
+                      className={`role-chip ${draft.embed.allowedRoleIds.includes(role.id) ? "active" : ""}`}
+                      onClick={() => toggleRole(role.id)}
+                      key={role.id}
+                    >
+                      <span style={{ backgroundColor: roleColor(role) }} />
+                      {role.name}
+                    </button>
+                  ))
+                )}
+              </div>
+              {mentionRoles.length > 0 && (
+                <div className="token-bar">
+                  {mentionRoles.map((role) => (
+                    <button type="button" className="secondary-action inline" onClick={() => appendMessage(`<@&${role.id}>`)} key={role.id}>
+                      <UserPlus size={15} />
+                      @{role.name}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </section>
+
+            <ActionStatus status={status} />
+            <div className="form-actions">
+              <button className="primary-action inline" onClick={save} disabled={saving}>
+                {saving ? <Loader2 className="spin" size={16} /> : <Save size={16} />}
+                Begrüßung speichern
+              </button>
+              <button className="secondary-action inline" onClick={welcome.reload}>
+                <RefreshCw size={16} />
+                Neu laden
+              </button>
+            </div>
+          </div>
+
+          <aside className="welcome-preview">
+            <div className="panel-title">
+              <h2>Discord-Vorschau</h2>
+              <span className="pill neutral">Preview</span>
+            </div>
+            <div className="discord-message">
+              <div className="discord-avatar">E</div>
+              <div className="discord-message-body">
+                <strong>EclipseBot <small>gerade eben</small></strong>
+                <p>{replaceTemplateTokens(draft.message) || "Keine Nachricht gesetzt."}</p>
+                {draft.embed.useEmbed && (
+                  <div className="welcome-embed-preview" style={{ borderLeftColor: draft.embed.color }}>
+                    <div>
+                      <strong>{replaceTemplateTokens(draft.embed.title) || "Willkommen"}</strong>
+                      <p>{replaceTemplateTokens(draft.embed.description) || "Embed-Beschreibung"}</p>
+                    </div>
+                    {imageUrl && draft.embed.imageMode !== "none" && (
+                      <div className={`welcome-image-preview ${draft.embed.imageMode}`}>
+                        <img src={imageUrl} alt="" />
+                      </div>
+                    )}
+                  </div>
+                )}
+                <div className="welcome-mention-preview">
+                  <span className={draft.embed.mentionMember ? "on" : ""}>Mitglied-Ping</span>
+                  <span className={draft.embed.allowEveryone ? "on danger" : ""}>@everyone</span>
+                  <span className={mentionRoles.length ? "on" : ""}>{mentionRoles.length} Rollen</span>
+                </div>
+              </div>
+            </div>
+          </aside>
+        </div>
+      )}
     </section>
   );
 }
