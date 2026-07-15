@@ -194,7 +194,7 @@ export function discordBotInviteUrl(env: Env, guildId: string, state?: string): 
 
   if (state) {
     url.searchParams.set("response_type", "code");
-    url.searchParams.set("redirect_uri", `${env.APP_URL.replace(/\/$/, "")}/api/bot/invite/callback`);
+    url.searchParams.set("redirect_uri", env.DISCORD_REDIRECT_URI);
     url.searchParams.set("state", state);
   }
 

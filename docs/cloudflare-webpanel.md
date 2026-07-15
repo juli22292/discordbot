@@ -113,11 +113,10 @@ Danach:
 
 1. Cloudflare Custom Domain verbinden.
 2. `APP_URL` und `DISCORD_REDIRECT_URI` in `wrangler.jsonc` für Produktion setzen.
-3. Im Discord Developer Portal beide Redirect URLs eintragen:
+3. Im Discord Developer Portal diese Redirect URL eintragen:
 
 ```text
 https://bot.carrothd.de/api/auth/discord/callback
-https://bot.carrothd.de/api/bot/invite/callback
 ```
 
 4. Python-Bot mit `WEBPANEL_INTERNAL_API_URL` und `INTERNAL_BOT_API_SECRET` starten.

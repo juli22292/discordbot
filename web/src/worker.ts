@@ -164,7 +164,7 @@ async function encryptedCookieState(env: Env, data: OAuthStateData): Promise<str
   return encryptJson(data, env.ENCRYPTION_KEY);
 }
 
-async function readEncryptedCookieState(c: HonoContext, expectedState: string, expectedKind: OAuthStateData["kind"]): Promise<OAuthStateData> {
+async function readEncryptedCookieState(c: HonoContext, expectedState: string, expectedKind?: OAuthStateData["kind"]): Promise<OAuthStateData> {
   requireEnv(c.env, "ENCRYPTION_KEY");
   const cookies = parseCookies(c.req.header("Cookie") ?? null);
   const cookieState = cookies.get(OAUTH_STATE_COOKIE);
@@ -182,7 +182,7 @@ async function readEncryptedCookieState(c: HonoContext, expectedState: string, e
   }
 
   if (
-    stateData.kind !== expectedKind ||
+    (expectedKind && stateData.kind !== expectedKind) ||
     stateData.state !== expectedState ||
     stateData.expiresAt < Date.now()
   ) {
@@ -403,6 +403,32 @@ function addQueryParam(path: string, key: string, value: string): string {
   return `${url.pathname}${url.search}`;
 }
 
+async function completeInviteCallback(
+  c: HonoContext,
+  stateData: OAuthStateData,
+  options: { code?: string | null; inviteError?: string | null }
+): Promise<Response> {
+  if (!stateData.guildId) throw new HttpError(400, "invite_state_invalid", "Die Bot-Einladung ist unvollständig.");
+  const access = await requireGuildManagementAccess(c, stateData.guildId, { requireBot: false });
+  const returnTo = stateData.returnTo || `/dashboard/${stateData.guildId}/overview`;
+
+  if (options.inviteError) {
+    const response = c.redirect(addQueryParam(returnTo, "invite", "cancelled"));
+    response.headers.append("Set-Cookie", clearCookieHeader(OAUTH_STATE_COOKIE, c.env));
+    return response;
+  }
+
+  if (!options.code) {
+    throw new HttpError(400, "invite_code_missing", "Discord hat die Bot-Einladung nicht bestätigt.");
+  }
+
+  await markBotInstalled(c.env, access.guild);
+
+  const response = c.redirect(addQueryParam(returnTo, "invite", "done"));
+  response.headers.append("Set-Cookie", clearCookieHeader(OAUTH_STATE_COOKIE, c.env));
+  return response;
+}
+
 async function getFreshGuilds(c: HonoContext, session: ActiveSession): Promise<DiscordGuild[]> {
   try {
     return await fetchDiscordGuilds(session.tokenData);
@@ -564,12 +590,22 @@ app.get("/api/auth/discord", async (c) => {
 app.get("/api/auth/discord/callback", async (c) => {
   const code = c.req.query("code");
   const state = c.req.query("state");
+  const inviteError = c.req.query("error");
 
-  if (!code || !state) {
+  if (!state) {
     throw new HttpError(400, "oauth_state_invalid", "Discord-Login konnte nicht sicher validiert werden.");
   }
 
-  const stateData = await readEncryptedCookieState(c, state, "login");
+  const stateData = await readEncryptedCookieState(c, state);
+
+  if (stateData.kind === "invite") {
+    return completeInviteCallback(c, stateData, { code, inviteError });
+  }
+
+  if (!code) {
+    throw new HttpError(400, "oauth_state_invalid", "Discord-Login konnte nicht sicher validiert werden.");
+  }
+
   const tokenData = await exchangeDiscordCode(c.env, code);
   const user = await fetchDiscordUser(tokenData);
   const sessionId = randomToken(32);
@@ -684,25 +720,7 @@ app.get("/api/bot/invite/callback", async (c) => {
   }
 
   const stateData = await readEncryptedCookieState(c, state, "invite");
-  if (!stateData.guildId) throw new HttpError(400, "invite_state_invalid", "Die Bot-Einladung ist unvollständig.");
-  const access = await requireGuildManagementAccess(c, stateData.guildId, { requireBot: false });
-  const returnTo = stateData.returnTo || `/dashboard/${stateData.guildId}/overview`;
-
-  if (inviteError) {
-    const response = c.redirect(addQueryParam(returnTo, "invite", "cancelled"));
-    response.headers.append("Set-Cookie", clearCookieHeader(OAUTH_STATE_COOKIE, c.env));
-    return response;
-  }
-
-  if (!code) {
-    throw new HttpError(400, "invite_code_missing", "Discord hat die Bot-Einladung nicht bestätigt.");
-  }
-
-  await markBotInstalled(c.env, access.guild);
-
-  const response = c.redirect(addQueryParam(returnTo, "invite", "done"));
-  response.headers.append("Set-Cookie", clearCookieHeader(OAUTH_STATE_COOKIE, c.env));
-  return response;
+  return completeInviteCallback(c, stateData, { code, inviteError });
 });
 
 app.get("/api/guilds/:guildId", async (c) => {

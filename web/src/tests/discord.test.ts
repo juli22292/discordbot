@@ -16,6 +16,7 @@ describe("Discord bot helpers", () => {
         {
           DISCORD_CLIENT_ID: "123456789012345678",
           APP_URL: "https://panel.example",
+          DISCORD_REDIRECT_URI: "https://panel.example/api/auth/discord/callback",
           BOT_INVITE_PERMISSIONS: "8"
         } as Env,
         "987654321098765432",
@@ -30,7 +31,7 @@ describe("Discord bot helpers", () => {
     expect(url.searchParams.get("guild_id")).toBe("987654321098765432");
     expect(url.searchParams.get("disable_guild_select")).toBe("true");
     expect(url.searchParams.get("response_type")).toBe("code");
-    expect(url.searchParams.get("redirect_uri")).toBe("https://panel.example/api/bot/invite/callback");
+    expect(url.searchParams.get("redirect_uri")).toBe("https://panel.example/api/auth/discord/callback");
     expect(url.searchParams.get("state")).toBe("secure-state");
   });
 
