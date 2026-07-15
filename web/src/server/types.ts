@@ -15,6 +15,7 @@ export interface Env {
   INTERNAL_BOT_API_SECRET: string;
   SESSION_TTL_SECONDS?: string;
   BOT_INVITE_PERMISSIONS?: string;
+  ADMIN_DISCORD_USER_IDS?: string;
 }
 
 export interface DiscordUser {

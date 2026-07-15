@@ -97,6 +97,15 @@ export const welcomeSettingsSchema = z.object({
     .default({})
 });
 
+export const presenceSchema = z.object({
+  status: z.enum(["online", "idle", "dnd", "offline"]).default("online"),
+  activityType: z.enum(["none", "playing", "watching", "listening", "streaming", "custom"]).default("none"),
+  text: z.string().trim().max(128, "Der Status-Text darf maximal 128 Zeichen lang sein.").default(""),
+  url: z
+    .union([z.string().trim().url().max(500), z.literal(""), z.null(), z.undefined()])
+    .transform((value) => (typeof value === "string" && value.trim() ? value.trim() : null))
+});
+
 export function assertSameGuild(routeGuildId: string, rowGuildId: string): void {
   if (routeGuildId !== rowGuildId) {
     throw new Error("Guild-Isolation verletzt: Ressource gehoert zu einer anderen Guild.");

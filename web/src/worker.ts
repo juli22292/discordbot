@@ -28,6 +28,7 @@ import {
   customCommandSchema,
   nicknameSchema,
   partialCustomCommandSchema,
+  presenceSchema,
   safeRedirectPath,
   settingsSchema,
   snowflakeSchema,
@@ -132,6 +133,28 @@ interface WelcomeSettingsResponse {
   message: string;
   autoRoleId: string | null;
   embed: WelcomeEmbedConfig;
+}
+
+interface BotRuntimeRow {
+  id: string;
+  status: string | null;
+  activity_type: string | null;
+  activity_text: string | null;
+  latency_ms: number | null;
+  ram_mb: number | null;
+  cpu_percent: number | null;
+  guild_count: number | null;
+  user_count: number | null;
+  command_count: number | null;
+  shard_count: number | null;
+  python_version: string | null;
+  discord_py_version: string | null;
+  platform: string | null;
+  bot_version: string | null;
+  uptime_seconds: number | null;
+  process_uptime_seconds: number | null;
+  payload: string;
+  updated_at: string;
 }
 
 interface CookieSessionData {
@@ -674,6 +697,116 @@ async function assertGuildMedia(env: Env, guildId: string, mediaKey: string | nu
   if (!row) {
     throw new HttpError(400, "media_not_found", "Das ausgewählte Begrüßungsbild gehört nicht zu dieser Guild.");
   }
+}
+
+function adminUserIds(env: Env): Set<string> {
+  return new Set(
+    String(env.ADMIN_DISCORD_USER_IDS ?? "")
+      .split(/[,\s]+/)
+      .map((id) => id.trim())
+      .filter((id) => /^\d{17,20}$/.test(id))
+  );
+}
+
+async function requireAdminSession(c: HonoContext): Promise<ActiveSession> {
+  const session = await requireSession(c);
+  const allowedIds = adminUserIds(c.env);
+
+  if (allowedIds.size > 0) {
+    if (!allowedIds.has(session.user.discordUserId)) {
+      throw new HttpError(403, "admin_forbidden", "Du bist für den Admin-Bereich nicht freigeschaltet.");
+    }
+
+    return session;
+  }
+
+  const guilds = await getFreshGuilds(c, session);
+  if (!guilds.some(canManageGuild)) {
+    throw new HttpError(403, "admin_forbidden", "Du brauchst mindestens einen verwaltbaren Discord-Server.");
+  }
+
+  return session;
+}
+
+async function ensureBotRuntimeTable(env: Env): Promise<void> {
+  const db = requireDb(env);
+  await db.prepare(
+    `CREATE TABLE IF NOT EXISTS bot_runtime_status (
+       id TEXT PRIMARY KEY,
+       status TEXT,
+       activity_type TEXT,
+       activity_text TEXT,
+       latency_ms REAL,
+       ram_mb REAL,
+       cpu_percent REAL,
+       guild_count INTEGER,
+       user_count INTEGER,
+       command_count INTEGER,
+       shard_count INTEGER,
+       python_version TEXT,
+       discord_py_version TEXT,
+       platform TEXT,
+       bot_version TEXT,
+       uptime_seconds INTEGER,
+       process_uptime_seconds INTEGER,
+       payload TEXT NOT NULL DEFAULT '{}',
+       updated_at TEXT NOT NULL
+     )`
+  ).run();
+}
+
+function normalizeBotRuntime(row: BotRuntimeRow | null): Record<string, unknown> | null {
+  if (!row) return null;
+  return {
+    id: row.id,
+    status: row.status,
+    activityType: row.activity_type,
+    activityText: row.activity_text,
+    latencyMs: row.latency_ms,
+    ramMb: row.ram_mb,
+    cpuPercent: row.cpu_percent,
+    guildCount: row.guild_count,
+    userCount: row.user_count,
+    commandCount: row.command_count,
+    shardCount: row.shard_count,
+    pythonVersion: row.python_version,
+    discordPyVersion: row.discord_py_version,
+    platform: row.platform,
+    botVersion: row.bot_version,
+    uptimeSeconds: row.uptime_seconds,
+    processUptimeSeconds: row.process_uptime_seconds,
+    updatedAt: row.updated_at,
+    details: parseJson<Record<string, unknown>>(row.payload, {})
+  };
+}
+
+async function enqueueBotAdminEvent(env: Env, action: string, payload: unknown): Promise<string> {
+  const guild = await first<GuildRow>(
+    requireDb(env).prepare(
+      `SELECT id, discord_guild_id, name, icon, bot_joined_at
+         FROM guilds
+        WHERE bot_joined_at IS NOT NULL
+        ORDER BY last_seen_at DESC, updated_at DESC
+        LIMIT 1`
+    )
+  );
+
+  if (!guild) {
+    throw new HttpError(409, "bot_not_connected", "Der Bot hat sich noch mit keiner Guild im Webpanel gemeldet.");
+  }
+
+  return enqueueSyncEvent(
+    env,
+    {
+      id: guild.id,
+      discordGuildId: guild.discord_guild_id,
+      name: guild.name,
+      icon: guild.icon,
+      botJoinedAt: guild.bot_joined_at
+    },
+    action,
+    payload
+  );
 }
 
 async function audit(
@@ -1447,6 +1580,136 @@ app.get("/api/guilds/:guildId/audit-log", async (c) => {
     ).bind(access.guild.id)
   );
   return json(c, { auditLog: rows });
+});
+
+app.get("/api/admin/bot", async (c) => {
+  await requireAdminSession(c);
+  await ensureBotRuntimeTable(c.env);
+
+  const runtime = await first<BotRuntimeRow>(
+    c.env.DB.prepare("SELECT * FROM bot_runtime_status WHERE id = 'latest'")
+  );
+  const recentEvents = await all<Record<string, unknown>>(
+    c.env.DB.prepare(
+      `SELECT e.id, e.action, e.status, e.attempts, e.max_attempts AS maxAttempts,
+              e.last_error AS lastError, e.created_at AS createdAt, e.completed_at AS completedAt,
+              g.discord_guild_id AS guildId, g.name AS guildName
+         FROM sync_events e
+         LEFT JOIN guilds g ON g.id = e.guild_id
+        ORDER BY e.created_at DESC
+        LIMIT 20`
+    )
+  );
+  const guildStats = await first<Record<string, unknown>>(
+    c.env.DB.prepare(
+      `SELECT
+         COUNT(*) AS knownGuilds,
+         SUM(CASE WHEN bot_joined_at IS NOT NULL THEN 1 ELSE 0 END) AS installedGuilds
+       FROM guilds`
+    )
+  );
+  const commandStats = await first<Record<string, unknown>>(
+    c.env.DB.prepare("SELECT COUNT(*) AS knownCommands FROM bot_commands")
+  );
+
+  return json(c, {
+    runtime: normalizeBotRuntime(runtime),
+    adminRestricted: adminUserIds(c.env).size > 0,
+    stats: {
+      knownGuilds: Number(guildStats?.knownGuilds ?? 0),
+      installedGuilds: Number(guildStats?.installedGuilds ?? 0),
+      knownCommands: Number(commandStats?.knownCommands ?? 0)
+    },
+    recentEvents: recentEvents.map((event) => ({
+      ...event,
+      attempts: Number(event.attempts ?? 0),
+      maxAttempts: Number(event.maxAttempts ?? 0)
+    }))
+  });
+});
+
+app.post("/api/admin/bot/presence", async (c) => {
+  const session = await requireAdminSession(c);
+  const data = presenceSchema.parse(await readJsonBody(c));
+
+  if (data.activityType !== "none" && !data.text) {
+    throw new HttpError(400, "presence_text_required", "Bitte gib einen Text für die Aktivität ein.");
+  }
+
+  const eventId = await enqueueBotAdminEvent(c.env, "bot.presence.update", {
+    ...data,
+    actorDiscordUserId: session.user.discordUserId,
+    actorUsername: session.user.displayName || session.user.username
+  });
+
+  return json(c, { ok: true, eventId, presence: data });
+});
+
+app.post("/api/internal/bot/runtime", async (c) => {
+  const body = (await signedInternalBody(c)) as Record<string, unknown>;
+  await ensureBotRuntimeTable(c.env);
+
+  const presence = (body.presence && typeof body.presence === "object" ? body.presence : {}) as Record<string, unknown>;
+  const system = (body.system && typeof body.system === "object" ? body.system : {}) as Record<string, unknown>;
+  const counts = (body.counts && typeof body.counts === "object" ? body.counts : {}) as Record<string, unknown>;
+  const versions = (body.versions && typeof body.versions === "object" ? body.versions : {}) as Record<string, unknown>;
+  const timestamp = nowIso();
+  const num = (value: unknown): number | null => {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : null;
+  };
+
+  await c.env.DB.prepare(
+    `INSERT INTO bot_runtime_status (
+       id, status, activity_type, activity_text, latency_ms, ram_mb, cpu_percent,
+       guild_count, user_count, command_count, shard_count,
+       python_version, discord_py_version, platform, bot_version,
+       uptime_seconds, process_uptime_seconds, payload, updated_at
+     )
+     VALUES ('latest', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+     ON CONFLICT(id) DO UPDATE SET
+       status = excluded.status,
+       activity_type = excluded.activity_type,
+       activity_text = excluded.activity_text,
+       latency_ms = excluded.latency_ms,
+       ram_mb = excluded.ram_mb,
+       cpu_percent = excluded.cpu_percent,
+       guild_count = excluded.guild_count,
+       user_count = excluded.user_count,
+       command_count = excluded.command_count,
+       shard_count = excluded.shard_count,
+       python_version = excluded.python_version,
+       discord_py_version = excluded.discord_py_version,
+       platform = excluded.platform,
+       bot_version = excluded.bot_version,
+       uptime_seconds = excluded.uptime_seconds,
+       process_uptime_seconds = excluded.process_uptime_seconds,
+       payload = excluded.payload,
+       updated_at = excluded.updated_at`
+  )
+    .bind(
+      String(presence.status ?? ""),
+      String(presence.activityType ?? ""),
+      String(presence.activityText ?? ""),
+      num(system.latencyMs),
+      num(system.ramMb),
+      num(system.cpuPercent),
+      num(counts.guilds),
+      num(counts.users),
+      num(counts.commands),
+      num(counts.shards),
+      String(versions.python ?? ""),
+      String(versions.discordPy ?? ""),
+      String(system.platform ?? ""),
+      String(versions.bot ?? ""),
+      num(system.uptimeSeconds),
+      num(system.processUptimeSeconds),
+      asJson(body),
+      timestamp
+    )
+    .run();
+
+  return json(c, { ok: true, updatedAt: timestamp });
 });
 
 app.post("/api/internal/bot/snapshot", async (c) => {

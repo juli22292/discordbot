@@ -1,0 +1,21 @@
+CREATE TABLE IF NOT EXISTS bot_runtime_status (
+  id TEXT PRIMARY KEY,
+  status TEXT,
+  activity_type TEXT,
+  activity_text TEXT,
+  latency_ms REAL,
+  ram_mb REAL,
+  cpu_percent REAL,
+  guild_count INTEGER,
+  user_count INTEGER,
+  command_count INTEGER,
+  shard_count INTEGER,
+  python_version TEXT,
+  discord_py_version TEXT,
+  platform TEXT,
+  bot_version TEXT,
+  uptime_seconds INTEGER,
+  process_uptime_seconds INTEGER,
+  payload TEXT NOT NULL DEFAULT '{}',
+  updated_at TEXT NOT NULL
+);

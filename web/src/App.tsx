@@ -133,6 +133,52 @@ type WelcomeSettings = {
   };
 };
 
+type AdminRuntime = {
+  status: string | null;
+  activityType: string | null;
+  activityText: string | null;
+  latencyMs: number | null;
+  ramMb: number | null;
+  cpuPercent: number | null;
+  guildCount: number | null;
+  userCount: number | null;
+  commandCount: number | null;
+  shardCount: number | null;
+  pythonVersion: string | null;
+  discordPyVersion: string | null;
+  platform: string | null;
+  botVersion: string | null;
+  uptimeSeconds: number | null;
+  processUptimeSeconds: number | null;
+  updatedAt: string;
+  details: {
+    bot?: { id?: string; name?: string; avatar?: string | null };
+    guilds?: Array<{ id: string; name: string; memberCount: number; channelCount: number; roleCount: number }>;
+  };
+};
+
+type AdminData = {
+  runtime: AdminRuntime | null;
+  adminRestricted: boolean;
+  stats: {
+    knownGuilds: number;
+    installedGuilds: number;
+    knownCommands: number;
+  };
+  recentEvents: Array<{
+    id: string;
+    action: string;
+    status: string;
+    attempts: number;
+    maxAttempts: number;
+    lastError: string | null;
+    createdAt: string;
+    completedAt: string | null;
+    guildId: string | null;
+    guildName: string | null;
+  }>;
+};
+
 type User = {
   username: string;
   displayName: string | null;
@@ -295,6 +341,7 @@ function App() {
   if (cleanPath === "/login" || cleanPath === "/") return <LoginPage />;
   if (cleanPath === "/dokumentation") return <DocumentationPage />;
   if (cleanPath === "/datenschutz") return <PrivacyPage />;
+  if (cleanPath === "/admin") return <AdminPage />;
   if (cleanPath === "/home" || cleanPath === "/panel") return <HomePage />;
   if (cleanPath.startsWith("/dashboard/")) return <Dashboard path={cleanPath} />;
   return <LoginPage />;
@@ -428,6 +475,10 @@ function TopNav({ user }: { user?: User | null }) {
         <button onClick={() => navigate("/panel")}>
           <Home size={17} />
           Panel
+        </button>
+        <button onClick={() => navigate("/admin")}>
+          <Gauge size={17} />
+          Admin
         </button>
         <button onClick={() => navigate("/dokumentation")}>
           <ClipboardList size={17} />
@@ -866,6 +917,241 @@ function HomePage() {
             </article>
           ))}
         </section>
+      </main>
+    </div>
+  );
+}
+
+function formatDuration(seconds: number | null | undefined) {
+  if (!seconds || seconds < 0) return "unbekannt";
+  const days = Math.floor(seconds / 86400);
+  const hours = Math.floor((seconds % 86400) / 3600);
+  const minutes = Math.floor((seconds % 3600) / 60);
+
+  if (days) return `${days}d ${hours}h`;
+  if (hours) return `${hours}h ${minutes}m`;
+  return `${minutes}m`;
+}
+
+function formatDateTime(value: string | null | undefined) {
+  if (!value) return "unbekannt";
+  return new Date(value).toLocaleString("de-DE");
+}
+
+function statusLabel(value: string | null | undefined) {
+  switch (value) {
+    case "online":
+      return "Erreichbar";
+    case "idle":
+      return "Abwesend";
+    case "dnd":
+      return "Nicht stören";
+    case "offline":
+      return "Unsichtbar";
+    default:
+      return value || "unbekannt";
+  }
+}
+
+function activityLabel(value: string | null | undefined) {
+  switch (value) {
+    case "playing":
+      return "Spielt";
+    case "watching":
+      return "Schaut";
+    case "listening":
+      return "Hört";
+    case "streaming":
+      return "Streamt";
+    case "custom":
+      return "Custom";
+    case "none":
+      return "Keine";
+    default:
+      return value || "Keine";
+  }
+}
+
+function AdminPage() {
+  const me = useApi<{ user: User }>("/api/me", []);
+  const admin = useApi<AdminData>("/api/admin/bot", []);
+  const runtime = admin.data?.runtime ?? null;
+  const [presence, setPresence] = useState({ status: "online", activityType: "none", text: "", url: "" });
+  const [saving, setSaving] = useState(false);
+  const [status, setStatus] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!runtime) return;
+    setPresence({
+      status: runtime.status || "online",
+      activityType: runtime.activityType || "none",
+      text: runtime.activityText || "",
+      url: ""
+    });
+  }, [runtime?.updatedAt]);
+
+  const lastSeenAge = runtime?.updatedAt ? Math.max(0, Math.floor((Date.now() - new Date(runtime.updatedAt).getTime()) / 1000)) : null;
+  const onlineTone = lastSeenAge !== null && lastSeenAge < 90 ? "ok" : "warn";
+
+  async function savePresence() {
+    setSaving(true);
+    setStatus(null);
+    try {
+      await api("/api/admin/bot/presence", {
+        method: "POST",
+        body: JSON.stringify(presence)
+      });
+      setStatus("Statusänderung wurde an den Bot gesendet.");
+      await admin.reload();
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : "Status konnte nicht geändert werden.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="app-shell">
+      <TopNav user={me.data?.user} />
+      <main className="content narrow admin-page">
+        <section className="admin-hero">
+          <div>
+            <p className="eyebrow">
+              <Gauge size={15} />
+              EclipseBot Admin
+            </p>
+            <h1>Bot Control Center</h1>
+            <p>Status setzen, Laufzeitdaten sehen und prüfen, ob Sync, RAM, Latenz und Guild-Snapshot sauber laufen.</p>
+          </div>
+          <button className="secondary-action inline" onClick={admin.reload}>
+            <RefreshCw size={16} />
+            Aktualisieren
+          </button>
+        </section>
+
+        {admin.loading && <LoadingBlock />}
+        {admin.error && <Notice tone="danger" text={admin.error} />}
+
+        {!admin.loading && !runtime && !admin.error && (
+          <EmptyState title="Noch kein Bot-Heartbeat" text="Sobald die aktualisierte bot.py läuft, sendet der Bot seine Live-Daten automatisch ans Webpanel." />
+        )}
+
+        {admin.data && (
+          <>
+            <section className="overview-tiles wide">
+              <StatusTile icon={<Activity size={19} />} label="Bot" value={lastSeenAge === null ? "wartet" : lastSeenAge < 90 ? "online" : "stale"} tone={onlineTone} />
+              <StatusTile icon={<Gauge size={19} />} label="Latenz" value={runtime?.latencyMs !== null && runtime?.latencyMs !== undefined ? `${Math.round(runtime.latencyMs)} ms` : "-"} />
+              <StatusTile icon={<Cpu size={19} />} label="RAM" value={runtime?.ramMb !== null && runtime?.ramMb !== undefined ? `${runtime.ramMb.toFixed(1)} MB` : "-"} />
+              <StatusTile icon={<Server size={19} />} label="Guilds" value={String(runtime?.guildCount ?? admin.data.stats.installedGuilds ?? 0)} tone="ok" />
+            </section>
+
+            <section className="admin-grid">
+              <div className="panel">
+                <div className="panel-title">
+                  <h2>Status ändern</h2>
+                  <span className="pill neutral">wie /status</span>
+                </div>
+                <div className="form-grid">
+                  <label>
+                    Sichtbarkeit
+                    <select value={presence.status} onChange={(event) => setPresence({ ...presence, status: event.target.value })}>
+                      <option value="online">Erreichbar</option>
+                      <option value="idle">Abwesend</option>
+                      <option value="dnd">Nicht stören</option>
+                      <option value="offline">Unsichtbar</option>
+                    </select>
+                  </label>
+                  <label>
+                    Aktivität
+                    <select value={presence.activityType} onChange={(event) => setPresence({ ...presence, activityType: event.target.value })}>
+                      <option value="none">Keine Aktivität</option>
+                      <option value="playing">Spielt</option>
+                      <option value="watching">Schaut</option>
+                      <option value="listening">Hört</option>
+                      <option value="streaming">Streamt</option>
+                      <option value="custom">Eigener Status</option>
+                    </select>
+                  </label>
+                  <label className="wide">
+                    Text
+                    <input value={presence.text} maxLength={128} onChange={(event) => setPresence({ ...presence, text: event.target.value })} placeholder="Minecraft, /help, Wartung..." />
+                  </label>
+                  {presence.activityType === "streaming" && (
+                    <label className="wide">
+                      Streaming-URL
+                      <input value={presence.url} onChange={(event) => setPresence({ ...presence, url: event.target.value })} placeholder="https://twitch.tv/discord" />
+                    </label>
+                  )}
+                </div>
+                <ActionStatus status={status} />
+                <div className="form-actions">
+                  <button className="primary-action inline" onClick={savePresence} disabled={saving}>
+                    {saving ? <Loader2 className="spin" size={16} /> : <Save size={16} />}
+                    Status speichern
+                  </button>
+                </div>
+              </div>
+
+              <div className="panel admin-console">
+                <div className="panel-title">
+                  <h2>Live Runtime</h2>
+                  <span className={lastSeenAge !== null && lastSeenAge < 90 ? "pill ok" : "pill warn"}>
+                    {lastSeenAge === null ? "wartet" : `vor ${lastSeenAge}s`}
+                  </span>
+                </div>
+                <dl className="facts">
+                  <div><dt>Status</dt><dd>{statusLabel(runtime?.status)}</dd></div>
+                  <div><dt>Aktivität</dt><dd>{activityLabel(runtime?.activityType)} {runtime?.activityText ? `- ${runtime.activityText}` : ""}</dd></div>
+                  <div><dt>Bot-Version</dt><dd>{runtime?.botVersion || "-"}</dd></div>
+                  <div><dt>Uptime</dt><dd>{formatDuration(runtime?.uptimeSeconds)}</dd></div>
+                  <div><dt>Python</dt><dd>{runtime?.pythonVersion || "-"}</dd></div>
+                  <div><dt>discord.py</dt><dd>{runtime?.discordPyVersion || "-"}</dd></div>
+                  <div><dt>CPU</dt><dd>{runtime?.cpuPercent !== null && runtime?.cpuPercent !== undefined ? `${runtime.cpuPercent.toFixed(1)}%` : "-"}</dd></div>
+                  <div><dt>Commands</dt><dd>{runtime?.commandCount ?? admin.data.stats.knownCommands}</dd></div>
+                  <div><dt>Letzter Heartbeat</dt><dd>{formatDateTime(runtime?.updatedAt)}</dd></div>
+                </dl>
+              </div>
+            </section>
+
+            <section className="admin-grid">
+              <div className="panel">
+                <div className="panel-title">
+                  <h2>Guilds</h2>
+                  <span className="pill">{runtime?.userCount ?? 0} User</span>
+                </div>
+                <div className="admin-guild-list">
+                  {(runtime?.details.guilds ?? []).slice(0, 12).map((guild) => (
+                    <article key={guild.id}>
+                      <strong>{guild.name}</strong>
+                      <span>{guild.memberCount} Mitglieder</span>
+                      <small>{guild.channelCount} Kanäle · {guild.roleCount} Rollen</small>
+                    </article>
+                  ))}
+                  {(runtime?.details.guilds ?? []).length === 0 && <p className="muted">Noch keine Guild-Details im Heartbeat.</p>}
+                </div>
+              </div>
+
+              <div className="panel">
+                <div className="panel-title">
+                  <h2>Sync-Events</h2>
+                  <span className={admin.data.adminRestricted ? "pill ok" : "pill warn"}>
+                    {admin.data.adminRestricted ? "ID-Lock" : "Login-Lock"}
+                  </span>
+                </div>
+                <div className="event-list">
+                  {admin.data.recentEvents.map((event) => (
+                    <article key={event.id}>
+                      <strong>{event.action}</strong>
+                      <span className={`pill ${event.status === "completed" ? "ok" : event.status === "failed" ? "danger" : "neutral"}`}>{event.status}</span>
+                      <small>{event.guildName || event.guildId || "global"} · {formatDateTime(event.createdAt)}</small>
+                      {event.lastError && <p>{event.lastError}</p>}
+                    </article>
+                  ))}
+                </div>
+              </div>
+            </section>
+          </>
+        )}
       </main>
     </div>
   );
