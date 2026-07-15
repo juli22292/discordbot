@@ -38,6 +38,29 @@ import {
 type AppBindings = { Bindings: Env };
 const app = new Hono<AppBindings>();
 
+const SECURITY_HEADERS: Record<string, string> = {
+  "Content-Security-Policy": [
+    "default-src 'self'",
+    "base-uri 'self'",
+    "object-src 'none'",
+    "frame-ancestors 'none'",
+    "script-src 'self'",
+    "style-src 'self' 'unsafe-inline'",
+    "img-src 'self' data: blob: https:",
+    "font-src 'self' data:",
+    "connect-src 'self'",
+    "form-action 'self' https://discord.com",
+    "upgrade-insecure-requests"
+  ].join("; "),
+  "Referrer-Policy": "strict-origin-when-cross-origin",
+  "Strict-Transport-Security": "max-age=31536000; includeSubDomains; preload",
+  "X-Content-Type-Options": "nosniff",
+  "X-Frame-Options": "DENY",
+  "Permissions-Policy": "camera=(), microphone=(), geolocation=(), payment=(), usb=(), fullscreen=(self)",
+  "Cross-Origin-Opener-Policy": "same-origin",
+  "Cross-Origin-Resource-Policy": "same-origin"
+};
+
 class HttpError extends Error {
   constructor(
     public readonly status: number,
@@ -131,6 +154,40 @@ type BotInstallStatus = "installed" | "missing" | "unknown";
 
 function json(c: HonoContext, data: unknown, status = 200): Response {
   return c.json(data, status as 200);
+}
+
+function setSecurityHeaders(headers: Headers): void {
+  for (const [name, value] of Object.entries(SECURITY_HEADERS)) {
+    headers.set(name, value);
+  }
+}
+
+function withSecurityHeaders(response: Response): Response {
+  try {
+    setSecurityHeaders(response.headers);
+    return response;
+  } catch {
+    const secured = new Response(response.body, response);
+    setSecurityHeaders(secured.headers);
+    return secured;
+  }
+}
+
+function httpsRedirect(request: Request): Response | null {
+  const url = new URL(request.url);
+  const forwardedProto = request.headers.get("x-forwarded-proto");
+
+  if (url.hostname !== "bot.carrothd.de" || (url.protocol !== "http:" && forwardedProto !== "http")) {
+    return null;
+  }
+
+  url.protocol = "https:";
+  return withSecurityHeaders(
+    new Response(null, {
+      status: 301,
+      headers: { Location: url.toString() }
+    })
+  );
 }
 
 function requireEnv(env: Env, key: keyof Env): string {
@@ -1630,7 +1687,12 @@ async function scheduled(_event: ScheduledEvent, env: Env): Promise<void> {
 }
 
 export default {
-  fetch: app.fetch,
+  async fetch(request: Request, env: Env, ctx: ExecutionContext) {
+    const redirect = httpsRedirect(request);
+    if (redirect) return redirect;
+
+    return withSecurityHeaders(await app.fetch(request, env, ctx));
+  },
   scheduled
 };
 
