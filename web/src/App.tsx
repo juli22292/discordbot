@@ -535,31 +535,97 @@ function DocumentationPage() {
 
 function PrivacyPage() {
   const privacyHighlights = [
-    { icon: <KeyRound size={18} />, title: "Discord Login", text: "Die Anmeldung läuft über Discord OAuth. Das Panel nutzt die Anmeldung nur, um deinen Account und deine verwaltbaren Server zu erkennen." },
-    { icon: <Database size={18} />, title: "Guild-Daten", text: "Gespeichert werden nur Daten, die für Serververwaltung, Einstellungen, Commands und Audit-Log gebraucht werden." },
-    { icon: <ShieldCheck size={18} />, title: "Geschützte Sitzungen", text: "Sessions und sensible Tokens werden serverseitig geschützt und nicht offen im Browser angezeigt." },
-    { icon: <Activity size={18} />, title: "Keine Werbung", text: "Das Webpanel ist ein Verwaltungsbereich und enthält keine Werbe- oder Marketingfunktionen." }
+    {
+      icon: <KeyRound size={18} />,
+      title: "Discord Login",
+      text: "Die Anmeldung läuft über Discord OAuth mit den Bereichen identify und guilds. Dadurch erkennt das Panel deinen Account und die Server, die du verwalten darfst."
+    },
+    {
+      icon: <UserRound size={18} />,
+      title: "Account-Daten",
+      text: "Gespeichert werden Discord-ID, Nutzername, Anzeigename, Avatar und der letzte Login-Zeitpunkt, damit Sessions und Audit-Logs zugeordnet werden können."
+    },
+    {
+      icon: <Server size={18} />,
+      title: "Server-Daten",
+      text: "Das Panel speichert Server-ID, Servername, Icon und Bot-Status. So kann angezeigt werden, ob EclipseBot bereits installiert ist."
+    },
+    {
+      icon: <Database size={18} />,
+      title: "Panel-Einstellungen",
+      text: "Gespeichert werden nur Einstellungen, die du im Panel nutzt: Sprache, Zeitzone, Bot-Profil, Commands, Custom Commands und technische Sync-Statuswerte."
+    },
+    {
+      icon: <ShieldCheck size={18} />,
+      title: "Geschützte Sitzungen",
+      text: "Discord-Tokens und Session-Daten werden serverseitig gespeichert und verschlüsselt. Im Browser wird kein Klartext-Token angezeigt."
+    },
+    {
+      icon: <ClipboardList size={18} />,
+      title: "Audit-Log",
+      text: "Änderungen im Panel werden protokolliert, damit nachvollziehbar bleibt, wer Einstellungen, Commands oder Bot-Profil-Daten verändert hat."
+    },
+    {
+      icon: <Activity size={18} />,
+      title: "Bot-Synchronisierung",
+      text: "Der Bot kann Rollen, Kanäle, Command-Status und Sync-Aufgaben ans Panel melden, damit die Oberfläche aktuell bleibt."
+    },
+    {
+      icon: <Shield size={18} />,
+      title: "Keine Werbung",
+      text: "Das Webpanel nutzt keine Werbefunktionen und erstellt keine Marketingprofile. Cookies werden für Login, OAuth-State und Session benötigt."
+    }
   ];
   const privacySections = [
     {
       eyebrow: "Anmeldung",
       title: "Welche Discord-Daten genutzt werden",
-      text: "Beim Login werden deine Discord-ID, dein Nutzername, dein Anzeigename und dein Avatar genutzt. Dazu kommen die Server, auf denen du passende Verwaltungsrechte hast."
+      text: "Beim Login fragt EclipseBot bei Discord deine Basisdaten ab: Discord-ID, Nutzername, Anzeigename und Avatar. Außerdem wird die Liste deiner Server geladen, damit das Panel nur Guilds zeigt, auf denen du Owner, Administrator oder eine passende Verwaltungsberechtigung bist."
+    },
+    {
+      eyebrow: "Sessions",
+      title: "Warum eine Sitzung gespeichert wird",
+      text: "Nach dem Login wird eine Session erstellt, damit du nicht bei jedem Seitenaufruf neu zu Discord geschickt wirst. Die Session enthält eine interne Session-ID, ein Ablaufdatum und verschlüsselte Discord-Token-Daten. Abgelaufene Sessions werden automatisch bereinigt."
     },
     {
       eyebrow: "Server",
-      title: "Was pro Guild gespeichert wird",
-      text: "Das Panel speichert serverbezogene Einstellungen wie Sprache, Zeitzone, Bot-Profil, Command-Konfigurationen und technische Sync-Statuswerte."
+      title: "Was pro Discord-Server gespeichert wird",
+      text: "Für jede verwaltbare Guild speichert das Panel die Discord-Server-ID, den Namen, das Icon und Zeitpunkte wie Bot installiert, Bot entfernt oder zuletzt gesehen. Diese Daten werden genutzt, um die Serverliste und den Installationsstatus korrekt anzuzeigen."
     },
     {
-      eyebrow: "Sicherheit",
-      title: "Wie sensible Daten behandelt werden",
-      text: "Discord-Tokens, Session-Daten und interne Bot-Schlüssel werden als Secrets oder verschlüsselte Daten behandelt. Sie werden nicht öffentlich auf der Webseite ausgegeben."
+      eyebrow: "Einstellungen",
+      title: "Welche Panel-Einstellungen gespeichert werden",
+      text: "Gespeichert werden Sprache, Zeitzone, Bot-Nickname, Avatar-Sync-Status, Command-Einstellungen, Cooldowns, Rollen- und Kanalbeschränkungen sowie Custom-Command-Texte. Diese Daten sind nötig, damit EclipseBot pro Server unterschiedlich konfiguriert werden kann."
+    },
+    {
+      eyebrow: "Rollen & Kanäle",
+      title: "Warum Rollen und Kanäle auftauchen können",
+      text: "Der laufende Bot kann eine Momentaufnahme von Kanälen und Rollen an das Webpanel senden. Dadurch kann das Panel später Auswahlfelder, Berechtigungen und Command-Regeln passend zu deinem Server anzeigen."
+    },
+    {
+      eyebrow: "Medien",
+      title: "Was bei Avatar-Uploads gespeichert wird",
+      text: "Wenn du einen serverbezogenen Bot-Avatar hochlädst, werden Dateityp, Dateigröße, Speicher-Key, Guild-Zuordnung und die Discord-ID des hochladenden Nutzers gespeichert. Die Datei selbst wird als geschütztes Guild-Medium abgelegt."
+    },
+    {
+      eyebrow: "Audit-Log",
+      title: "Welche Änderungen protokolliert werden",
+      text: "Bei wichtigen Aktionen speichert das Panel Aktion, Ziel, Zeitpunkt, ausführende Discord-ID und alte beziehungsweise neue Werte. Das hilft, Änderungen im Team später nachvollziehen zu können."
+    },
+    {
+      eyebrow: "Sync",
+      title: "Welche technischen Sync-Daten entstehen",
+      text: "Für Aufgaben zwischen Webpanel und Bot werden Sync-Events gespeichert. Dazu gehören Status, Anzahl der Versuche, Fehlermeldungen und technische Nutzdaten. Erfolgreich abgeschlossene Sync-Events werden nach einiger Zeit bereinigt."
     },
     {
       eyebrow: "Kontrolle",
       title: "Abmelden und Zugriff begrenzen",
-      text: "Du kannst dich jederzeit abmelden. Das Panel zeigt nur Server an, für die dein Discord-Account ausreichende Rechte besitzt."
+      text: "Du kannst dich jederzeit abmelden. Dabei wird deine aktive Session gelöscht. Das Panel zeigt nur Server an, für die dein Discord-Account ausreichende Rechte besitzt, und trennt Einstellungen strikt pro Guild."
+    },
+    {
+      eyebrow: "Nicht genutzt",
+      title: "Was nicht für Werbung genutzt wird",
+      text: "Das Panel ist ein Verwaltungswerkzeug. Es gibt keine Werbeanzeigen, keine Marketingprofile und keine Funktion, die deine Panel-Daten an Werbenetzwerke weitergibt. Notwendige Cookies dienen nur Login, OAuth-Sicherheit und Session-Verwaltung."
     }
   ];
 
