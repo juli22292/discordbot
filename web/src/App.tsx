@@ -1912,20 +1912,21 @@ function AdminGuildViewPage({ path }: { path: string }) {
                 <span className="pill neutral">{currentRows} Treffer</span>
               </div>
 
-              <div className="owner-panel-toolbar">
+              <div className="owner-panel-toolbar owner-guild-browser-toolbar">
                 <label className="owner-search">
                   <Search size={16} />
                   <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Suchen nach Name, ID, Rolle oder Kanal" aria-label="Guild-Daten suchen" />
                 </label>
-                <div className="owner-segmented" aria-label="Guild-Daten auswählen">
+                <div className="owner-segmented owner-browser-tabs" aria-label="Guild-Daten auswählen">
                   {[
-                    ["roles", `Rollen ${data.roles.length}`],
-                    ["members", `Mitglieder ${data.limits.membersShown}${data.limits.membersPartial ? "+" : ""}`],
-                    ["channels", `Kanäle ${data.channels.length}`]
-                  ].map(([value, label]) => (
+                    ["roles", "Rollen", data.roles.length],
+                    ["members", "Mitglieder", `${data.limits.membersShown}${data.limits.membersPartial ? "+" : ""}`],
+                    ["channels", "Kanäle", data.channels.length]
+                  ].map(([value, label, count]) => (
                     <button key={value} type="button" className={activeTab === value ? "active" : ""} onClick={() => setActiveTab(value as "roles" | "members" | "channels")}>
                       {value === "roles" ? <Shield size={14} /> : value === "members" ? <UserRound size={14} /> : <Hash size={14} />}
-                      {label}
+                      <span>{label}</span>
+                      <strong>{count}</strong>
                     </button>
                   ))}
                 </div>
