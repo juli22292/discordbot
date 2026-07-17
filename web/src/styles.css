@@ -1663,6 +1663,82 @@ textarea {
   min-width: 0;
 }
 
+.owner-current-status {
+  display: grid;
+  grid-template-columns: 12px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  min-height: 58px;
+  margin-bottom: 16px;
+  padding: 12px 14px;
+  border: 1px solid var(--border-soft);
+  border-radius: 8px;
+  background: rgba(9, 11, 16, 0.56);
+}
+
+.owner-current-status-dot {
+  width: 11px;
+  height: 11px;
+  border-radius: 999px;
+  background: var(--muted);
+  box-shadow: 0 0 0 4px rgba(148, 163, 184, 0.1);
+}
+
+.owner-current-status small {
+  display: block;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.owner-current-status strong {
+  display: block;
+  margin-top: 2px;
+  color: var(--text);
+  font-size: 18px;
+}
+
+.owner-current-status em {
+  color: var(--muted);
+  font-size: 12px;
+  font-style: normal;
+  white-space: nowrap;
+}
+
+.owner-current-status.online {
+  border-color: rgba(47, 191, 122, 0.28);
+  background: linear-gradient(90deg, rgba(47, 191, 122, 0.12), rgba(9, 11, 16, 0.58));
+}
+
+.owner-current-status.online .owner-current-status-dot {
+  background: var(--green);
+  box-shadow: 0 0 0 4px rgba(47, 191, 122, 0.12), 0 0 18px rgba(47, 191, 122, 0.34);
+}
+
+.owner-current-status.idle {
+  border-color: rgba(244, 189, 99, 0.34);
+  background: linear-gradient(90deg, rgba(244, 189, 99, 0.13), rgba(9, 11, 16, 0.58));
+}
+
+.owner-current-status.idle .owner-current-status-dot {
+  background: var(--amber);
+  box-shadow: 0 0 0 4px rgba(244, 189, 99, 0.12), 0 0 18px rgba(244, 189, 99, 0.28);
+}
+
+.owner-current-status.dnd {
+  border-color: rgba(255, 116, 116, 0.32);
+  background: linear-gradient(90deg, rgba(255, 116, 116, 0.12), rgba(9, 11, 16, 0.58));
+}
+
+.owner-current-status.dnd .owner-current-status-dot {
+  background: var(--red);
+  box-shadow: 0 0 0 4px rgba(255, 116, 116, 0.12), 0 0 18px rgba(255, 116, 116, 0.28);
+}
+
+.owner-current-status.offline .owner-current-status-dot,
+.owner-current-status.unknown .owner-current-status-dot {
+  background: #7f8a9d;
+}
+
 .owner-presets {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -2603,6 +2679,7 @@ textarea {
   .overview-tiles,
   .docs-highlight-grid,
   .form-grid,
+  .owner-current-status,
   .owner-overview-grid,
   .owner-presets,
   .owner-runtime-mini,
@@ -2611,6 +2688,14 @@ textarea {
   .guild-card,
   .planned-hero {
     grid-template-columns: 1fr;
+  }
+
+  .owner-current-status {
+    justify-items: start;
+  }
+
+  .owner-current-status em {
+    white-space: normal;
   }
 
   .docs-hero,

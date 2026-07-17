@@ -985,6 +985,21 @@ function statusLabel(value: string | null | undefined) {
   }
 }
 
+function statusToneClass(value: string | null | undefined) {
+  switch (value) {
+    case "online":
+      return "online";
+    case "idle":
+      return "idle";
+    case "dnd":
+      return "dnd";
+    case "offline":
+      return "offline";
+    default:
+      return "unknown";
+  }
+}
+
 function activityLabel(value: string | null | undefined) {
   switch (value) {
     case "playing":
@@ -1427,7 +1442,18 @@ function AdminPageModern() {
                     <h2>Präsenz steuern</h2>
                     <p className="muted">Status und Aktivität ohne Umwege setzen.</p>
                   </div>
-                  <span className="pill neutral">{statusLabel(runtime?.status)}</span>
+                  <span className={`pill ${runtime?.status === "online" ? "ok" : runtime?.status === "dnd" ? "danger" : runtime?.status === "idle" ? "warn" : "neutral"}`}>
+                    {statusLabel(runtime?.status)}
+                  </span>
+                </div>
+
+                <div className={`owner-current-status ${statusToneClass(runtime?.status)}`}>
+                  <span className="owner-current-status-dot" aria-hidden="true" />
+                  <div>
+                    <small>Aktueller Bot-Status</small>
+                    <strong>{statusLabel(runtime?.status)}</strong>
+                  </div>
+                  <em>{runtime?.updatedAt ? `gemeldet ${formatDateTime(runtime.updatedAt)}` : "wartet auf Bot-Daten"}</em>
                 </div>
 
                 <div className="owner-presets">
