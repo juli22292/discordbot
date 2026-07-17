@@ -1592,6 +1592,393 @@ textarea {
   grid-column: 1 / -1;
 }
 
+.owner-admin-page {
+  display: grid;
+  gap: 18px;
+}
+
+.owner-hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 18px;
+  min-height: 146px;
+  padding: 22px;
+  border: 1px solid rgba(119, 183, 255, 0.22);
+  border-radius: 8px;
+  background:
+    linear-gradient(135deg, rgba(119, 183, 255, 0.12), transparent 36%),
+    linear-gradient(315deg, rgba(77, 219, 143, 0.08), transparent 34%),
+    rgba(21, 25, 34, 0.92);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.045), var(--soft-shadow);
+}
+
+.owner-hero h1 {
+  margin: 8px 0 7px;
+  font-size: 34px;
+}
+
+.owner-hero p:last-child {
+  max-width: 760px;
+  color: var(--muted);
+  line-height: 1.6;
+}
+
+.owner-hero-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.secondary-action.inline.is-active {
+  color: var(--green);
+  border-color: rgba(77, 219, 143, 0.34);
+  background: rgba(77, 219, 143, 0.1);
+}
+
+.owner-overview-grid {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(128px, 1fr));
+  gap: 12px;
+}
+
+.owner-admin-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.05fr) minmax(340px, 0.95fr);
+  gap: 16px;
+  align-items: start;
+}
+
+.owner-admin-grid-wide {
+  grid-template-columns: minmax(0, 1.22fr) minmax(360px, 0.78fr);
+}
+
+.owner-presence-panel,
+.owner-health-panel,
+.owner-guilds-panel,
+.owner-events-panel {
+  min-width: 0;
+}
+
+.owner-presets {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.owner-preset-button {
+  min-height: 42px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border: 1px solid var(--border-soft);
+  border-radius: 8px;
+  color: var(--muted-strong);
+  background: rgba(9, 11, 16, 0.56);
+  cursor: pointer;
+  transition: border-color 160ms ease, background 160ms ease, color 160ms ease;
+}
+
+.owner-preset-button:hover,
+.owner-preset-button.active {
+  color: var(--text);
+  border-color: rgba(119, 183, 255, 0.36);
+  background: rgba(119, 183, 255, 0.1);
+}
+
+.owner-health-summary {
+  display: grid;
+  grid-template-columns: 132px minmax(0, 1fr);
+  gap: 14px;
+  align-items: stretch;
+  margin-bottom: 14px;
+}
+
+.owner-health-score {
+  aspect-ratio: 1;
+  display: grid;
+  place-items: center;
+  align-content: center;
+  gap: 4px;
+  border: 1px solid var(--border-soft);
+  border-radius: 8px;
+  background: rgba(9, 11, 16, 0.58);
+}
+
+.owner-health-score strong {
+  color: var(--text);
+  font-size: 34px;
+  line-height: 1;
+}
+
+.owner-health-score span {
+  color: var(--muted);
+  font-size: 12px;
+  text-transform: uppercase;
+}
+
+.owner-health-score.ok {
+  border-color: rgba(77, 219, 143, 0.34);
+  background: linear-gradient(180deg, rgba(77, 219, 143, 0.14), rgba(9, 11, 16, 0.58));
+}
+
+.owner-health-score.warn {
+  border-color: rgba(244, 189, 99, 0.34);
+  background: linear-gradient(180deg, rgba(244, 189, 99, 0.14), rgba(9, 11, 16, 0.58));
+}
+
+.owner-health-score.danger {
+  border-color: rgba(255, 107, 107, 0.34);
+  background: linear-gradient(180deg, rgba(255, 107, 107, 0.14), rgba(9, 11, 16, 0.58));
+}
+
+.owner-runtime-mini {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin: 0;
+}
+
+.owner-runtime-mini div {
+  min-width: 0;
+  display: grid;
+  gap: 5px;
+  padding: 10px;
+  border: 1px solid var(--border-soft);
+  border-radius: 8px;
+  background: rgba(9, 11, 16, 0.48);
+}
+
+.owner-runtime-mini dt {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.owner-runtime-mini dd {
+  margin: 0;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.owner-health-list,
+.owner-guild-list,
+.owner-event-list {
+  display: grid;
+  gap: 10px;
+}
+
+.owner-health-item,
+.owner-guild-row,
+.owner-event-row {
+  min-width: 0;
+  border: 1px solid var(--border-soft);
+  border-radius: 8px;
+  background: rgba(9, 11, 16, 0.52);
+}
+
+.owner-health-item {
+  display: grid;
+  grid-template-columns: 32px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  padding: 11px;
+}
+
+.owner-health-item > span {
+  width: 32px;
+  height: 32px;
+  display: grid;
+  place-items: center;
+  border-radius: 8px;
+  background: rgba(119, 183, 255, 0.1);
+}
+
+.owner-health-item.ok > span {
+  color: var(--green);
+  background: rgba(77, 219, 143, 0.1);
+}
+
+.owner-health-item.warn > span {
+  color: var(--amber);
+  background: rgba(244, 189, 99, 0.1);
+}
+
+.owner-health-item.danger > span {
+  color: var(--red);
+  background: rgba(255, 107, 107, 0.1);
+}
+
+.owner-health-item strong,
+.owner-guild-row strong,
+.owner-event-row strong {
+  color: var(--text);
+}
+
+.owner-health-item small,
+.owner-guild-row small,
+.owner-event-row small,
+.owner-event-meta,
+.owner-event-error {
+  color: var(--muted);
+}
+
+.owner-health-item em {
+  color: var(--muted-strong);
+  font-style: normal;
+  white-space: nowrap;
+}
+
+.owner-panel-toolbar {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(180px, 0.35fr);
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.owner-search,
+.owner-select {
+  position: relative;
+  display: block;
+}
+
+.owner-search svg,
+.owner-select svg {
+  position: absolute;
+  z-index: 1;
+  left: 12px;
+  top: 50%;
+  color: var(--muted);
+  pointer-events: none;
+  transform: translateY(-50%);
+}
+
+.owner-search input,
+.owner-select select {
+  padding-left: 38px;
+}
+
+.owner-guild-list {
+  max-height: 650px;
+  overflow: auto;
+  padding-right: 2px;
+}
+
+.owner-guild-row {
+  display: grid;
+  grid-template-columns: 42px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+}
+
+.owner-guild-initial {
+  width: 42px;
+  height: 42px;
+  display: grid;
+  place-items: center;
+  border: 1px solid rgba(119, 183, 255, 0.22);
+  border-radius: 8px;
+  color: var(--blue);
+  font-weight: 800;
+  background: rgba(119, 183, 255, 0.1);
+}
+
+.owner-guild-row small {
+  display: block;
+  margin-top: 4px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.owner-guild-stats {
+  min-width: 245px;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.owner-guild-stats span,
+.owner-event-meta span {
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  padding: 5px 9px;
+  border: 1px solid var(--border-soft);
+  border-radius: 8px;
+  color: var(--muted-strong);
+  background: rgba(34, 41, 54, 0.52);
+  white-space: nowrap;
+}
+
+.owner-segmented {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 6px;
+  padding: 4px;
+  margin-bottom: 14px;
+  border: 1px solid var(--border-soft);
+  border-radius: 8px;
+  background: rgba(9, 11, 16, 0.48);
+}
+
+.owner-segmented button {
+  min-height: 34px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border: 0;
+  border-radius: 7px;
+  color: var(--muted);
+  background: transparent;
+  cursor: pointer;
+}
+
+.owner-segmented button:hover,
+.owner-segmented button.active {
+  color: var(--text);
+  background: rgba(119, 183, 255, 0.12);
+}
+
+.owner-event-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px 12px;
+  padding: 12px;
+}
+
+.owner-event-row small {
+  display: block;
+  margin-top: 5px;
+}
+
+.owner-event-meta,
+.owner-event-error {
+  grid-column: 1 / -1;
+}
+
+.owner-event-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.owner-event-error {
+  margin: 0;
+  padding: 10px;
+  border: 1px solid rgba(255, 107, 107, 0.22);
+  border-radius: 8px;
+  background: rgba(255, 107, 107, 0.08);
+  overflow-wrap: anywhere;
+}
+
 .welcome-page {
   display: grid;
   gap: 16px;
@@ -2051,14 +2438,25 @@ textarea {
   .dashboard-layout,
   .section-grid,
   .admin-grid,
+  .owner-admin-grid,
+  .owner-admin-grid-wide,
   .welcome-grid {
     grid-template-columns: 1fr;
   }
 
   .metric-strip,
   .overview-tiles,
+  .owner-overview-grid,
   .docs-highlight-grid {
     grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .owner-health-summary {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .owner-health-score {
+    width: min(180px, 100%);
   }
 
   .planned-grid {
@@ -2120,6 +2518,11 @@ textarea {
   .overview-tiles,
   .docs-highlight-grid,
   .form-grid,
+  .owner-overview-grid,
+  .owner-presets,
+  .owner-runtime-mini,
+  .owner-panel-toolbar,
+  .owner-segmented,
   .guild-card,
   .planned-hero {
     grid-template-columns: 1fr;
@@ -2155,6 +2558,25 @@ textarea {
   .admin-hero {
     align-items: flex-start;
     flex-direction: column;
+  }
+
+  .owner-hero {
+    grid-template-columns: 1fr;
+  }
+
+  .owner-hero-actions {
+    width: 100%;
+    justify-content: flex-start;
+  }
+
+  .owner-guild-row {
+    grid-template-columns: 42px minmax(0, 1fr);
+  }
+
+  .owner-guild-stats {
+    grid-column: 1 / -1;
+    min-width: 0;
+    justify-content: flex-start;
   }
 }
 

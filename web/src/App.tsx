@@ -10,16 +10,19 @@ import {
   Bot,
   Check,
   ChevronRight,
+  Clock3,
   ClipboardList,
   Command,
   Cpu,
   Database,
   Gauge,
+  HardDrive,
   Home,
   Hash,
   KeyRound,
   LayoutDashboard,
   LifeBuoy,
+  ListFilter,
   Loader2,
   LogOut,
   MessageSquare,
@@ -29,15 +32,18 @@ import {
   RefreshCw,
   Rocket,
   Save,
+  Search,
   Server,
   Settings,
   Shield,
   ShieldCheck,
+  SlidersHorizontal,
   Sparkles,
   Trash2,
   Upload,
   UserPlus,
-  UserRound
+  UserRound,
+  Wifi
 } from "lucide-react";
 import "./styles.css";
 
@@ -341,7 +347,7 @@ function App() {
   if (cleanPath === "/login" || cleanPath === "/") return <LoginPage />;
   if (cleanPath === "/dokumentation") return <DocumentationPage />;
   if (cleanPath === "/datenschutz") return <PrivacyPage />;
-  if (cleanPath === "/admin") return <AdminPage />;
+  if (cleanPath === "/admin") return <AdminPageModern />;
   if (cleanPath === "/home" || cleanPath === "/panel") return <HomePage />;
   if (cleanPath.startsWith("/dashboard/")) return <Dashboard path={cleanPath} />;
   return <LoginPage />;
@@ -1147,6 +1153,408 @@ function AdminPage() {
                       {event.lastError && <p>{event.lastError}</p>}
                     </article>
                   ))}
+                </div>
+              </div>
+            </section>
+          </>
+        )}
+      </main>
+    </div>
+  );
+}
+
+type OwnerTone = "ok" | "warn" | "danger" | "neutral";
+
+function ownerEventStatusLabel(status: string) {
+  switch (status) {
+    case "completed":
+      return "Erledigt";
+    case "failed":
+      return "Fehler";
+    case "processing":
+      return "Läuft";
+    case "queued":
+      return "Wartet";
+    case "pending":
+      return "Offen";
+    default:
+      return status || "Unbekannt";
+  }
+}
+
+function ownerEventStatusTone(status: string): OwnerTone {
+  if (status === "completed") return "ok";
+  if (status === "failed") return "danger";
+  if (status === "queued" || status === "pending" || status === "processing") return "warn";
+  return "neutral";
+}
+
+function compactNumber(value: number | null | undefined) {
+  if (value === null || value === undefined) return "-";
+  return new Intl.NumberFormat("de-DE", { maximumFractionDigits: 1, notation: value >= 10000 ? "compact" : "standard" }).format(value);
+}
+
+function AdminPageModern() {
+  const me = useApi<{ user: User }>("/api/me", []);
+  const admin = useApi<AdminData>("/api/admin/bot", []);
+  const runtime = admin.data?.runtime ?? null;
+  const guilds = runtime?.details.guilds ?? [];
+  const recentEvents = admin.data?.recentEvents ?? [];
+
+  const [presence, setPresence] = useState({ status: "online", activityType: "none", text: "", url: "" });
+  const [saving, setSaving] = useState(false);
+  const [saveStatus, setSaveStatus] = useState<string | null>(null);
+  const [guildSearch, setGuildSearch] = useState("");
+  const [guildSort, setGuildSort] = useState<"members" | "name" | "channels">("members");
+  const [eventFilter, setEventFilter] = useState<"all" | "open" | "failed" | "completed">("all");
+  const [autoRefresh, setAutoRefresh] = useState(true);
+
+  useEffect(() => {
+    if (!runtime) return;
+    setPresence({
+      status: runtime.status || "online",
+      activityType: runtime.activityType || "none",
+      text: runtime.activityText || "",
+      url: ""
+    });
+  }, [runtime?.updatedAt]);
+
+  useEffect(() => {
+    if (!autoRefresh) return;
+    const timer = window.setInterval(() => {
+      void admin.reload();
+    }, 30000);
+
+    return () => window.clearInterval(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoRefresh]);
+
+  const lastSeenAge = runtime?.updatedAt ? Math.max(0, Math.floor((Date.now() - new Date(runtime.updatedAt).getTime()) / 1000)) : null;
+  const heartbeatFresh = lastSeenAge !== null && lastSeenAge < 90;
+  const latencyMs = runtime?.latencyMs;
+  const ramMb = runtime?.ramMb;
+  const cpuPercent = runtime?.cpuPercent;
+  const failedEvents = recentEvents.filter((event) => event.status === "failed").length;
+  const openEvents = recentEvents.filter((event) => !["completed", "failed"].includes(event.status)).length;
+  const installedGuilds = admin.data?.stats.installedGuilds ?? 0;
+  const knownGuilds = admin.data?.stats.knownGuilds ?? 0;
+  const installRate = knownGuilds ? Math.round((installedGuilds / knownGuilds) * 100) : 0;
+
+  const filteredGuilds = useMemo(() => {
+    const needle = guildSearch.trim().toLowerCase();
+    return [...guilds]
+      .filter((guild) => !needle || guild.name.toLowerCase().includes(needle) || guild.id.includes(needle))
+      .sort((left, right) => {
+        if (guildSort === "name") return left.name.localeCompare(right.name, "de");
+        if (guildSort === "channels") return right.channelCount - left.channelCount;
+        return right.memberCount - left.memberCount;
+      });
+  }, [guildSearch, guildSort, guilds]);
+
+  const visibleEvents = useMemo(() => {
+    return recentEvents.filter((event) => {
+      if (eventFilter === "all") return true;
+      if (eventFilter === "open") return !["completed", "failed"].includes(event.status);
+      return event.status === eventFilter;
+    });
+  }, [eventFilter, recentEvents]);
+
+  const healthChecks = [
+    {
+      label: "Heartbeat",
+      value: lastSeenAge === null ? "wartet" : heartbeatFresh ? `vor ${lastSeenAge}s` : `vor ${formatDuration(lastSeenAge)}`,
+      detail: "Live-Daten vom Bot",
+      tone: heartbeatFresh ? "ok" : "warn",
+      icon: <Wifi size={16} />
+    },
+    {
+      label: "Gateway",
+      value: latencyMs !== null && latencyMs !== undefined ? `${Math.round(latencyMs)} ms` : "-",
+      detail: "Discord-Latenz",
+      tone: latencyMs === null || latencyMs === undefined || latencyMs < 250 ? "ok" : "warn",
+      icon: <Gauge size={16} />
+    },
+    {
+      label: "Ressourcen",
+      value: cpuPercent !== null && cpuPercent !== undefined ? `${cpuPercent.toFixed(1)}% CPU` : "CPU offen",
+      detail: ramMb !== null && ramMb !== undefined ? `${ramMb.toFixed(1)} MB RAM` : "RAM nicht gemeldet",
+      tone: (cpuPercent !== null && cpuPercent !== undefined && cpuPercent > 80) || (ramMb !== null && ramMb !== undefined && ramMb > 1536) ? "warn" : "ok",
+      icon: <Cpu size={16} />
+    },
+    {
+      label: "Sync-Queue",
+      value: openEvents ? `${openEvents} offen` : "sauber",
+      detail: failedEvents ? `${failedEvents} Fehler in den letzten Events` : "keine aktuellen Fehler",
+      tone: failedEvents ? "danger" : openEvents ? "warn" : "ok",
+      icon: <Clock3 size={16} />
+    }
+  ] satisfies Array<{ label: string; value: string; detail: string; tone: OwnerTone; icon: React.ReactNode }>;
+
+  const healthScore = Math.round((healthChecks.filter((check) => check.tone === "ok").length / healthChecks.length) * 100);
+  const healthTone: OwnerTone = healthScore >= 75 ? "ok" : healthScore >= 50 ? "warn" : "danger";
+
+  const presencePresets = [
+    { label: "Normal", status: "online", activityType: "none", text: "", url: "" },
+    { label: "Support", status: "online", activityType: "listening", text: "/help", url: "" },
+    { label: "Wartung", status: "dnd", activityType: "watching", text: "Wartung", url: "" },
+    { label: "Idle", status: "idle", activityType: "playing", text: "mit Slash-Commands", url: "" }
+  ];
+
+  async function savePresence() {
+    setSaving(true);
+    setSaveStatus(null);
+    try {
+      await api("/api/admin/bot/presence", {
+        method: "POST",
+        body: JSON.stringify(presence)
+      });
+      setSaveStatus("Statusänderung wurde an den Bot gesendet.");
+      await admin.reload();
+    } catch (error) {
+      setSaveStatus(error instanceof Error ? error.message : "Status konnte nicht geändert werden.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="app-shell">
+      <TopNav user={me.data?.user} />
+      <main className="content narrow owner-admin-page">
+        <section className="owner-hero">
+          <div>
+            <p className="eyebrow">
+              <ShieldCheck size={15} />
+              Owner Operations
+            </p>
+            <h1>Bot Control Center</h1>
+            <p>Live-Status, Präsenz, Guilds und Sync-Jobs sauber gebündelt. Alles Wichtige ist sofort sichtbar und die Bedienung bleibt schnell.</p>
+          </div>
+          <div className="owner-hero-actions">
+            <button className={`secondary-action inline ${autoRefresh ? "is-active" : ""}`} onClick={() => setAutoRefresh((value) => !value)}>
+              <Activity size={16} />
+              Auto {autoRefresh ? "an" : "aus"}
+            </button>
+            <button className="secondary-action inline" onClick={() => void admin.reload()}>
+              <RefreshCw size={16} />
+              Aktualisieren
+            </button>
+          </div>
+        </section>
+
+        {admin.loading && <LoadingBlock />}
+        {admin.error && <Notice tone="danger" text={admin.error} />}
+
+        {!admin.loading && !runtime && !admin.error && (
+          <EmptyState title="Noch kein Bot-Heartbeat" text="Sobald der Bot läuft, landen seine Live-Daten automatisch hier im Owner-Bereich." />
+        )}
+
+        {admin.data && (
+          <>
+            <section className="owner-overview-grid">
+              <StatusTile icon={<Wifi size={19} />} label="Gateway" value={lastSeenAge === null ? "wartet" : heartbeatFresh ? "online" : "stale"} tone={heartbeatFresh ? "ok" : "warn"} />
+              <StatusTile icon={<Gauge size={19} />} label="Latenz" value={latencyMs !== null && latencyMs !== undefined ? `${Math.round(latencyMs)} ms` : "-"} tone={latencyMs !== null && latencyMs !== undefined && latencyMs > 250 ? "warn" : "ok"} />
+              <StatusTile icon={<HardDrive size={19} />} label="RAM" value={ramMb !== null && ramMb !== undefined ? `${ramMb.toFixed(1)} MB` : "-"} tone={ramMb !== null && ramMb !== undefined && ramMb > 1536 ? "warn" : "ok"} />
+              <StatusTile icon={<Cpu size={19} />} label="CPU" value={cpuPercent !== null && cpuPercent !== undefined ? `${cpuPercent.toFixed(1)}%` : "-"} tone={cpuPercent !== null && cpuPercent !== undefined && cpuPercent > 80 ? "warn" : "ok"} />
+              <StatusTile icon={<Server size={19} />} label="Guilds" value={compactNumber(runtime?.guildCount ?? installedGuilds)} tone="ok" />
+              <StatusTile icon={<Command size={19} />} label="Commands" value={compactNumber(runtime?.commandCount ?? admin.data.stats.knownCommands)} />
+            </section>
+
+            <section className="owner-admin-grid">
+              <div className="panel owner-presence-panel">
+                <div className="panel-title">
+                  <div>
+                    <h2>Präsenz steuern</h2>
+                    <p className="muted">Status und Aktivität ohne Umwege setzen.</p>
+                  </div>
+                  <span className="pill neutral">{statusLabel(runtime?.status)}</span>
+                </div>
+
+                <div className="owner-presets">
+                  {presencePresets.map((preset) => {
+                    const active = presence.status === preset.status && presence.activityType === preset.activityType && presence.text === preset.text;
+                    return (
+                      <button
+                        key={preset.label}
+                        type="button"
+                        className={`owner-preset-button ${active ? "active" : ""}`}
+                        onClick={() => setPresence({ status: preset.status, activityType: preset.activityType, text: preset.text, url: preset.url })}
+                      >
+                        <Sparkles size={15} />
+                        {preset.label}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                <div className="form-grid">
+                  <label>
+                    Sichtbarkeit
+                    <select value={presence.status} onChange={(event) => setPresence({ ...presence, status: event.target.value })}>
+                      <option value="online">Erreichbar</option>
+                      <option value="idle">Abwesend</option>
+                      <option value="dnd">Nicht stören</option>
+                      <option value="offline">Unsichtbar</option>
+                    </select>
+                  </label>
+                  <label>
+                    Aktivität
+                    <select value={presence.activityType} onChange={(event) => setPresence({ ...presence, activityType: event.target.value })}>
+                      <option value="none">Keine Aktivität</option>
+                      <option value="playing">Spielt</option>
+                      <option value="watching">Schaut</option>
+                      <option value="listening">Hört</option>
+                      <option value="streaming">Streamt</option>
+                      <option value="custom">Eigener Status</option>
+                    </select>
+                  </label>
+                  <label className="wide">
+                    Text
+                    <input value={presence.text} maxLength={128} onChange={(event) => setPresence({ ...presence, text: event.target.value })} placeholder="Minecraft, /help, Wartung..." />
+                  </label>
+                  {presence.activityType === "streaming" && (
+                    <label className="wide">
+                      Streaming-URL
+                      <input value={presence.url} onChange={(event) => setPresence({ ...presence, url: event.target.value })} placeholder="https://twitch.tv/dein-kanal" />
+                    </label>
+                  )}
+                </div>
+
+                <ActionStatus status={saveStatus} />
+                <div className="form-actions">
+                  <button className="primary-action inline" onClick={savePresence} disabled={saving}>
+                    {saving ? <Loader2 className="spin" size={16} /> : <Save size={16} />}
+                    Status speichern
+                  </button>
+                </div>
+              </div>
+
+              <div className="panel owner-health-panel">
+                <div className="panel-title">
+                  <div>
+                    <h2>Systemzustand</h2>
+                    <p className="muted">Kompakter Check für Laufzeit und Queue.</p>
+                  </div>
+                  <span className={`pill ${healthTone}`}>{healthScore}%</span>
+                </div>
+
+                <div className="owner-health-summary">
+                  <div className={`owner-health-score ${healthTone}`}>
+                    <strong>{healthScore}%</strong>
+                    <span>Health</span>
+                  </div>
+                  <dl className="owner-runtime-mini">
+                    <div><dt>Uptime</dt><dd>{formatDuration(runtime?.uptimeSeconds)}</dd></div>
+                    <div><dt>Bot-Version</dt><dd>{runtime?.botVersion || "-"}</dd></div>
+                    <div><dt>discord.py</dt><dd>{runtime?.discordPyVersion || "-"}</dd></div>
+                    <div><dt>Python</dt><dd>{runtime?.pythonVersion || "-"}</dd></div>
+                    <div><dt>Installiert</dt><dd>{installedGuilds}/{knownGuilds || installedGuilds} · {installRate}%</dd></div>
+                    <div><dt>Letzter Heartbeat</dt><dd>{formatDateTime(runtime?.updatedAt)}</dd></div>
+                  </dl>
+                </div>
+
+                <div className="owner-health-list">
+                  {healthChecks.map((check) => (
+                    <article key={check.label} className={`owner-health-item ${check.tone}`}>
+                      <span>{check.icon}</span>
+                      <div>
+                        <strong>{check.label}</strong>
+                        <small>{check.detail}</small>
+                      </div>
+                      <em>{check.value}</em>
+                    </article>
+                  ))}
+                </div>
+              </div>
+            </section>
+
+            <section className="owner-admin-grid owner-admin-grid-wide">
+              <div className="panel owner-guilds-panel">
+                <div className="panel-title">
+                  <div>
+                    <h2>Guild-Übersicht</h2>
+                    <p className="muted">{compactNumber(runtime?.userCount)} Nutzer über {compactNumber(runtime?.guildCount ?? guilds.length)} Guilds.</p>
+                  </div>
+                  <span className="pill neutral">{filteredGuilds.length} Treffer</span>
+                </div>
+
+                <div className="owner-panel-toolbar">
+                  <label className="owner-search">
+                    <Search size={16} />
+                    <input value={guildSearch} onChange={(event) => setGuildSearch(event.target.value)} placeholder="Guild suchen" aria-label="Guild suchen" />
+                  </label>
+                  <label className="owner-select">
+                    <SlidersHorizontal size={16} />
+                    <select value={guildSort} onChange={(event) => setGuildSort(event.target.value as "members" | "name" | "channels")} aria-label="Guilds sortieren">
+                      <option value="members">Mitglieder</option>
+                      <option value="name">Name</option>
+                      <option value="channels">Kanäle</option>
+                    </select>
+                  </label>
+                </div>
+
+                <div className="owner-guild-list">
+                  {filteredGuilds.slice(0, 18).map((guild) => (
+                    <article key={guild.id} className="owner-guild-row">
+                      <div className="owner-guild-initial">{(guild.name || "?").slice(0, 2).toUpperCase()}</div>
+                      <div>
+                        <strong>{guild.name}</strong>
+                        <small>{guild.id}</small>
+                      </div>
+                      <div className="owner-guild-stats">
+                        <span>{compactNumber(guild.memberCount)} Mitglieder</span>
+                        <span>{guild.channelCount} Kanäle</span>
+                        <span>{guild.roleCount} Rollen</span>
+                      </div>
+                    </article>
+                  ))}
+                  {filteredGuilds.length > 18 && <p className="muted">+ {filteredGuilds.length - 18} weitere Treffer</p>}
+                  {guilds.length === 0 && <p className="muted">Noch keine Guild-Details im Heartbeat.</p>}
+                  {guilds.length > 0 && filteredGuilds.length === 0 && <p className="muted">Keine Guild passt zu deiner Suche.</p>}
+                </div>
+              </div>
+
+              <div className="panel owner-events-panel">
+                <div className="panel-title">
+                  <div>
+                    <h2>Sync-Events</h2>
+                    <p className="muted">Letzte Aktionen aus der Bot-Queue.</p>
+                  </div>
+                  <span className={admin.data.adminRestricted ? "pill ok" : "pill warn"}>
+                    {admin.data.adminRestricted ? "ID-Lock" : "Login-Lock"}
+                  </span>
+                </div>
+
+                <div className="owner-segmented" aria-label="Events filtern">
+                  {[
+                    ["all", "Alle"],
+                    ["open", "Offen"],
+                    ["failed", "Fehler"],
+                    ["completed", "Erledigt"]
+                  ].map(([value, label]) => (
+                    <button key={value} type="button" className={eventFilter === value ? "active" : ""} onClick={() => setEventFilter(value as "all" | "open" | "failed" | "completed")}>
+                      <ListFilter size={14} />
+                      {label}
+                    </button>
+                  ))}
+                </div>
+
+                <div className="owner-event-list">
+                  {visibleEvents.map((event) => (
+                    <article key={event.id} className="owner-event-row">
+                      <div>
+                        <strong>{event.action}</strong>
+                        <small>{event.guildName || event.guildId || "global"} · {formatDateTime(event.createdAt)}</small>
+                      </div>
+                      <span className={`pill ${ownerEventStatusTone(event.status)}`}>{ownerEventStatusLabel(event.status)}</span>
+                      <div className="owner-event-meta">
+                        <span>{event.attempts}/{event.maxAttempts} Versuche</span>
+                        {event.completedAt && <span>fertig {formatDateTime(event.completedAt)}</span>}
+                      </div>
+                      {event.lastError && <p className="owner-event-error">{event.lastError}</p>}
+                    </article>
+                  ))}
+                  {visibleEvents.length === 0 && <p className="muted">Keine Events in diesem Filter.</p>}
                 </div>
               </div>
             </section>
