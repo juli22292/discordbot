@@ -2335,9 +2335,33 @@ textarea {
 .empty-state {
   display: grid;
   place-items: center;
+  gap: 8px;
   min-height: 120px;
+  padding: 20px;
   color: var(--muted);
   text-align: center;
+}
+
+.loading-block {
+  border: 1px solid var(--border-soft);
+  border-radius: 8px;
+  background:
+    linear-gradient(145deg, rgba(255, 255, 255, 0.035), transparent 48%),
+    rgba(21, 25, 34, 0.86);
+}
+
+.loading-block svg {
+  color: var(--blue);
+}
+
+.loading-block strong {
+  color: var(--text);
+}
+
+.loading-block small {
+  max-width: 42ch;
+  color: var(--muted);
+  line-height: 1.5;
 }
 
 .skeleton {

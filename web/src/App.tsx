@@ -844,21 +844,22 @@ function HomePage() {
             <h2>Serverliste</h2>
             <p>Nur Guilds mit Verwaltungsrechten werden angezeigt.</p>
           </div>
-          <button className="secondary-action" onClick={() => guilds.reload()}>
-            <RefreshCw size={16} />
+          <button className="secondary-action" onClick={() => guilds.reload()} disabled={guilds.loading}>
+            {guilds.loading ? <Loader2 className="spin" size={16} /> : <RefreshCw size={16} />}
             Aktualisieren
           </button>
         </div>
 
-        {guilds.loading && <SkeletonGrid />}
-        {guilds.error && <Notice tone="danger" text={guilds.error} />}
+        {guilds.loading && <LoadingBlock text="Server werden geladen" detail="Deine verwaltbaren Guilds werden neu abgefragt." />}
+        {!guilds.loading && guilds.error && <Notice tone="danger" text={guilds.error} />}
         {!guilds.loading && guilds.data?.guilds.length === 0 && (
           <EmptyState title="Keine verwaltbaren Server" text="Discord hat für diesen Account keine passende Guild geliefert." />
         )}
 
-        <section className="guild-grid">
-          {guilds.data?.guilds.map((guild, index) => (
-            <article
+        {!guilds.loading && guilds.data && guilds.data.guilds.length > 0 && (
+          <section className="guild-grid">
+            {guilds.data.guilds.map((guild, index) => (
+              <article
               className={`guild-card ${guild.botInstalled || guild.botInstallStatus === "installed" ? "installed" : guild.botInstallStatus === "unknown" ? "unknown" : "missing"} reveal-card`}
               style={{ "--delay": `${index * 65}ms` } as React.CSSProperties}
               key={guild.id}
@@ -920,9 +921,10 @@ function HomePage() {
                   Einladen
                 </a>
               )}
-            </article>
-          ))}
-        </section>
+              </article>
+            ))}
+          </section>
+        )}
       </main>
     </div>
   );
@@ -2552,11 +2554,12 @@ function ActionStatus({ status }: { status: string | null }) {
   return <p className="action-status">{status}</p>;
 }
 
-function LoadingBlock() {
+function LoadingBlock({ text = "Laden", detail }: { text?: string; detail?: string }) {
   return (
-    <div className="loading-block">
+    <div className="loading-block" role="status" aria-live="polite">
       <Loader2 className="spin" size={18} />
-      Laden
+      <strong>{text}</strong>
+      {detail && <small>{detail}</small>}
     </div>
   );
 }
