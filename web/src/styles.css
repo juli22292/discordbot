@@ -1099,6 +1099,12 @@ p {
   color: var(--green);
 }
 
+.icon-button.danger-soft {
+  color: var(--red);
+  border-color: rgba(255, 116, 116, 0.24);
+  background: rgba(255, 116, 116, 0.08);
+}
+
 .primary-action:disabled,
 .secondary-action:disabled,
 .danger-action:disabled,
@@ -1639,19 +1645,19 @@ textarea {
   background: rgba(104, 168, 255, 0.09);
 }
 
-.owner-refresh-button {
+.refresh-button {
   position: relative;
   overflow: hidden;
 }
 
-.owner-refresh-button.is-loading {
+.refresh-button.is-loading {
   opacity: 1;
   color: var(--text);
   border-color: rgba(104, 168, 255, 0.42);
   background: rgba(104, 168, 255, 0.12);
 }
 
-.owner-refresh-button.is-loading::after {
+.refresh-button.is-loading::after {
   content: "";
   position: absolute;
   left: 0;
@@ -2300,6 +2306,93 @@ textarea {
   white-space: nowrap;
 }
 
+.owner-invites-panel {
+  min-width: 0;
+}
+
+.owner-invite-form {
+  display: grid;
+  grid-template-columns: minmax(220px, 1.3fr) minmax(150px, 0.7fr) minmax(130px, 0.55fr) auto auto;
+  gap: 12px;
+  align-items: end;
+  margin-bottom: 12px;
+}
+
+.owner-invite-toggle {
+  min-height: 44px;
+  margin-bottom: 0;
+  align-items: center;
+  justify-content: center;
+}
+
+.owner-invite-list {
+  display: grid;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.owner-invite-row {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: minmax(170px, 0.58fr) minmax(260px, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  border: 1px solid var(--border-soft);
+  border-radius: 8px;
+  background:
+    linear-gradient(135deg, rgba(104, 168, 255, 0.06), transparent 40%),
+    rgba(9, 11, 16, 0.52);
+}
+
+.owner-invite-code {
+  min-width: 0;
+}
+
+.owner-invite-code strong {
+  display: block;
+  color: var(--text);
+  font-family: "JetBrains Mono", "SFMono-Regular", Consolas, monospace;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.owner-invite-code small {
+  display: block;
+  margin-top: 4px;
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.owner-invite-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  min-width: 0;
+}
+
+.owner-invite-meta span {
+  max-width: 220px;
+  padding: 5px 8px;
+  border: 1px solid rgba(119, 183, 255, 0.13);
+  border-radius: 999px;
+  color: var(--muted-strong);
+  background: rgba(119, 183, 255, 0.06);
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.owner-invite-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
 .owner-detail-list {
   display: grid;
   gap: 10px;
@@ -2901,6 +2994,19 @@ textarea {
     width: min(180px, 100%);
   }
 
+  .owner-invite-form {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .owner-invite-row {
+    grid-template-columns: minmax(0, 1fr);
+    align-items: start;
+  }
+
+  .owner-invite-actions {
+    justify-content: flex-start;
+  }
+
   .planned-grid {
     grid-template-columns: 1fr;
   }
@@ -3058,6 +3164,14 @@ textarea {
 
   .owner-browser-tabs {
     grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .owner-invite-form {
+    grid-template-columns: 1fr;
+  }
+
+  .owner-invite-meta span {
+    max-width: 100%;
   }
 
   .owner-guild-facts {

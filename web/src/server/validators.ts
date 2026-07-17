@@ -106,6 +106,13 @@ export const presenceSchema = z.object({
     .transform((value) => (typeof value === "string" && value.trim() ? value.trim() : null))
 });
 
+export const inviteCreateSchema = z.object({
+  channelId: snowflakeSchema,
+  maxAge: z.number().int().min(0).max(604800).default(604800),
+  maxUses: z.number().int().min(0).max(100).default(0),
+  temporary: z.boolean().default(false)
+});
+
 export function assertSameGuild(routeGuildId: string, rowGuildId: string): void {
   if (routeGuildId !== rowGuildId) {
     throw new Error("Guild-Isolation verletzt: Ressource gehoert zu einer anderen Guild.");

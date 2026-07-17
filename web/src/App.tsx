@@ -14,8 +14,10 @@ import {
   Clock3,
   ClipboardList,
   Command,
+  Copy,
   Cpu,
   Database,
+  ExternalLink,
   Gauge,
   HardDrive,
   Home,
@@ -269,6 +271,21 @@ type AdminGuildDetail = {
   warnings: string[];
 };
 
+type AdminGuildInvite = {
+  code: string;
+  url: string;
+  channelId: string | null;
+  channelName: string | null;
+  inviterId: string | null;
+  inviterName: string | null;
+  uses: number | null;
+  maxUses: number | null;
+  maxAge: number | null;
+  temporary: boolean;
+  createdAt: string | null;
+  expiresAt: string | null;
+};
+
 type User = {
   username: string;
   displayName: string | null;
@@ -426,6 +443,31 @@ function useApi<T>(path: string | null, deps: React.DependencyList = []) {
   }, deps);
 
   return { data, error, loading, reload: load };
+}
+
+function RefreshButton({
+  loading,
+  onClick,
+  label = "Aktualisieren",
+  loadingLabel = "Laden",
+  className = ""
+}: {
+  loading: boolean;
+  onClick: () => void | Promise<void>;
+  label?: string;
+  loadingLabel?: string;
+  className?: string;
+}) {
+  return (
+    <button
+      className={`secondary-action inline refresh-button ${loading ? "is-loading" : ""} ${className}`.trim()}
+      onClick={() => void onClick()}
+      disabled={loading}
+    >
+      {loading ? <Loader2 className="spin" size={16} /> : <RefreshCw size={16} />}
+      {loading ? loadingLabel : label}
+    </button>
+  );
 }
 
 function App() {
@@ -933,13 +975,10 @@ function HomePage() {
             <h2>Serverliste</h2>
             <p>Nur Guilds mit Verwaltungsrechten werden angezeigt.</p>
           </div>
-          <button className="secondary-action" onClick={() => guilds.reload()} disabled={guilds.loading}>
-            {guilds.loading ? <Loader2 className="spin" size={16} /> : <RefreshCw size={16} />}
-            Aktualisieren
-          </button>
+          <RefreshButton loading={guilds.loading} onClick={guilds.reload} />
         </div>
 
-        {guilds.loading && <LoadingBlock text="Server werden geladen" detail="Deine verwaltbaren Guilds werden neu abgefragt." />}
+        {guilds.loading && !guilds.data && <LoadingBlock text="Server werden geladen" detail="Deine verwaltbaren Guilds werden neu abgefragt." />}
         {!guilds.loading && guilds.error && <Notice tone="danger" text={guilds.error} />}
         {!guilds.loading && guilds.data?.guilds.length === 0 && (
           <EmptyState title="Keine verwaltbaren Server" text="Discord hat für diesen Account keine passende Guild geliefert." />
@@ -1028,6 +1067,16 @@ function formatDuration(seconds: number | null | undefined) {
   if (days) return `${days}d ${hours}h`;
   if (hours) return `${hours}h ${minutes}m`;
   return `${minutes}m`;
+}
+
+function formatInviteAge(seconds: number | null | undefined) {
+  if (seconds === 0) return "unbegrenzt";
+  return formatDuration(seconds);
+}
+
+function formatInviteUses(uses: number | null | undefined, maxUses: number | null | undefined) {
+  if (!maxUses) return `${uses ?? 0} genutzt`;
+  return `${uses ?? 0}/${maxUses} genutzt`;
 }
 
 function formatDateTime(value: string | null | undefined) {
@@ -1135,13 +1184,10 @@ function AdminPage() {
             <h1>Bot Control Center</h1>
             <p>Status setzen, Laufzeitdaten sehen und prüfen, ob Sync, RAM, Latenz und Guild-Snapshot sauber laufen.</p>
           </div>
-          <button className="secondary-action inline" onClick={admin.reload}>
-            <RefreshCw size={16} />
-            Aktualisieren
-          </button>
+          <RefreshButton loading={admin.loading} onClick={admin.reload} />
         </section>
 
-        {admin.loading && <LoadingBlock />}
+        {admin.loading && !admin.data && <LoadingBlock />}
         {admin.error && <Notice tone="danger" text={admin.error} />}
 
         {!admin.loading && !runtime && !admin.error && (
@@ -1478,14 +1524,7 @@ function AdminPageModern() {
               <Activity size={16} />
               Auto {autoRefresh ? "an" : "aus"}
             </button>
-            <button
-              className={`secondary-action inline owner-refresh-button ${ownerRefreshing ? "is-loading" : ""}`}
-              onClick={() => void admin.reload()}
-              disabled={admin.loading}
-            >
-              {ownerRefreshing ? <Loader2 className="spin" size={16} /> : <RefreshCw size={16} />}
-              {ownerRefreshing ? "Laden" : "Aktualisieren"}
-            </button>
+            <RefreshButton loading={ownerRefreshing} onClick={admin.reload} />
           </div>
         </section>
 
@@ -1756,6 +1795,7 @@ function AdminGuildViewPage({ path }: { path: string }) {
   const routeGuildName = decodeURIComponent(segments[5] ?? "Guild");
   const validGuildId = /^\d{17,20}$/.test(guildId);
   const detail = useApi<AdminGuildDetail>(validGuildId ? `/api/admin/discordguilds/${guildId}` : null, [guildId]);
+  const invites = useApi<{ invites: AdminGuildInvite[] }>(validGuildId ? `/api/admin/discordguilds/${guildId}/invites` : null, [guildId]);
   const data = detail.data;
   const guild = data?.guild;
   const [activeTab, setActiveTab] = useState<"roles" | "members" | "channels">("roles");
@@ -1763,6 +1803,13 @@ function AdminGuildViewPage({ path }: { path: string }) {
   const [nickname, setNickname] = useState("");
   const [savingNickname, setSavingNickname] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
+  const [inviteChannelId, setInviteChannelId] = useState("");
+  const [inviteMaxAge, setInviteMaxAge] = useState("604800");
+  const [inviteMaxUses, setInviteMaxUses] = useState("0");
+  const [inviteTemporary, setInviteTemporary] = useState(false);
+  const [inviteBusy, setInviteBusy] = useState(false);
+  const [deletingInviteCode, setDeletingInviteCode] = useState<string | null>(null);
+  const [inviteStatus, setInviteStatus] = useState<string | null>(null);
 
   useEffect(() => {
     if (!data) return;
@@ -1772,6 +1819,23 @@ function AdminGuildViewPage({ path }: { path: string }) {
   const roleNameById = useMemo(() => {
     return new Map((data?.roles ?? []).map((role) => [role.id, role.name]));
   }, [data?.roles]);
+
+  const inviteChannels = useMemo(() => {
+    return (data?.channels ?? []).filter((channel) => {
+      return ["Text", "News", "Forum"].includes(channel.type) && channel.canSend !== false;
+    });
+  }, [data?.channels]);
+
+  useEffect(() => {
+    if (!inviteChannels.length) {
+      setInviteChannelId("");
+      return;
+    }
+
+    if (!inviteChannels.some((channel) => channel.id === inviteChannelId)) {
+      setInviteChannelId(inviteChannels[0].id);
+    }
+  }, [inviteChannels, inviteChannelId]);
 
   const needle = search.trim().toLowerCase();
   const visibleRoles = (data?.roles ?? []).filter((role) => {
@@ -1809,8 +1873,58 @@ function AdminGuildViewPage({ path }: { path: string }) {
     }
   }
 
+  async function createInvite() {
+    if (!validGuildId || !inviteChannelId) return;
+    setInviteBusy(true);
+    setInviteStatus(null);
+
+    try {
+      const response = await api<{ invite: AdminGuildInvite }>(`/api/admin/discordguilds/${guildId}/invites`, {
+        method: "POST",
+        body: JSON.stringify({
+          channelId: inviteChannelId,
+          maxAge: Number(inviteMaxAge),
+          maxUses: Math.max(0, Math.min(100, Number(inviteMaxUses) || 0)),
+          temporary: inviteTemporary
+        })
+      });
+      setInviteStatus(`Invite erstellt: ${response.invite.url}`);
+      await invites.reload();
+    } catch (error) {
+      setInviteStatus(error instanceof Error ? error.message : "Invite konnte nicht erstellt werden.");
+    } finally {
+      setInviteBusy(false);
+    }
+  }
+
+  async function copyInvite(invite: AdminGuildInvite) {
+    try {
+      await navigator.clipboard.writeText(invite.url);
+      setInviteStatus("Invite-Link wurde kopiert.");
+    } catch {
+      setInviteStatus(invite.url);
+    }
+  }
+
+  async function deleteInvite(code: string) {
+    if (!validGuildId) return;
+    setDeletingInviteCode(code);
+    setInviteStatus(null);
+
+    try {
+      await api(`/api/admin/discordguilds/${guildId}/invites/${encodeURIComponent(code)}`, { method: "DELETE" });
+      setInviteStatus("Invite wurde gelöscht.");
+      await invites.reload();
+    } catch (error) {
+      setInviteStatus(error instanceof Error ? error.message : "Invite konnte nicht gelöscht werden.");
+    } finally {
+      setDeletingInviteCode(null);
+    }
+  }
+
   const displayedGuildName = guild?.name || routeGuildName;
   const currentRows = activeTab === "roles" ? visibleRoles.length : activeTab === "members" ? visibleMembers.length : visibleChannels.length;
+  const inviteList = invites.data?.invites ?? [];
 
   return (
     <div className="app-shell">
@@ -1836,10 +1950,7 @@ function AdminGuildViewPage({ path }: { path: string }) {
               <p>{guildId}</p>
             </div>
           </div>
-          <button className="secondary-action inline" onClick={() => void detail.reload()} disabled={detail.loading}>
-            {detail.loading && data ? <Loader2 className="spin" size={16} /> : <RefreshCw size={16} />}
-            {detail.loading && data ? "Laden" : "Aktualisieren"}
-          </button>
+          <RefreshButton loading={detail.loading && Boolean(data)} onClick={detail.reload} />
         </section>
 
         {!validGuildId && <Notice tone="danger" text="Die Guild-ID in der URL ist ungültig." />}
@@ -1901,6 +2012,101 @@ function AdminGuildViewPage({ path }: { path: string }) {
                   <div><dt>Features</dt><dd>{guild.features.length ? guild.features.slice(0, 4).join(", ") : "-"}</dd></div>
                 </dl>
               </div>
+            </section>
+
+            <section className="panel owner-invites-panel">
+              <div className="panel-title">
+                <div>
+                  <h2>Invite-Links</h2>
+                  <p className="muted">Server-Einladungen direkt über den Bot erstellen, kopieren und wieder löschen.</p>
+                </div>
+                <RefreshButton loading={invites.loading && Boolean(invites.data)} onClick={invites.reload} />
+              </div>
+
+              {invites.error && <Notice tone="danger" text={invites.error} />}
+
+              <div className="owner-invite-form">
+                <label>
+                  Kanal
+                  <select value={inviteChannelId} onChange={(event) => setInviteChannelId(event.target.value)} disabled={!inviteChannels.length}>
+                    {inviteChannels.length === 0 ? (
+                      <option value="">Kein passender Kanal sichtbar</option>
+                    ) : (
+                      inviteChannels.map((channel) => (
+                        <option value={channel.id} key={channel.id}>
+                          #{channel.name} · {channel.type}
+                        </option>
+                      ))
+                    )}
+                  </select>
+                </label>
+                <label>
+                  Ablauf
+                  <select value={inviteMaxAge} onChange={(event) => setInviteMaxAge(event.target.value)}>
+                    <option value="3600">1 Stunde</option>
+                    <option value="21600">6 Stunden</option>
+                    <option value="86400">1 Tag</option>
+                    <option value="604800">7 Tage</option>
+                    <option value="0">Unbegrenzt</option>
+                  </select>
+                </label>
+                <label>
+                  Max. Nutzungen
+                  <input
+                    type="number"
+                    min={0}
+                    max={100}
+                    value={inviteMaxUses}
+                    onChange={(event) => setInviteMaxUses(event.target.value)}
+                  />
+                </label>
+                <label className="toggle owner-invite-toggle">
+                  <input type="checkbox" checked={inviteTemporary} onChange={(event) => setInviteTemporary(event.target.checked)} />
+                  Temporär
+                </label>
+                <button className="primary-action inline" onClick={createInvite} disabled={inviteBusy || !inviteChannelId}>
+                  {inviteBusy ? <Loader2 className="spin" size={16} /> : <Plus size={16} />}
+                  Invite erstellen
+                </button>
+              </div>
+
+              <ActionStatus status={inviteStatus} />
+
+              {invites.loading && !invites.data && <LoadingBlock text="Invites werden geladen" detail="Aktive Einladungen werden von Discord abgefragt." />}
+              {!invites.loading && !invites.error && inviteList.length === 0 && (
+                <p className="muted">Noch keine aktiven Invite-Links gefunden.</p>
+              )}
+
+              {inviteList.length > 0 && (
+                <div className="owner-invite-list">
+                  {inviteList.map((invite) => (
+                    <article className="owner-invite-row" key={invite.code}>
+                      <div className="owner-invite-code">
+                        <strong>{invite.code}</strong>
+                        <small>{invite.channelName ? `#${invite.channelName}` : invite.channelId ?? "Kanal unbekannt"}</small>
+                      </div>
+                      <div className="owner-invite-meta">
+                        <span>{formatInviteUses(invite.uses, invite.maxUses)}</span>
+                        <span>{formatInviteAge(invite.maxAge)}</span>
+                        <span>{invite.temporary ? "temporär" : "normal"}</span>
+                        <span>{invite.inviterName || invite.inviterId || "Bot/API"}</span>
+                        {invite.expiresAt && <span>bis {formatDateTime(invite.expiresAt)}</span>}
+                      </div>
+                      <div className="owner-invite-actions">
+                        <a className="icon-button" href={invite.url} target="_blank" rel="noreferrer" title="Invite öffnen">
+                          <ExternalLink size={16} />
+                        </a>
+                        <button className="icon-button" onClick={() => void copyInvite(invite)} title="Invite kopieren">
+                          <Copy size={16} />
+                        </button>
+                        <button className="icon-button danger-soft" onClick={() => void deleteInvite(invite.code)} disabled={deletingInviteCode === invite.code} title="Invite löschen">
+                          {deletingInviteCode === invite.code ? <Loader2 className="spin" size={16} /> : <Trash2 size={16} />}
+                        </button>
+                      </div>
+                    </article>
+                  ))}
+                </div>
+              )}
             </section>
 
             <section className="panel owner-guild-browser-panel">
@@ -2452,7 +2658,7 @@ function WelcomePage({ guildId }: { guildId: string }) {
         </label>
       </div>
 
-      {(welcome.loading || channels.loading || roles.loading) && <LoadingBlock />}
+      {((welcome.loading && !welcome.data) || (channels.loading && !channels.data) || (roles.loading && !roles.data)) && <LoadingBlock />}
       {(welcome.error || channels.error || roles.error) && <Notice tone="danger" text={welcome.error || channels.error || roles.error || "Fehler beim Laden."} />}
 
       {!welcome.loading && (
@@ -2623,10 +2829,7 @@ function WelcomePage({ guildId }: { guildId: string }) {
                 {saving ? <Loader2 className="spin" size={16} /> : <Save size={16} />}
                 Begrüßung speichern
               </button>
-              <button className="secondary-action inline" onClick={welcome.reload}>
-                <RefreshCw size={16} />
-                Neu laden
-              </button>
+              <RefreshButton loading={welcome.loading && Boolean(welcome.data)} onClick={welcome.reload} label="Neu laden" />
             </div>
           </div>
 
@@ -2689,13 +2892,10 @@ function CommandsPage({ guildId }: { guildId: string }) {
     <section className="panel">
       <div className="panel-title">
         <h2>Slash-Befehle</h2>
-        <button className="secondary-action inline" onClick={commands.reload}>
-          <RefreshCw size={16} />
-          Neu laden
-        </button>
+        <RefreshButton loading={commands.loading && Boolean(commands.data)} onClick={commands.reload} label="Neu laden" />
       </div>
       <ActionStatus status={status} />
-      {commands.loading && <LoadingBlock />}
+      {commands.loading && !commands.data && <LoadingBlock />}
       {commands.error && <Notice tone="danger" text={commands.error} />}
       {!commands.loading && commands.data?.commands.length === 0 && (
         <EmptyState title="Noch kein Bot-Snapshot" text="Sobald der Python-Bot die interne Schnittstelle erreicht, erscheinen hier seine echten Slash-Befehle." />
@@ -2795,12 +2995,9 @@ function CustomCommandsPage({ guildId }: { guildId: string }) {
       <div className="panel">
         <div className="panel-title">
           <h2>Custom Commands</h2>
-          <button className="secondary-action inline" onClick={commands.reload}>
-            <RefreshCw size={16} />
-            Neu laden
-          </button>
+          <RefreshButton loading={commands.loading && Boolean(commands.data)} onClick={commands.reload} label="Neu laden" />
         </div>
-        {commands.loading && <LoadingBlock />}
+        {commands.loading && !commands.data && <LoadingBlock />}
         {commands.error && <Notice tone="danger" text={commands.error} />}
         {commands.data?.customCommands.length === 0 && <EmptyState title="Keine Custom Commands" text="Erstelle den ersten Command für diese Guild." />}
         <div className="custom-list">
@@ -2918,12 +3115,9 @@ function AuditLogPage({ guildId }: { guildId: string }) {
     <section className="panel">
       <div className="panel-title">
         <h2>Audit-Log</h2>
-        <button className="secondary-action inline" onClick={audit.reload}>
-          <RefreshCw size={16} />
-          Neu laden
-        </button>
+        <RefreshButton loading={audit.loading && Boolean(audit.data)} onClick={audit.reload} label="Neu laden" />
       </div>
-      {audit.loading && <LoadingBlock />}
+      {audit.loading && !audit.data && <LoadingBlock />}
       {audit.error && <Notice tone="danger" text={audit.error} />}
       <div className="audit-table">
         {audit.data?.auditLog.map((entry) => (

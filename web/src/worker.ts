@@ -10,6 +10,8 @@ import { decryptJson, encryptJson, randomToken, verifyInternalBotRequest } from 
 import { all, asJson, first, newId, nowIso, parseJson } from "./server/db";
 import {
   DiscordApiError,
+  createDiscordChannelInvite,
+  deleteDiscordInvite,
   discordAvatarUrl,
   discordBotInviteUrl,
   discordGuildIconUrl,
@@ -20,6 +22,7 @@ import {
   fetchDiscordBotGuild,
   fetchDiscordBotGuildMember,
   fetchDiscordBotGuildMembers,
+  fetchDiscordBotGuildInvites,
   fetchDiscordBotGuildRoles,
   fetchDiscordGuilds,
   fetchDiscordUser,
@@ -32,6 +35,7 @@ import {
   assertSameGuild,
   commandConfigSchema,
   customCommandSchema,
+  inviteCreateSchema,
   nicknameSchema,
   partialCustomCommandSchema,
   presenceSchema,
@@ -916,19 +920,58 @@ async function fallbackAdminGuilds(env: Env): Promise<AdminGuildRuntimeItem[]> {
 
 async function requireAdminGuild(env: Env, discordGuildId: string): Promise<GuildRow> {
   snowflakeSchema.parse(discordGuildId);
-  const guild = await first<GuildRow>(
+  const existing = await first<GuildRow>(
     requireDb(env).prepare(
       `SELECT id, discord_guild_id, name, icon, bot_joined_at
          FROM guilds
-        WHERE discord_guild_id = ? AND bot_joined_at IS NOT NULL`
+        WHERE discord_guild_id = ?`
     ).bind(discordGuildId)
   );
 
-  if (!guild) {
+  if (existing?.bot_joined_at) return existing;
+
+  const liveGuild = await fetchDiscordBotGuild(env, discordGuildId);
+
+  if (!liveGuild) {
     throw new HttpError(404, "guild_not_found", "Diese Guild wurde im Owner-Bereich nicht gefunden oder der Bot ist dort nicht mehr installiert.");
   }
 
-  return guild;
+  const timestamp = nowIso();
+  const icon = discordGuildIconUrl({ id: liveGuild.id, icon: liveGuild.icon ?? null });
+
+  if (existing) {
+    await requireDb(env).prepare(
+      `UPDATE guilds
+          SET name = ?, icon = ?, bot_joined_at = COALESCE(bot_joined_at, ?),
+              bot_removed_at = NULL, last_seen_at = ?, updated_at = ?
+        WHERE id = ?`
+    )
+      .bind(liveGuild.name, icon, timestamp, timestamp, timestamp, existing.id)
+      .run();
+
+    return {
+      ...existing,
+      name: liveGuild.name,
+      icon,
+      bot_joined_at: existing.bot_joined_at ?? timestamp
+    };
+  }
+
+  const id = newId("gld");
+  await requireDb(env).prepare(
+    `INSERT INTO guilds (id, discord_guild_id, name, icon, bot_joined_at, last_seen_at, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+  )
+    .bind(id, liveGuild.id, liveGuild.name, icon, timestamp, timestamp, timestamp, timestamp)
+    .run();
+
+  return {
+    id,
+    discord_guild_id: liveGuild.id,
+    name: liveGuild.name,
+    icon,
+    bot_joined_at: timestamp
+  };
 }
 
 function discordRoleColor(value: unknown): string {
@@ -1014,6 +1057,41 @@ function normalizeAdminMember(member: Record<string, unknown>) {
     roles: Array.isArray(member.roles) ? member.roles.map((role) => String(role)) : [],
     joinedAt: member.joined_at ? String(member.joined_at) : null,
     premiumSince: member.premium_since ? String(member.premium_since) : null
+  };
+}
+
+function inviteCodeFromInput(value: string): string {
+  let text = String(value || "").trim().replace(/^<|>$/g, "");
+  text = text.replace(/^https?:\/\//i, "").replace(/^www\./i, "");
+
+  for (const prefix of ["discord.gg/", "discord.com/invite/", "discordapp.com/invite/"]) {
+    if (text.toLowerCase().startsWith(prefix)) {
+      text = text.slice(prefix.length);
+      break;
+    }
+  }
+
+  return text.split("?")[0]?.split("/")[0]?.trim() ?? "";
+}
+
+function normalizeAdminInvite(invite: Record<string, unknown>) {
+  const channel = (invite.channel && typeof invite.channel === "object" ? invite.channel : {}) as Record<string, unknown>;
+  const inviter = (invite.inviter && typeof invite.inviter === "object" ? invite.inviter : {}) as Record<string, unknown>;
+  const code = String(invite.code ?? "");
+
+  return {
+    code,
+    url: String(invite.url ?? `https://discord.gg/${code}`),
+    channelId: channel.id ? String(channel.id) : null,
+    channelName: channel.name ? String(channel.name) : null,
+    inviterId: inviter.id ? String(inviter.id) : null,
+    inviterName: inviter.global_name ? String(inviter.global_name) : inviter.username ? String(inviter.username) : null,
+    uses: finiteNumber(invite.uses),
+    maxUses: finiteNumber(invite.max_uses),
+    maxAge: finiteNumber(invite.max_age),
+    temporary: Boolean(invite.temporary),
+    createdAt: invite.created_at ? String(invite.created_at) : null,
+    expiresAt: invite.expires_at ? String(invite.expires_at) : null
   };
 }
 
@@ -1189,6 +1267,11 @@ async function enqueueSyncEvent(
 app.onError((error, c) => {
   if (error instanceof HttpError) {
     return json(c, { error: { code: error.code, message: error.message } }, error.status);
+  }
+
+  if (error instanceof DiscordApiError) {
+    const status = error.status >= 400 && error.status < 600 ? error.status : 502;
+    return json(c, { error: { code: "discord_api_error", message: error.message } }, status);
   }
 
   const message = error instanceof Error ? error.message : "Unbekannter Fehler.";
@@ -2074,6 +2157,71 @@ app.get("/api/admin/discordguilds/:guildId", async (c) => {
     },
     warnings
   });
+});
+
+app.get("/api/admin/discordguilds/:guildId/invites", async (c) => {
+  await requireAdminSession(c);
+  const guildId = snowflakeSchema.parse(c.req.param("guildId"));
+  await requireAdminGuild(c.env, guildId);
+
+  const invites = await fetchDiscordBotGuildInvites(c.env, guildId);
+  return json(c, { invites: invites.map((invite) => normalizeAdminInvite(invite as unknown as Record<string, unknown>)) });
+});
+
+app.post("/api/admin/discordguilds/:guildId/invites", async (c) => {
+  const session = await requireAdminSession(c);
+  const guildId = snowflakeSchema.parse(c.req.param("guildId"));
+  const guild = await requireAdminGuild(c.env, guildId);
+  const data = inviteCreateSchema.parse(await readJsonBody(c));
+  const knownChannel = await first<Record<string, unknown>>(
+    c.env.DB.prepare("SELECT discord_channel_id FROM guild_channels WHERE guild_id = ? AND discord_channel_id = ?")
+      .bind(guild.id, data.channelId)
+  );
+
+  if (!knownChannel) {
+    const liveChannels = await fetchDiscordBotGuildChannels(c.env, guildId);
+    if (!liveChannels.some((channel) => channel.id === data.channelId)) {
+      throw new HttpError(400, "channel_not_in_guild", "Dieser Kanal gehört nicht zu dieser Guild oder ist für den Bot nicht sichtbar.");
+    }
+  }
+
+  const invite = await createDiscordChannelInvite(c.env, data.channelId, {
+    maxAge: data.maxAge,
+    maxUses: data.maxUses,
+    temporary: data.temporary
+  });
+
+  await audit(c.env, guild.id, session.user.discordUserId, "owner.guild.invite.create", "discord_invite", null, {
+    channelId: data.channelId,
+    code: invite.code,
+    maxAge: data.maxAge,
+    maxUses: data.maxUses,
+    temporary: data.temporary
+  });
+
+  return json(c, { ok: true, invite: normalizeAdminInvite(invite as unknown as Record<string, unknown>) });
+});
+
+app.delete("/api/admin/discordguilds/:guildId/invites/:code", async (c) => {
+  const session = await requireAdminSession(c);
+  const guildId = snowflakeSchema.parse(c.req.param("guildId"));
+  const guild = await requireAdminGuild(c.env, guildId);
+  const code = inviteCodeFromInput(decodeURIComponent(c.req.param("code") ?? ""));
+
+  if (!/^[A-Za-z0-9_-]{2,120}$/.test(code)) {
+    throw new HttpError(400, "invite_code_invalid", "Der Invite-Code ist ungültig.");
+  }
+
+  const invites = await fetchDiscordBotGuildInvites(c.env, guildId);
+  const invite = invites.find((item) => item.code === code);
+
+  if (!invite) {
+    throw new HttpError(404, "invite_not_found", "Dieser Invite wurde auf der Guild nicht gefunden.");
+  }
+
+  await deleteDiscordInvite(c.env, code);
+  await audit(c.env, guild.id, session.user.discordUserId, "owner.guild.invite.delete", "discord_invite", normalizeAdminInvite(invite as unknown as Record<string, unknown>), null);
+  return json(c, { ok: true, code });
 });
 
 app.patch("/api/admin/discordguilds/:guildId/bot-nickname", async (c) => {

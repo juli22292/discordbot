@@ -55,6 +55,28 @@ export interface DiscordBotChannel {
   position?: number;
 }
 
+export interface DiscordBotInvite {
+  code: string;
+  url?: string;
+  channel?: {
+    id: string;
+    name?: string | null;
+    type?: number;
+  } | null;
+  inviter?: {
+    id: string;
+    username: string;
+    global_name?: string | null;
+    avatar?: string | null;
+  } | null;
+  uses?: number | null;
+  max_uses?: number | null;
+  max_age?: number | null;
+  temporary?: boolean;
+  created_at?: string | null;
+  expires_at?: string | null;
+}
+
 export interface DiscordApplicationCommand {
   id: string;
   name: string;
@@ -261,6 +283,64 @@ export async function fetchDiscordBotGuildChannels(env: Env, guildId: string): P
   return discordFetch<DiscordBotChannel[]>(`/guilds/${guildId}/channels`, {
     headers: { Authorization: `Bot ${botToken}` }
   });
+}
+
+export async function fetchDiscordBotGuildInvites(env: Env, guildId: string): Promise<DiscordBotInvite[]> {
+  const botToken = env.DISCORD_BOT_TOKEN?.trim();
+  if (!botToken) return [];
+
+  const response = await discordRequest(`/guilds/${guildId}/invites`, {
+    headers: { Authorization: `Bot ${botToken}` }
+  });
+
+  if (response.status === 404) return [];
+  if (response.status === 403) {
+    throw new DiscordApiError(403, "Dem Bot fehlt auf dieser Guild die Berechtigung, Invite-Links zu lesen.");
+  }
+  if (!response.ok) {
+    const text = await response.text();
+    throw new DiscordApiError(response.status, `Discord API ${response.status}: ${text.slice(0, 300)}`);
+  }
+
+  return response.json<DiscordBotInvite[]>();
+}
+
+export async function createDiscordChannelInvite(
+  env: Env,
+  channelId: string,
+  options: { maxAge: number; maxUses: number; temporary: boolean }
+): Promise<DiscordBotInvite> {
+  const botToken = env.DISCORD_BOT_TOKEN?.trim();
+  if (!botToken) throw new DiscordApiError(500, "DISCORD_BOT_TOKEN ist nicht konfiguriert.");
+
+  return discordFetch<DiscordBotInvite>(`/channels/${channelId}/invites`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bot ${botToken}`,
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({
+      max_age: options.maxAge,
+      max_uses: options.maxUses,
+      temporary: options.temporary,
+      unique: true
+    })
+  });
+}
+
+export async function deleteDiscordInvite(env: Env, code: string): Promise<void> {
+  const botToken = env.DISCORD_BOT_TOKEN?.trim();
+  if (!botToken) throw new DiscordApiError(500, "DISCORD_BOT_TOKEN ist nicht konfiguriert.");
+
+  const response = await discordRequest(`/invites/${encodeURIComponent(code)}`, {
+    method: "DELETE",
+    headers: { Authorization: `Bot ${botToken}` }
+  });
+
+  if (!response.ok) {
+    const text = await response.text();
+    throw new DiscordApiError(response.status, `Discord API ${response.status}: ${text.slice(0, 300)}`);
+  }
 }
 
 export async function updateDiscordBotGuildNickname(env: Env, guildId: string, nickname: string | null): Promise<void> {
