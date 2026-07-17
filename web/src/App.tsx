@@ -1254,6 +1254,9 @@ function AdminPageModern() {
   const me = useApi<{ user: User }>("/api/me", []);
   const admin = useApi<AdminData>("/api/admin/bot", []);
   const runtime = admin.data?.runtime ?? null;
+  const ownerHasData = Boolean(admin.data);
+  const ownerInitialLoading = admin.loading && !ownerHasData;
+  const ownerRefreshing = admin.loading && ownerHasData;
   const guilds = runtime?.details.guilds ?? [];
   const recentEvents = admin.data?.recentEvents ?? [];
 
@@ -1410,17 +1413,21 @@ function AdminPageModern() {
               <Activity size={16} />
               Auto {autoRefresh ? "an" : "aus"}
             </button>
-            <button className="secondary-action inline" onClick={() => void admin.reload()}>
-              <RefreshCw size={16} />
-              Aktualisieren
+            <button
+              className={`secondary-action inline owner-refresh-button ${ownerRefreshing ? "is-loading" : ""}`}
+              onClick={() => void admin.reload()}
+              disabled={admin.loading}
+            >
+              {ownerRefreshing ? <Loader2 className="spin" size={16} /> : <RefreshCw size={16} />}
+              {ownerRefreshing ? "Laden" : "Aktualisieren"}
             </button>
           </div>
         </section>
 
-        {admin.loading && <LoadingBlock />}
+        {ownerInitialLoading && <LoadingBlock />}
         {admin.error && <Notice tone="danger" text={admin.error} />}
 
-        {!admin.loading && !runtime && !admin.error && (
+        {!ownerInitialLoading && !runtime && !admin.error && (
           <EmptyState title="Noch keine Bot-Daten" text="Sobald eine Datenquelle erreichbar ist, landen die Werte automatisch hier." />
         )}
 

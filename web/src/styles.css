@@ -1639,6 +1639,29 @@ textarea {
   background: rgba(104, 168, 255, 0.09);
 }
 
+.owner-refresh-button {
+  position: relative;
+  overflow: hidden;
+}
+
+.owner-refresh-button.is-loading {
+  opacity: 1;
+  color: var(--text);
+  border-color: rgba(104, 168, 255, 0.42);
+  background: rgba(104, 168, 255, 0.12);
+}
+
+.owner-refresh-button.is-loading::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, var(--blue), transparent);
+  animation: ownerRefreshLoad 980ms linear infinite;
+}
+
 .owner-overview-grid {
   display: grid;
   grid-template-columns: repeat(6, minmax(128px, 1fr));
@@ -2565,6 +2588,15 @@ textarea {
 @keyframes spin {
   to {
     transform: rotate(360deg);
+  }
+}
+
+@keyframes ownerRefreshLoad {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(100%);
   }
 }
 
