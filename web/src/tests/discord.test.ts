@@ -53,7 +53,7 @@ describe("Discord bot helpers", () => {
 
   it("checks bot guild presence with the bot token", async () => {
     globalThis.fetch = vi.fn(async (input, init) => {
-      expect(String(input)).toBe("https://discord.com/api/v10/guilds/987654321098765432");
+      expect(String(input)).toBe("https://discord.com/api/v10/guilds/987654321098765432?with_counts=true");
       expect(new Headers(init?.headers).get("Authorization")).toBe("Bot test-token");
       return new Response(JSON.stringify({ id: "987654321098765432", name: "Test", icon: null }), {
         headers: { "Content-Type": "application/json" }

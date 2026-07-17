@@ -3,6 +3,7 @@ import { createRoot } from "react-dom/client";
 import {
   Activity,
   AlertTriangle,
+  ArrowLeft,
   ArrowRight,
   AtSign,
   BadgeCheck,
@@ -209,6 +210,65 @@ type AdminData = {
   }>;
 };
 
+type AdminGuildDetail = {
+  guild: {
+    id: string;
+    name: string;
+    icon: string | null;
+    ownerId: string | null;
+    ownerName: string | null;
+    memberCount: number | null;
+    presenceCount: number | null;
+    channelCount: number;
+    roleCount: number;
+    shardId: number | null;
+    createdAt: string | null;
+    joinedAt: string | null;
+    features: string[];
+  };
+  settings: {
+    botNickname: string | null;
+    effectiveBotNickname: string | null;
+  };
+  roles: Array<{
+    id: string;
+    name: string;
+    color: string;
+    position: number;
+    managed: boolean;
+    botCanManage: boolean;
+    mentionable: boolean;
+    hoist: boolean;
+  }>;
+  channels: Array<{
+    id: string;
+    name: string;
+    type: string;
+    categoryId: string | null;
+    categoryName: string | null;
+    position: number;
+    canView: boolean | null;
+    canSend: boolean | null;
+  }>;
+  members: Array<{
+    id: string;
+    username: string;
+    displayName: string;
+    globalName: string | null;
+    nick: string | null;
+    avatar: string | null;
+    bot: boolean;
+    roles: string[];
+    joinedAt: string | null;
+    premiumSince: string | null;
+  }>;
+  limits: {
+    membersShown: number;
+    membersPartial: boolean;
+  };
+  warnings: string[];
+};
+
 type User = {
   username: string;
   displayName: string | null;
@@ -293,6 +353,10 @@ function navigate(path: string) {
   window.dispatchEvent(new PopStateEvent("popstate"));
 }
 
+function adminGuildViewPath(guild: { id: string; name: string }) {
+  return `/admin/discordguilds/view/${encodeURIComponent(guild.id)}/${encodeURIComponent(guild.name || "guild")}`;
+}
+
 function safeClientReturnTo(value: string | null | undefined): string {
   if (!value || !value.startsWith("/") || value.startsWith("//") || value.startsWith("/api/") || value.startsWith("/login")) {
     return "/panel";
@@ -371,6 +435,7 @@ function App() {
   if (cleanPath === "/login" || cleanPath === "/") return <LoginPage />;
   if (cleanPath === "/dokumentation") return <DocumentationPage />;
   if (cleanPath === "/datenschutz") return <PrivacyPage />;
+  if (cleanPath.startsWith("/admin/discordguilds/view/")) return <AdminGuildViewPage path={cleanPath} />;
   if (cleanPath === "/admin") return <AdminPageModern />;
   if (cleanPath === "/home" || cleanPath === "/panel") return <HomePage />;
   if (cleanPath.startsWith("/dashboard/")) return <Dashboard path={cleanPath} />;
@@ -1596,7 +1661,13 @@ function AdminPageModern() {
                         <div className="owner-guild-initial">{(guild.name || "?").slice(0, 2).toUpperCase()}</div>
                       )}
                       <div className="owner-guild-main">
-                        <strong>{guild.name}</strong>
+                        <button
+                          type="button"
+                          className="owner-guild-name-link"
+                          onClick={() => navigate(adminGuildViewPath({ id: guild.id, name: guild.name }))}
+                        >
+                          {guild.name}
+                        </button>
                         <small className="owner-guild-id">{guild.id}</small>
                         <div className="owner-guild-meta">
                           {guild.ownerName || guild.ownerId ? <span>Owner: {guild.ownerName || guild.ownerId}</span> : <span>Owner unbekannt</span>}
@@ -1674,6 +1745,258 @@ function MetricCard({ icon, label, value, tone }: { icon: React.ReactNode; label
       <span>{icon}</span>
       <strong>{value}</strong>
       <small>{label}</small>
+    </div>
+  );
+}
+
+function AdminGuildViewPage({ path }: { path: string }) {
+  const me = useApi<{ user: User }>("/api/me", []);
+  const segments = path.split("/");
+  const guildId = decodeURIComponent(segments[4] ?? "");
+  const routeGuildName = decodeURIComponent(segments[5] ?? "Guild");
+  const validGuildId = /^\d{17,20}$/.test(guildId);
+  const detail = useApi<AdminGuildDetail>(validGuildId ? `/api/admin/discordguilds/${guildId}` : null, [guildId]);
+  const data = detail.data;
+  const guild = data?.guild;
+  const [activeTab, setActiveTab] = useState<"roles" | "members" | "channels">("roles");
+  const [search, setSearch] = useState("");
+  const [nickname, setNickname] = useState("");
+  const [savingNickname, setSavingNickname] = useState(false);
+  const [status, setStatus] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!data) return;
+    setNickname(data.settings.effectiveBotNickname || data.settings.botNickname || "");
+  }, [data?.settings.effectiveBotNickname, data?.settings.botNickname]);
+
+  const roleNameById = useMemo(() => {
+    return new Map((data?.roles ?? []).map((role) => [role.id, role.name]));
+  }, [data?.roles]);
+
+  const needle = search.trim().toLowerCase();
+  const visibleRoles = (data?.roles ?? []).filter((role) => {
+    if (!needle) return true;
+    return role.name.toLowerCase().includes(needle) || role.id.includes(needle);
+  });
+  const visibleMembers = (data?.members ?? []).filter((member) => {
+    if (!needle) return true;
+    return [member.displayName, member.username, member.id, member.nick ?? "", ...member.roles.map((roleId) => roleNameById.get(roleId) ?? roleId)]
+      .join(" ")
+      .toLowerCase()
+      .includes(needle);
+  });
+  const visibleChannels = (data?.channels ?? []).filter((channel) => {
+    if (!needle) return true;
+    return [channel.name, channel.type, channel.categoryName ?? "", channel.id].join(" ").toLowerCase().includes(needle);
+  });
+
+  async function saveNickname() {
+    if (!validGuildId) return;
+    setSavingNickname(true);
+    setStatus(null);
+    try {
+      const response = await api<{ nickname: string | null }>(`/api/admin/discordguilds/${guildId}/bot-nickname`, {
+        method: "PATCH",
+        body: JSON.stringify({ nickname })
+      });
+      setNickname(response.nickname ?? "");
+      setStatus("Botname wurde aktualisiert.");
+      await detail.reload();
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : "Botname konnte nicht geändert werden.");
+    } finally {
+      setSavingNickname(false);
+    }
+  }
+
+  const displayedGuildName = guild?.name || routeGuildName;
+  const currentRows = activeTab === "roles" ? visibleRoles.length : activeTab === "members" ? visibleMembers.length : visibleChannels.length;
+
+  return (
+    <div className="app-shell">
+      <TopNav user={me.data?.user} />
+      <main className="content narrow owner-guild-detail-page">
+        <section className="owner-guild-detail-hero">
+          <button type="button" className="secondary-action inline" onClick={() => navigate("/admin")}>
+            <ArrowLeft size={16} />
+            Zurück
+          </button>
+          <div className="owner-guild-detail-title">
+            {guild?.icon ? (
+              <img className="owner-guild-detail-icon" src={guild.icon} alt="" />
+            ) : (
+              <div className="owner-guild-detail-icon fallback">{(displayedGuildName || "?").slice(0, 2).toUpperCase()}</div>
+            )}
+            <div>
+              <p className="eyebrow">
+                <Server size={15} />
+                Owner Guild View
+              </p>
+              <h1>{displayedGuildName}</h1>
+              <p>{guildId}</p>
+            </div>
+          </div>
+          <button className="secondary-action inline" onClick={() => void detail.reload()} disabled={detail.loading}>
+            {detail.loading && data ? <Loader2 className="spin" size={16} /> : <RefreshCw size={16} />}
+            {detail.loading && data ? "Laden" : "Aktualisieren"}
+          </button>
+        </section>
+
+        {!validGuildId && <Notice tone="danger" text="Die Guild-ID in der URL ist ungültig." />}
+        {detail.loading && !data && <LoadingBlock text="Guild wird geladen" detail="Rollen, Mitglieder und Serverdaten werden abgefragt." />}
+        {detail.error && <Notice tone="danger" text={detail.error} />}
+
+        {data && guild && (
+          <>
+            <section className="overview-tiles wide">
+              <StatusTile icon={<UserRound size={19} />} label="Mitglieder" value={compactNumber(guild.memberCount)} tone="ok" />
+              <StatusTile icon={<Shield size={19} />} label="Rollen" value={compactNumber(guild.roleCount)} />
+              <StatusTile icon={<Hash size={19} />} label="Kanäle" value={compactNumber(guild.channelCount)} />
+              <StatusTile icon={<Gauge size={19} />} label="Shard" value={guild.shardId === null ? "-" : String(guild.shardId)} />
+              <StatusTile icon={<Activity size={19} />} label="Online" value={compactNumber(guild.presenceCount)} />
+            </section>
+
+            {data.warnings.length > 0 && (
+              <div className="owner-warning-stack">
+                {data.warnings.map((warning) => <Notice key={warning} tone="warning" text={warning} />)}
+              </div>
+            )}
+
+            <section className="owner-guild-detail-grid">
+              <div className="panel owner-guild-profile-panel">
+                <div className="panel-title">
+                  <div>
+                    <h2>Botname</h2>
+                    <p className="muted">Nickname vom Bot auf dieser Guild ändern.</p>
+                  </div>
+                  <span className="pill neutral">{data.settings.effectiveBotNickname || "Standard"}</span>
+                </div>
+                <label>
+                  Botname auf diesem Server
+                  <input value={nickname} maxLength={32} onChange={(event) => setNickname(event.target.value)} placeholder={displayedGuildName} />
+                </label>
+                <ActionStatus status={status} />
+                <div className="form-actions">
+                  <button className="primary-action inline" onClick={saveNickname} disabled={savingNickname}>
+                    {savingNickname ? <Loader2 className="spin" size={16} /> : <Save size={16} />}
+                    Botname speichern
+                  </button>
+                  <button type="button" className="secondary-action inline" onClick={() => setNickname("")}>
+                    Zurücksetzen
+                  </button>
+                </div>
+              </div>
+
+              <div className="panel owner-guild-facts-panel">
+                <div className="panel-title">
+                  <div>
+                    <h2>Serverdaten</h2>
+                    <p className="muted">Live-Daten und letzter Bot-Join.</p>
+                  </div>
+                </div>
+                <dl className="owner-guild-facts">
+                  <div><dt>Owner</dt><dd>{guild.ownerName || guild.ownerId || "unbekannt"}</dd></div>
+                  <div><dt>Bot beigetreten</dt><dd>{formatDateTime(guild.joinedAt)}</dd></div>
+                  <div><dt>Erstellt</dt><dd>{formatDateTime(guild.createdAt)}</dd></div>
+                  <div><dt>Features</dt><dd>{guild.features.length ? guild.features.slice(0, 4).join(", ") : "-"}</dd></div>
+                </dl>
+              </div>
+            </section>
+
+            <section className="panel owner-guild-browser-panel">
+              <div className="panel-title">
+                <div>
+                  <h2>Guild Browser</h2>
+                  <p className="muted">Rollen, Mitglieder und Kanäle dieser Guild durchsuchen.</p>
+                </div>
+                <span className="pill neutral">{currentRows} Treffer</span>
+              </div>
+
+              <div className="owner-panel-toolbar">
+                <label className="owner-search">
+                  <Search size={16} />
+                  <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Suchen nach Name, ID, Rolle oder Kanal" aria-label="Guild-Daten suchen" />
+                </label>
+                <div className="owner-segmented" aria-label="Guild-Daten auswählen">
+                  {[
+                    ["roles", `Rollen ${data.roles.length}`],
+                    ["members", `Mitglieder ${data.limits.membersShown}${data.limits.membersPartial ? "+" : ""}`],
+                    ["channels", `Kanäle ${data.channels.length}`]
+                  ].map(([value, label]) => (
+                    <button key={value} type="button" className={activeTab === value ? "active" : ""} onClick={() => setActiveTab(value as "roles" | "members" | "channels")}>
+                      {value === "roles" ? <Shield size={14} /> : value === "members" ? <UserRound size={14} /> : <Hash size={14} />}
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {activeTab === "roles" && (
+                <div className="owner-detail-list">
+                  {visibleRoles.map((role) => (
+                    <article key={role.id} className="owner-detail-row">
+                      <span className="role-dot" style={{ backgroundColor: role.color }} />
+                      <div>
+                        <strong>{role.name}</strong>
+                        <small>{role.id}</small>
+                      </div>
+                      <div className="owner-detail-tags">
+                        <span>Position {role.position}</span>
+                        {role.managed && <span>managed</span>}
+                        {role.botCanManage && <span>Bot kann verwalten</span>}
+                        {role.mentionable && <span>mentionable</span>}
+                      </div>
+                    </article>
+                  ))}
+                  {visibleRoles.length === 0 && <p className="muted">Keine Rolle gefunden.</p>}
+                </div>
+              )}
+
+              {activeTab === "members" && (
+                <div className="owner-detail-list">
+                  {visibleMembers.map((member) => (
+                    <article key={member.id} className="owner-detail-row member">
+                      {member.avatar ? <img className="member-avatar" src={member.avatar} alt="" /> : <div className="member-avatar fallback">{member.displayName.slice(0, 2).toUpperCase()}</div>}
+                      <div>
+                        <strong>{member.displayName}</strong>
+                        <small>{member.username} · {member.id}</small>
+                      </div>
+                      <div className="owner-detail-tags">
+                        {member.bot && <span>Bot</span>}
+                        {member.nick && <span>Nickname</span>}
+                        <span>{member.roles.length} Rollen</span>
+                        {member.joinedAt && <span>seit {formatDateTime(member.joinedAt)}</span>}
+                      </div>
+                    </article>
+                  ))}
+                  {data.limits.membersPartial && <p className="muted">Discord liefert hier aktuell die ersten {data.limits.membersShown} Mitglieder.</p>}
+                  {visibleMembers.length === 0 && <p className="muted">Keine Mitglieder geladen oder keine Treffer.</p>}
+                </div>
+              )}
+
+              {activeTab === "channels" && (
+                <div className="owner-detail-list">
+                  {visibleChannels.map((channel) => (
+                    <article key={channel.id} className="owner-detail-row">
+                      <span className="channel-symbol">#</span>
+                      <div>
+                        <strong>{channel.name}</strong>
+                        <small>{channel.id}{channel.categoryName ? ` · ${channel.categoryName}` : ""}</small>
+                      </div>
+                      <div className="owner-detail-tags">
+                        <span>{channel.type}</span>
+                        <span>Position {channel.position}</span>
+                        {channel.canSend !== null && <span>{channel.canSend ? "sendbar" : "nicht sendbar"}</span>}
+                      </div>
+                    </article>
+                  ))}
+                  {visibleChannels.length === 0 && <p className="muted">Kein Kanal gefunden.</p>}
+                </div>
+              )}
+            </section>
+          </>
+        )}
+      </main>
     </div>
   );
 }

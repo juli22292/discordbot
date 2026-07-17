@@ -10,10 +10,49 @@ interface DiscordTokenResponse {
   scope: string;
 }
 
-interface DiscordBotGuild {
+export interface DiscordBotGuild {
   id: string;
   name: string;
   icon?: string | null;
+  owner_id?: string | null;
+  member_count?: number;
+  approximate_member_count?: number;
+  approximate_presence_count?: number;
+  features?: string[];
+}
+
+export interface DiscordBotMember {
+  user?: {
+    id: string;
+    username: string;
+    global_name?: string | null;
+    avatar?: string | null;
+    bot?: boolean;
+  };
+  nick?: string | null;
+  roles?: string[];
+  joined_at?: string | null;
+  premium_since?: string | null;
+  pending?: boolean;
+}
+
+export interface DiscordBotRole {
+  id: string;
+  name: string;
+  color?: number;
+  position?: number;
+  managed?: boolean;
+  permissions?: string;
+  hoist?: boolean;
+  mentionable?: boolean;
+}
+
+export interface DiscordBotChannel {
+  id: string;
+  name?: string;
+  type?: number;
+  parent_id?: string | null;
+  position?: number;
 }
 
 export interface DiscordApplicationCommand {
@@ -155,7 +194,7 @@ export async function fetchDiscordBotGuild(env: Env, guildId: string): Promise<D
   const botToken = env.DISCORD_BOT_TOKEN?.trim();
   if (!botToken) return null;
 
-  const response = await discordRequest(`/guilds/${guildId}`, {
+  const response = await discordRequest(`/guilds/${guildId}?with_counts=true`, {
     headers: { Authorization: `Bot ${botToken}` }
   });
 
@@ -169,6 +208,78 @@ export async function fetchDiscordBotGuild(env: Env, guildId: string): Promise<D
   }
 
   return response.json<DiscordBotGuild>();
+}
+
+export async function fetchDiscordBotGuildMember(env: Env, guildId: string, userId: string): Promise<DiscordBotMember | null> {
+  const botToken = env.DISCORD_BOT_TOKEN?.trim();
+  if (!botToken) return null;
+
+  const response = await discordRequest(`/guilds/${guildId}/members/${userId}`, {
+    headers: { Authorization: `Bot ${botToken}` }
+  });
+
+  if (response.status === 403 || response.status === 404) return null;
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(`Discord Bot API ${response.status}: ${text.slice(0, 300)}`);
+  }
+
+  return response.json<DiscordBotMember>();
+}
+
+export async function fetchDiscordBotGuildMembers(env: Env, guildId: string, limit = 200): Promise<DiscordBotMember[]> {
+  const botToken = env.DISCORD_BOT_TOKEN?.trim();
+  if (!botToken) return [];
+
+  const safeLimit = Math.max(1, Math.min(1000, Math.floor(limit)));
+  const response = await discordRequest(`/guilds/${guildId}/members?limit=${safeLimit}`, {
+    headers: { Authorization: `Bot ${botToken}` }
+  });
+
+  if (response.status === 403 || response.status === 404) return [];
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(`Discord Bot API ${response.status}: ${text.slice(0, 300)}`);
+  }
+
+  return response.json<DiscordBotMember[]>();
+}
+
+export async function fetchDiscordBotGuildRoles(env: Env, guildId: string): Promise<DiscordBotRole[]> {
+  const botToken = env.DISCORD_BOT_TOKEN?.trim();
+  if (!botToken) return [];
+
+  return discordFetch<DiscordBotRole[]>(`/guilds/${guildId}/roles`, {
+    headers: { Authorization: `Bot ${botToken}` }
+  });
+}
+
+export async function fetchDiscordBotGuildChannels(env: Env, guildId: string): Promise<DiscordBotChannel[]> {
+  const botToken = env.DISCORD_BOT_TOKEN?.trim();
+  if (!botToken) return [];
+
+  return discordFetch<DiscordBotChannel[]>(`/guilds/${guildId}/channels`, {
+    headers: { Authorization: `Bot ${botToken}` }
+  });
+}
+
+export async function updateDiscordBotGuildNickname(env: Env, guildId: string, nickname: string | null): Promise<void> {
+  const botToken = env.DISCORD_BOT_TOKEN?.trim();
+  if (!botToken) throw new DiscordApiError(500, "DISCORD_BOT_TOKEN ist nicht konfiguriert.");
+
+  const response = await discordRequest(`/guilds/${guildId}/members/@me`, {
+    method: "PATCH",
+    headers: {
+      Authorization: `Bot ${botToken}`,
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({ nick: nickname })
+  });
+
+  if (!response.ok) {
+    const text = await response.text();
+    throw new DiscordApiError(response.status, `Discord API ${response.status}: ${text.slice(0, 300)}`);
+  }
 }
 
 export async function fetchDiscordApplicationCommands(env: Env): Promise<DiscordApplicationCommand[]> {

@@ -2027,6 +2027,28 @@ textarea {
   white-space: nowrap;
 }
 
+.owner-guild-name-link {
+  width: 100%;
+  display: block;
+  border: 0;
+  padding: 0;
+  color: var(--text);
+  background: transparent;
+  font: inherit;
+  font-weight: 800;
+  text-align: left;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.owner-guild-name-link:hover,
+.owner-guild-name-link:focus-visible {
+  color: var(--blue);
+  outline: none;
+}
+
 .owner-guild-row small {
   display: block;
   margin-top: 4px;
@@ -2137,6 +2159,193 @@ textarea {
   border-radius: 8px;
   background: rgba(255, 107, 107, 0.08);
   overflow-wrap: anywhere;
+}
+
+.owner-guild-detail-page {
+  display: grid;
+  gap: 16px;
+}
+
+.owner-guild-detail-hero {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 16px;
+  padding: 18px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: linear-gradient(135deg, rgba(15, 20, 32, 0.94), rgba(9, 12, 18, 0.9));
+  box-shadow: var(--soft-shadow);
+}
+
+.owner-guild-detail-title {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.owner-guild-detail-title h1 {
+  margin: 0;
+  color: var(--text);
+  font-size: clamp(26px, 3vw, 40px);
+}
+
+.owner-guild-detail-title p:last-child {
+  margin: 5px 0 0;
+  color: var(--muted);
+  font-family: "JetBrains Mono", "SFMono-Regular", Consolas, monospace;
+}
+
+.owner-guild-detail-icon {
+  width: 62px;
+  height: 62px;
+  border: 1px solid rgba(119, 183, 255, 0.24);
+  border-radius: 8px;
+  object-fit: cover;
+  background: rgba(119, 183, 255, 0.08);
+}
+
+.owner-guild-detail-icon.fallback {
+  display: grid;
+  place-items: center;
+  color: var(--blue);
+  font-weight: 900;
+  font-size: 20px;
+}
+
+.owner-warning-stack {
+  display: grid;
+  gap: 10px;
+}
+
+.owner-guild-detail-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 0.95fr) minmax(340px, 1.05fr);
+  gap: 16px;
+  align-items: start;
+}
+
+.owner-guild-profile-panel,
+.owner-guild-facts-panel,
+.owner-guild-browser-panel {
+  min-width: 0;
+}
+
+.owner-guild-facts {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin: 0;
+}
+
+.owner-guild-facts div {
+  min-width: 0;
+  min-height: 64px;
+  padding: 11px;
+  border: 1px solid var(--border-soft);
+  border-radius: 8px;
+  background: rgba(9, 11, 16, 0.48);
+}
+
+.owner-guild-facts dt {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.owner-guild-facts dd {
+  margin: 5px 0 0;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.owner-detail-list {
+  display: grid;
+  gap: 10px;
+}
+
+.owner-detail-row {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr) minmax(220px, auto);
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  border: 1px solid var(--border-soft);
+  border-radius: 8px;
+  background: rgba(9, 11, 16, 0.52);
+}
+
+.owner-detail-row strong {
+  display: block;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.owner-detail-row small {
+  display: block;
+  margin-top: 4px;
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.owner-detail-tags {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.owner-detail-tags span {
+  padding: 5px 8px;
+  border: 1px solid rgba(119, 183, 255, 0.13);
+  border-radius: 999px;
+  color: var(--muted-strong);
+  background: rgba(119, 183, 255, 0.06);
+  font-size: 12px;
+}
+
+.role-dot {
+  width: 18px;
+  height: 18px;
+  justify-self: center;
+  border-radius: 999px;
+  box-shadow: 0 0 0 4px rgba(255, 255, 255, 0.04);
+}
+
+.channel-symbol,
+.member-avatar {
+  width: 34px;
+  height: 34px;
+  border: 1px solid rgba(119, 183, 255, 0.2);
+  border-radius: 8px;
+}
+
+.channel-symbol {
+  display: grid;
+  place-items: center;
+  color: var(--blue);
+  background: rgba(119, 183, 255, 0.1);
+  font-weight: 900;
+}
+
+.member-avatar {
+  object-fit: cover;
+  background: rgba(119, 183, 255, 0.08);
+}
+
+.member-avatar.fallback {
+  display: grid;
+  place-items: center;
+  color: var(--blue);
+  font-size: 12px;
+  font-weight: 800;
 }
 
 .welcome-page {
@@ -2633,6 +2842,7 @@ textarea {
   .admin-grid,
   .owner-admin-grid,
   .owner-admin-grid-wide,
+  .owner-guild-detail-grid,
   .welcome-grid {
     grid-template-columns: 1fr;
   }
@@ -2790,6 +3000,25 @@ textarea {
     grid-column: 2;
     justify-self: start;
     text-align: left;
+  }
+
+  .owner-guild-detail-hero {
+    grid-template-columns: 1fr;
+    justify-items: start;
+  }
+
+  .owner-detail-row {
+    grid-template-columns: 34px minmax(0, 1fr);
+    align-items: start;
+  }
+
+  .owner-detail-tags {
+    grid-column: 1 / -1;
+    justify-content: flex-start;
+  }
+
+  .owner-guild-facts {
+    grid-template-columns: 1fr;
   }
 }
 

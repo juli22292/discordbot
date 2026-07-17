@@ -16,10 +16,15 @@ import {
   discordOAuthAuthorizeUrl,
   exchangeDiscordCode,
   fetchDiscordApplicationCommands,
+  fetchDiscordBotGuildChannels,
   fetchDiscordBotGuild,
+  fetchDiscordBotGuildMember,
+  fetchDiscordBotGuildMembers,
+  fetchDiscordBotGuildRoles,
   fetchDiscordGuilds,
   fetchDiscordUser,
-  refreshDiscordToken
+  refreshDiscordToken,
+  updateDiscordBotGuildNickname
 } from "./server/discord";
 import { canManageGuild, permissionLabel } from "./server/permissions";
 import type { ActiveSession, DiscordGuild, Env, GuildAccess, SessionUser, TokenData } from "./server/types";
@@ -907,6 +912,109 @@ async function fallbackAdminGuilds(env: Env): Promise<AdminGuildRuntimeItem[]> {
     roleCount: Number(guild.roleCount ?? 0),
     joinedAt: guild.joinedAt ? String(guild.joinedAt) : null
   }));
+}
+
+async function requireAdminGuild(env: Env, discordGuildId: string): Promise<GuildRow> {
+  snowflakeSchema.parse(discordGuildId);
+  const guild = await first<GuildRow>(
+    requireDb(env).prepare(
+      `SELECT id, discord_guild_id, name, icon, bot_joined_at
+         FROM guilds
+        WHERE discord_guild_id = ? AND bot_joined_at IS NOT NULL`
+    ).bind(discordGuildId)
+  );
+
+  if (!guild) {
+    throw new HttpError(404, "guild_not_found", "Diese Guild wurde im Owner-Bereich nicht gefunden oder der Bot ist dort nicht mehr installiert.");
+  }
+
+  return guild;
+}
+
+function discordRoleColor(value: unknown): string {
+  const color = Number(value ?? 0);
+  if (!Number.isFinite(color) || color <= 0) return "#5865F2";
+  return `#${Math.max(0, Math.min(0xffffff, color)).toString(16).padStart(6, "0").toUpperCase()}`;
+}
+
+function discordChannelTypeLabel(value: unknown): string {
+  const numeric = Number(value);
+  if (Number.isFinite(numeric)) {
+    const labels: Record<number, string> = {
+      0: "Text",
+      2: "Voice",
+      4: "Kategorie",
+      5: "News",
+      10: "News-Thread",
+      11: "Thread",
+      12: "Privater Thread",
+      13: "Stage",
+      15: "Forum"
+    };
+    return labels[numeric] ?? `Typ ${numeric}`;
+  }
+
+  return String(value || "unknown");
+}
+
+function discordUserAvatarUrl(user: { id?: string; avatar?: string | null } | undefined): string | null {
+  if (!user?.id || !user.avatar) return null;
+  const extension = user.avatar.startsWith("a_") ? "gif" : "png";
+  return `https://cdn.discordapp.com/avatars/${user.id}/${user.avatar}.${extension}?size=128`;
+}
+
+function runtimeGuildFromRow(row: BotRuntimeRow | null, guildId: string): Record<string, unknown> | null {
+  const payload = parseJson<Record<string, unknown>>(row?.payload ?? "", {});
+  const guilds = Array.isArray(payload.guilds) ? payload.guilds : [];
+  return (guilds.find((item) => {
+    return item && typeof item === "object" && String((item as Record<string, unknown>).id ?? "") === guildId;
+  }) as Record<string, unknown> | undefined) ?? null;
+}
+
+function normalizeAdminRole(role: Record<string, unknown>) {
+  const color = discordRoleColor(role.color);
+  return {
+    id: String(role.id ?? role.discord_role_id ?? ""),
+    name: String(role.name ?? "Unbenannte Rolle"),
+    color,
+    position: Number(role.position ?? 0),
+    managed: Boolean(role.managed),
+    botCanManage: Boolean(role.botCanManage ?? role.bot_can_manage),
+    mentionable: Boolean(role.mentionable),
+    hoist: Boolean(role.hoist)
+  };
+}
+
+function normalizeAdminChannel(channel: Record<string, unknown>) {
+  return {
+    id: String(channel.id ?? channel.discord_channel_id ?? ""),
+    name: String(channel.name ?? "unbenannt"),
+    type: discordChannelTypeLabel(channel.type ?? channel.channel_type),
+    categoryId: channel.categoryId ? String(channel.categoryId) : channel.category_id ? String(channel.category_id) : null,
+    categoryName: channel.categoryName ? String(channel.categoryName) : channel.category_name ? String(channel.category_name) : null,
+    position: Number(channel.position ?? 0),
+    canView: channel.canView !== undefined ? Boolean(channel.canView) : channel.can_view !== undefined ? Boolean(channel.can_view) : null,
+    canSend: channel.canSend !== undefined ? Boolean(channel.canSend) : channel.can_send !== undefined ? Boolean(channel.can_send) : null
+  };
+}
+
+function normalizeAdminMember(member: Record<string, unknown>) {
+  const user = (member.user && typeof member.user === "object" ? member.user : {}) as Record<string, unknown>;
+  const username = String(user.username ?? "Unbekannt");
+  const globalName = user.global_name ? String(user.global_name) : null;
+  const nick = member.nick ? String(member.nick) : null;
+  return {
+    id: String(user.id ?? member.id ?? ""),
+    username,
+    displayName: nick || globalName || username,
+    globalName,
+    nick,
+    avatar: discordUserAvatarUrl({ id: String(user.id ?? ""), avatar: user.avatar ? String(user.avatar) : null }),
+    bot: Boolean(user.bot),
+    roles: Array.isArray(member.roles) ? member.roles.map((role) => String(role)) : [],
+    joinedAt: member.joined_at ? String(member.joined_at) : null,
+    premiumSince: member.premium_since ? String(member.premium_since) : null
+  };
 }
 
 async function refreshCommandStatsFromDiscord(env: Env, knownCommands: number): Promise<number> {
@@ -1858,6 +1966,130 @@ app.get("/api/admin/bot", async (c) => {
       maxAttempts: Number(event.maxAttempts ?? 0)
     }))
   });
+});
+
+app.get("/api/admin/discordguilds/:guildId", async (c) => {
+  await requireAdminSession(c);
+  await ensureBotRuntimeTable(c.env);
+  const guildId = snowflakeSchema.parse(c.req.param("guildId"));
+  const guild = await requireAdminGuild(c.env, guildId);
+  const settings = await ensureSettings(c.env, guild.id);
+  const runtime = await first<BotRuntimeRow>(
+    c.env.DB.prepare("SELECT * FROM bot_runtime_status WHERE id = 'latest'")
+  );
+  const runtimeGuild = runtimeGuildFromRow(runtime, guildId);
+  const warnings: string[] = [];
+
+  const dbRoles = await all<Record<string, unknown>>(
+    c.env.DB.prepare(
+      `SELECT discord_role_id AS id, name, color, position, managed, bot_can_manage AS botCanManage
+         FROM guild_roles
+        WHERE guild_id = ?
+        ORDER BY position DESC, name ASC`
+    ).bind(guild.id)
+  );
+  const dbChannels = await all<Record<string, unknown>>(
+    c.env.DB.prepare(
+      `SELECT discord_channel_id AS id, name, channel_type AS type, category_id AS categoryId,
+              category_name AS categoryName, can_view AS canView, can_send AS canSend, position
+         FROM guild_channels
+        WHERE guild_id = ?
+        ORDER BY position ASC, name ASC`
+    ).bind(guild.id)
+  );
+
+  let liveGuild: Awaited<ReturnType<typeof fetchDiscordBotGuild>> = null;
+  let liveRoles: Record<string, unknown>[] = [];
+  let liveChannels: Record<string, unknown>[] = [];
+  let liveMembers: Record<string, unknown>[] = [];
+  let botMember: Record<string, unknown> | null = null;
+
+  try {
+    liveGuild = await fetchDiscordBotGuild(c.env, guildId);
+  } catch (error) {
+    warnings.push(`Discord-Guild konnte nicht live geladen werden: ${error instanceof Error ? error.message : "unbekannter Fehler"}`);
+  }
+
+  try {
+    liveRoles = (await fetchDiscordBotGuildRoles(c.env, guildId)) as unknown as Record<string, unknown>[];
+  } catch (error) {
+    warnings.push(`Live-Rollen konnten nicht geladen werden, Snapshot wird genutzt: ${error instanceof Error ? error.message : "unbekannter Fehler"}`);
+  }
+
+  try {
+    liveChannels = (await fetchDiscordBotGuildChannels(c.env, guildId)) as unknown as Record<string, unknown>[];
+  } catch (error) {
+    warnings.push(`Live-Kanäle konnten nicht geladen werden, Snapshot wird genutzt: ${error instanceof Error ? error.message : "unbekannter Fehler"}`);
+  }
+
+  try {
+    liveMembers = (await fetchDiscordBotGuildMembers(c.env, guildId, 250)) as unknown as Record<string, unknown>[];
+  } catch (error) {
+    warnings.push(`Mitglieder konnten nicht geladen werden: ${error instanceof Error ? error.message : "unbekannter Fehler"}`);
+  }
+
+  if (c.env.DISCORD_CLIENT_ID?.trim()) {
+    try {
+      botMember = await fetchDiscordBotGuildMember(c.env, guildId, c.env.DISCORD_CLIENT_ID.trim()) as unknown as Record<string, unknown> | null;
+    } catch {
+      botMember = null;
+    }
+  }
+
+  const roles = (liveRoles.length ? liveRoles : dbRoles).map(normalizeAdminRole).filter((role) => role.id);
+  const channels = (liveChannels.length ? liveChannels : dbChannels).map(normalizeAdminChannel).filter((channel) => channel.id);
+  const members = liveMembers.map(normalizeAdminMember).filter((member) => member.id);
+  const memberCount = finiteNumber(liveGuild?.member_count)
+    ?? finiteNumber(liveGuild?.approximate_member_count)
+    ?? finiteNumber(runtimeGuild?.memberCount)
+    ?? members.length
+    ?? null;
+
+  return json(c, {
+    guild: {
+      id: guild.discord_guild_id,
+      name: liveGuild?.name ?? guild.name,
+      icon: liveGuild?.icon ? discordGuildIconUrl({ id: guild.discord_guild_id, icon: liveGuild.icon }) : guild.icon,
+      ownerId: liveGuild?.owner_id ?? runtimeGuild?.ownerId ?? null,
+      ownerName: runtimeGuild?.ownerName ?? null,
+      memberCount,
+      presenceCount: finiteNumber(liveGuild?.approximate_presence_count),
+      channelCount: channels.length,
+      roleCount: roles.length,
+      shardId: finiteNumber(runtimeGuild?.shardId),
+      createdAt: runtimeGuild?.createdAt ?? null,
+      joinedAt: runtimeGuild?.joinedAt ?? guild.bot_joined_at,
+      features: Array.isArray(liveGuild?.features) ? liveGuild.features : []
+    },
+    settings: {
+      botNickname: settings.bot_nickname,
+      effectiveBotNickname: botMember?.nick ? String(botMember.nick) : settings.bot_nickname
+    },
+    roles,
+    channels,
+    members,
+    limits: {
+      membersShown: members.length,
+      membersPartial: memberCount !== null ? members.length < memberCount : false
+    },
+    warnings
+  });
+});
+
+app.patch("/api/admin/discordguilds/:guildId/bot-nickname", async (c) => {
+  const session = await requireAdminSession(c);
+  const guildId = snowflakeSchema.parse(c.req.param("guildId"));
+  const guild = await requireAdminGuild(c.env, guildId);
+  const data = nicknameSchema.parse(await readJsonBody(c));
+  const oldValue = await ensureSettings(c.env, guild.id);
+
+  await updateDiscordBotGuildNickname(c.env, guildId, data.nickname);
+  await c.env.DB.prepare("UPDATE guild_settings SET bot_nickname = ?, updated_at = ? WHERE guild_id = ?")
+    .bind(data.nickname, nowIso(), guild.id)
+    .run();
+
+  await audit(c.env, guild.id, session.user.discordUserId, "owner.guild.nickname.update", "bot_nickname", oldValue.bot_nickname, data.nickname);
+  return json(c, { ok: true, nickname: data.nickname });
 });
 
 app.post("/api/admin/bot/presence", async (c) => {
