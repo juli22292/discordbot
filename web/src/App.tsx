@@ -140,6 +140,7 @@ type WelcomeSettings = {
 };
 
 type AdminRuntime = {
+  id: string;
   status: string | null;
   activityType: string | null;
   activityText: string | null;
@@ -156,10 +157,33 @@ type AdminRuntime = {
   botVersion: string | null;
   uptimeSeconds: number | null;
   processUptimeSeconds: number | null;
-  updatedAt: string;
+  updatedAt: string | null;
   details: {
     bot?: { id?: string; name?: string; avatar?: string | null };
-    guilds?: Array<{ id: string; name: string; memberCount: number; channelCount: number; roleCount: number }>;
+    heartbeat?: boolean;
+    source?: string;
+    pterodactyl?: {
+      state?: string;
+      suspended?: boolean;
+      ramMb?: number | null;
+      cpuPercent?: number | null;
+      diskMb?: number | null;
+      uptimeSeconds?: number | null;
+      checkedAt?: string | null;
+    } | null;
+    guilds?: Array<{
+      id: string;
+      name: string;
+      icon?: string | null;
+      memberCount: number | null;
+      channelCount: number;
+      roleCount: number;
+      ownerId?: string | null;
+      ownerName?: string | null;
+      shardId?: number | null;
+      createdAt?: string | null;
+      joinedAt?: string | null;
+    }>;
   };
 };
 
@@ -1196,6 +1220,21 @@ function compactNumber(value: number | null | undefined) {
   return new Intl.NumberFormat("de-DE", { maximumFractionDigits: 1, notation: value >= 10000 ? "compact" : "standard" }).format(value);
 }
 
+function pterodactylStateLabel(value: string | null | undefined) {
+  switch (value) {
+    case "running":
+      return "läuft";
+    case "starting":
+      return "startet";
+    case "stopping":
+      return "stoppt";
+    case "offline":
+      return "offline";
+    default:
+      return value || "unbekannt";
+  }
+}
+
 function AdminPageModern() {
   const me = useApi<{ user: User }>("/api/me", []);
   const admin = useApi<AdminData>("/api/admin/bot", []);
@@ -1207,7 +1246,7 @@ function AdminPageModern() {
   const [saving, setSaving] = useState(false);
   const [saveStatus, setSaveStatus] = useState<string | null>(null);
   const [guildSearch, setGuildSearch] = useState("");
-  const [guildSort, setGuildSort] = useState<"members" | "name" | "channels">("members");
+  const [guildSort, setGuildSort] = useState<"name" | "members" | "channels" | "roles">("name");
   const [eventFilter, setEventFilter] = useState<"all" | "open" | "failed" | "completed">("all");
   const [autoRefresh, setAutoRefresh] = useState(true);
 
@@ -1232,7 +1271,16 @@ function AdminPageModern() {
   }, [autoRefresh]);
 
   const lastSeenAge = runtime?.updatedAt ? Math.max(0, Math.floor((Date.now() - new Date(runtime.updatedAt).getTime()) / 1000)) : null;
-  const heartbeatFresh = lastSeenAge !== null && lastSeenAge < 90;
+  const fallbackRuntime = runtime?.id === "fallback" || runtime?.details.heartbeat === false;
+  const pterodactyl = runtime?.details.pterodactyl ?? null;
+  const pterodactylState = pterodactyl?.state ?? null;
+  const pterodactylOnline = Boolean(pterodactylState && !pterodactyl?.suspended && ["running", "starting"].includes(pterodactylState));
+  const heartbeatFresh = !fallbackRuntime && lastSeenAge !== null && lastSeenAge < 90;
+  const signalLabel = fallbackRuntime ? (pterodactyl ? "Prozess" : "Sync") : "Gateway";
+  const signalValue = fallbackRuntime
+    ? pterodactyl ? pterodactylStateLabel(pterodactylState) : "fehlt"
+    : lastSeenAge === null ? "wartet" : heartbeatFresh ? "online" : "stale";
+  const signalTone: "ok" | "warn" = fallbackRuntime ? (pterodactylOnline ? "ok" : "warn") : heartbeatFresh ? "ok" : "warn";
   const latencyMs = runtime?.latencyMs;
   const ramMb = runtime?.ramMb;
   const cpuPercent = runtime?.cpuPercent;
@@ -1241,15 +1289,25 @@ function AdminPageModern() {
   const installedGuilds = admin.data?.stats.installedGuilds ?? 0;
   const knownGuilds = admin.data?.stats.knownGuilds ?? 0;
   const installRate = knownGuilds ? Math.round((installedGuilds / knownGuilds) * 100) : 0;
+  const guildUserText = runtime?.userCount !== null && runtime?.userCount !== undefined ? `${compactNumber(runtime.userCount)} Nutzer` : "Nutzer offen";
 
   const filteredGuilds = useMemo(() => {
     const needle = guildSearch.trim().toLowerCase();
     return [...guilds]
-      .filter((guild) => !needle || guild.name.toLowerCase().includes(needle) || guild.id.includes(needle))
+      .filter((guild) => {
+        if (!needle) return true;
+        return (
+          guild.name.toLowerCase().includes(needle) ||
+          guild.id.includes(needle) ||
+          (guild.ownerName ?? "").toLowerCase().includes(needle) ||
+          (guild.ownerId ?? "").includes(needle)
+        );
+      })
       .sort((left, right) => {
         if (guildSort === "name") return left.name.localeCompare(right.name, "de");
         if (guildSort === "channels") return right.channelCount - left.channelCount;
-        return right.memberCount - left.memberCount;
+        if (guildSort === "roles") return right.roleCount - left.roleCount;
+        return (right.memberCount ?? 0) - (left.memberCount ?? 0);
       });
   }, [guildSearch, guildSort, guilds]);
 
@@ -1263,10 +1321,10 @@ function AdminPageModern() {
 
   const healthChecks = [
     {
-      label: "Heartbeat",
-      value: lastSeenAge === null ? "wartet" : heartbeatFresh ? `vor ${lastSeenAge}s` : `vor ${formatDuration(lastSeenAge)}`,
-      detail: "Live-Daten vom Bot",
-      tone: heartbeatFresh ? "ok" : "warn",
+      label: fallbackRuntime ? "Datenquelle" : "Heartbeat",
+      value: fallbackRuntime ? (pterodactyl ? "Pterodactyl" : "Datenbank") : lastSeenAge === null ? "wartet" : heartbeatFresh ? `vor ${lastSeenAge}s` : `vor ${formatDuration(lastSeenAge)}`,
+      detail: fallbackRuntime ? "Bot-Heartbeat fehlt" : "Live-Daten vom Bot",
+      tone: fallbackRuntime ? "warn" : heartbeatFresh ? "ok" : "warn",
       icon: <Wifi size={16} />
     },
     {
@@ -1348,13 +1406,13 @@ function AdminPageModern() {
         {admin.error && <Notice tone="danger" text={admin.error} />}
 
         {!admin.loading && !runtime && !admin.error && (
-          <EmptyState title="Noch kein Bot-Heartbeat" text="Sobald der Bot läuft, landen seine Live-Daten automatisch hier im Owner-Bereich." />
+          <EmptyState title="Noch keine Bot-Daten" text="Sobald eine Datenquelle erreichbar ist, landen die Werte automatisch hier." />
         )}
 
         {admin.data && (
           <>
             <section className="owner-overview-grid">
-              <StatusTile icon={<Wifi size={19} />} label="Gateway" value={lastSeenAge === null ? "wartet" : heartbeatFresh ? "online" : "stale"} tone={heartbeatFresh ? "ok" : "warn"} />
+              <StatusTile icon={<Wifi size={19} />} label={signalLabel} value={signalValue} tone={signalTone} />
               <StatusTile icon={<Gauge size={19} />} label="Latenz" value={latencyMs !== null && latencyMs !== undefined ? `${Math.round(latencyMs)} ms` : "-"} tone={latencyMs !== null && latencyMs !== undefined && latencyMs > 250 ? "warn" : "ok"} />
               <StatusTile icon={<HardDrive size={19} />} label="RAM" value={ramMb !== null && ramMb !== undefined ? `${ramMb.toFixed(1)} MB` : "-"} tone={ramMb !== null && ramMb !== undefined && ramMb > 1536 ? "warn" : "ok"} />
               <StatusTile icon={<Cpu size={19} />} label="CPU" value={cpuPercent !== null && cpuPercent !== undefined ? `${cpuPercent.toFixed(1)}%` : "-"} tone={cpuPercent !== null && cpuPercent !== undefined && cpuPercent > 80 ? "warn" : "ok"} />
@@ -1451,7 +1509,7 @@ function AdminPageModern() {
                     <div><dt>discord.py</dt><dd>{runtime?.discordPyVersion || "-"}</dd></div>
                     <div><dt>Python</dt><dd>{runtime?.pythonVersion || "-"}</dd></div>
                     <div><dt>Installiert</dt><dd>{installedGuilds}/{knownGuilds || installedGuilds} · {installRate}%</dd></div>
-                    <div><dt>Letzter Heartbeat</dt><dd>{formatDateTime(runtime?.updatedAt)}</dd></div>
+                    <div><dt>{fallbackRuntime ? "Letzter Check" : "Letzter Heartbeat"}</dt><dd>{formatDateTime(runtime?.updatedAt)}</dd></div>
                   </dl>
                 </div>
 
@@ -1475,7 +1533,7 @@ function AdminPageModern() {
                 <div className="panel-title">
                   <div>
                     <h2>Guild-Übersicht</h2>
-                    <p className="muted">{compactNumber(runtime?.userCount)} Nutzer über {compactNumber(runtime?.guildCount ?? guilds.length)} Guilds.</p>
+                    <p className="muted">{guildUserText} über {compactNumber(runtime?.guildCount ?? guilds.length)} Guilds.</p>
                   </div>
                   <span className="pill neutral">{filteredGuilds.length} Treffer</span>
                 </div>
@@ -1483,14 +1541,15 @@ function AdminPageModern() {
                 <div className="owner-panel-toolbar">
                   <label className="owner-search">
                     <Search size={16} />
-                    <input value={guildSearch} onChange={(event) => setGuildSearch(event.target.value)} placeholder="Guild suchen" aria-label="Guild suchen" />
+                    <input value={guildSearch} onChange={(event) => setGuildSearch(event.target.value)} placeholder="Name, ID oder Owner suchen" aria-label="Guild suchen" />
                   </label>
                   <label className="owner-select">
                     <SlidersHorizontal size={16} />
-                    <select value={guildSort} onChange={(event) => setGuildSort(event.target.value as "members" | "name" | "channels")} aria-label="Guilds sortieren">
-                      <option value="members">Mitglieder</option>
+                    <select value={guildSort} onChange={(event) => setGuildSort(event.target.value as "name" | "members" | "channels" | "roles")} aria-label="Guilds sortieren">
                       <option value="name">Name</option>
+                      <option value="members">Mitglieder</option>
                       <option value="channels">Kanäle</option>
+                      <option value="roles">Rollen</option>
                     </select>
                   </label>
                 </div>
@@ -1498,20 +1557,29 @@ function AdminPageModern() {
                 <div className="owner-guild-list">
                   {filteredGuilds.slice(0, 18).map((guild) => (
                     <article key={guild.id} className="owner-guild-row">
-                      <div className="owner-guild-initial">{(guild.name || "?").slice(0, 2).toUpperCase()}</div>
-                      <div>
+                      {guild.icon ? (
+                        <img className="owner-guild-avatar" src={guild.icon} alt="" />
+                      ) : (
+                        <div className="owner-guild-initial">{(guild.name || "?").slice(0, 2).toUpperCase()}</div>
+                      )}
+                      <div className="owner-guild-main">
                         <strong>{guild.name}</strong>
-                        <small>{guild.id}</small>
+                        <small className="owner-guild-id">{guild.id}</small>
+                        <div className="owner-guild-meta">
+                          {guild.ownerName || guild.ownerId ? <span>Owner: {guild.ownerName || guild.ownerId}</span> : <span>Owner unbekannt</span>}
+                          {guild.shardId !== null && guild.shardId !== undefined && <span>Shard {guild.shardId}</span>}
+                          {guild.joinedAt && <span>seit {formatDateTime(guild.joinedAt)}</span>}
+                        </div>
                       </div>
                       <div className="owner-guild-stats">
-                        <span>{compactNumber(guild.memberCount)} Mitglieder</span>
+                        <span>{guild.memberCount === null ? "Mitglieder offen" : `${compactNumber(guild.memberCount)} Mitglieder`}</span>
                         <span>{guild.channelCount} Kanäle</span>
                         <span>{guild.roleCount} Rollen</span>
                       </div>
                     </article>
                   ))}
                   {filteredGuilds.length > 18 && <p className="muted">+ {filteredGuilds.length - 18} weitere Treffer</p>}
-                  {guilds.length === 0 && <p className="muted">Noch keine Guild-Details im Heartbeat.</p>}
+                  {guilds.length === 0 && <p className="muted">Noch keine Guild-Daten verfügbar.</p>}
                   {guilds.length > 0 && filteredGuilds.length === 0 && <p className="muted">Keine Guild passt zu deiner Suche.</p>}
                 </div>
               </div>

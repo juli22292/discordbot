@@ -102,12 +102,6 @@ export async function verifyInternalBotRequest(
     throw new Error("Interne Signatur ist abgelaufen.");
   }
 
-  const nonceKey = `bot:${nonce}`;
-  const existingNonce = await env.BOT_EVENT_NONCES.get(nonceKey);
-  if (existingNonce) {
-    throw new Error("Interne Signatur wurde bereits verwendet.");
-  }
-
   const url = new URL(request.url);
   const bodyHash = await sha256Hex(bodyText);
   const message = `${request.method.toUpperCase()}\n${url.pathname}${url.search}\n${timestamp}\n${nonce}\n${bodyHash}`;
@@ -117,5 +111,16 @@ export async function verifyInternalBotRequest(
     throw new Error("Interne Signatur ist falsch.");
   }
 
-  await env.BOT_EVENT_NONCES.put(nonceKey, "1", { expirationTtl: 300 });
+  const nonceKey = `bot:${nonce}`;
+
+  if (env.BOT_EVENT_NONCES) {
+    const existingNonce = await env.BOT_EVENT_NONCES.get(nonceKey);
+    if (existingNonce) {
+      throw new Error("Interne Signatur wurde bereits verwendet.");
+    }
+
+    await env.BOT_EVENT_NONCES.put(nonceKey, "1", { expirationTtl: 300 });
+  } else {
+    console.warn("BOT_EVENT_NONCES KV-Binding fehlt. Interne Bot-Anfragen werden ohne Replay-Cache validiert.");
+  }
 }

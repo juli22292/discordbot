@@ -16,6 +16,13 @@ interface DiscordBotGuild {
   icon?: string | null;
 }
 
+export interface DiscordApplicationCommand {
+  id: string;
+  name: string;
+  description?: string;
+  type?: number;
+}
+
 interface DiscordRateLimitBody {
   message?: string;
   retry_after?: number;
@@ -162,6 +169,15 @@ export async function fetchDiscordBotGuild(env: Env, guildId: string): Promise<D
   }
 
   return response.json<DiscordBotGuild>();
+}
+
+export async function fetchDiscordApplicationCommands(env: Env): Promise<DiscordApplicationCommand[]> {
+  const botToken = env.DISCORD_BOT_TOKEN?.trim();
+  if (!botToken || !env.DISCORD_CLIENT_ID?.trim()) return [];
+
+  return discordFetch<DiscordApplicationCommand[]>(`/applications/${env.DISCORD_CLIENT_ID}/commands`, {
+    headers: { Authorization: `Bot ${botToken}` }
+  });
 }
 
 export function discordAvatarUrl(user: Pick<DiscordUser, "id" | "avatar">): string | null {

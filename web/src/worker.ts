@@ -15,6 +15,7 @@ import {
   discordGuildIconUrl,
   discordOAuthAuthorizeUrl,
   exchangeDiscordCode,
+  fetchDiscordApplicationCommands,
   fetchDiscordBotGuild,
   fetchDiscordGuilds,
   fetchDiscordUser,
@@ -155,6 +156,30 @@ interface BotRuntimeRow {
   process_uptime_seconds: number | null;
   payload: string;
   updated_at: string;
+}
+
+interface AdminGuildRuntimeItem {
+  id: string;
+  name: string;
+  icon: string | null;
+  memberCount: number | null;
+  channelCount: number;
+  roleCount: number;
+  ownerId?: string | null;
+  ownerName?: string | null;
+  shardId?: number | null;
+  createdAt?: string | null;
+  joinedAt?: string | null;
+}
+
+interface PterodactylRuntime {
+  state: string;
+  suspended: boolean;
+  ramMb: number | null;
+  cpuPercent: number | null;
+  diskMb: number | null;
+  uptimeSeconds: number | null;
+  checkedAt: string;
 }
 
 interface CookieSessionData {
@@ -777,6 +802,202 @@ function normalizeBotRuntime(row: BotRuntimeRow | null): Record<string, unknown>
     processUptimeSeconds: row.process_uptime_seconds,
     updatedAt: row.updated_at,
     details: parseJson<Record<string, unknown>>(row.payload, {})
+  };
+}
+
+function finiteNumber(value: unknown): number | null {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function roundNumber(value: number | null, fractionDigits = 2): number | null {
+  if (value === null) return null;
+  const factor = 10 ** fractionDigits;
+  return Math.round(value * factor) / factor;
+}
+
+function pterodactylPanelUrl(env: Env): string | null {
+  const raw = env.PTERODACTYL_PANEL_URL?.trim();
+  if (!raw) return null;
+
+  try {
+    const url = new URL(raw.startsWith("http") ? raw : `https://${raw}`);
+    return url.origin;
+  } catch {
+    return null;
+  }
+}
+
+async function fetchPterodactylRuntime(env: Env): Promise<PterodactylRuntime | null> {
+  const panelUrl = pterodactylPanelUrl(env);
+  const apiKey = env.PTERODACTYL_CLIENT_API_KEY?.trim();
+  const serverId = env.PTERODACTYL_SERVER_ID?.trim();
+
+  if (!panelUrl || !apiKey || !serverId) return null;
+
+  try {
+    const response = await fetch(`${panelUrl}/api/client/servers/${encodeURIComponent(serverId)}/resources`, {
+      headers: {
+        Accept: "application/json",
+        Authorization: `Bearer ${apiKey}`
+      }
+    });
+
+    if (!response.ok) {
+      const text = await response.text();
+      console.warn(`Pterodactyl API ${response.status}: ${text.slice(0, 300)}`);
+      return null;
+    }
+
+    const data = await response.json() as {
+      attributes?: {
+        current_state?: string;
+        is_suspended?: boolean;
+        resources?: {
+          memory_bytes?: number;
+          cpu_absolute?: number;
+          disk_bytes?: number;
+          uptime?: number;
+        };
+      };
+    };
+    const attributes = data.attributes ?? {};
+    const resources = attributes.resources ?? {};
+    const memoryBytes = finiteNumber(resources.memory_bytes);
+    const diskBytes = finiteNumber(resources.disk_bytes);
+    const uptimeMs = finiteNumber(resources.uptime);
+
+    return {
+      state: String(attributes.current_state ?? "unknown"),
+      suspended: Boolean(attributes.is_suspended),
+      ramMb: roundNumber(memoryBytes === null ? null : memoryBytes / 1024 / 1024),
+      cpuPercent: roundNumber(finiteNumber(resources.cpu_absolute)),
+      diskMb: roundNumber(diskBytes === null ? null : diskBytes / 1024 / 1024),
+      uptimeSeconds: uptimeMs === null ? null : Math.floor(uptimeMs / 1000),
+      checkedAt: nowIso()
+    };
+  } catch (error) {
+    console.warn("Pterodactyl API konnte nicht abgefragt werden", error);
+    return null;
+  }
+}
+
+async function fallbackAdminGuilds(env: Env): Promise<AdminGuildRuntimeItem[]> {
+  const rows = await all<Record<string, unknown>>(
+    requireDb(env).prepare(
+      `SELECT
+         g.discord_guild_id AS id,
+         g.name,
+         g.icon,
+         g.bot_joined_at AS joinedAt,
+         (SELECT COUNT(*) FROM guild_channels c WHERE c.guild_id = g.id) AS channelCount,
+         (SELECT COUNT(*) FROM guild_roles r WHERE r.guild_id = g.id) AS roleCount
+       FROM guilds g
+       WHERE g.bot_joined_at IS NOT NULL
+       ORDER BY LOWER(g.name) ASC`
+    )
+  );
+
+  return rows.map((guild) => ({
+    id: String(guild.id ?? ""),
+    name: String(guild.name ?? "Unbekannte Guild"),
+    icon: guild.icon ? String(guild.icon) : null,
+    memberCount: null,
+    channelCount: Number(guild.channelCount ?? 0),
+    roleCount: Number(guild.roleCount ?? 0),
+    joinedAt: guild.joinedAt ? String(guild.joinedAt) : null
+  }));
+}
+
+async function refreshCommandStatsFromDiscord(env: Env, knownCommands: number): Promise<number> {
+  if (knownCommands > 0 || !env.DISCORD_BOT_TOKEN?.trim() || !env.DISCORD_CLIENT_ID?.trim()) {
+    return knownCommands;
+  }
+
+  try {
+    const commands = await fetchDiscordApplicationCommands(env);
+    if (!commands.length) return knownCommands;
+
+    const timestamp = nowIso();
+    for (const command of commands) {
+      if (!command.name || !/^[a-z0-9 _-]{1,80}$/.test(command.name)) continue;
+      await requireDb(env).prepare(
+        `INSERT INTO bot_commands (id, command_name, description, command_type, updated_at)
+         VALUES (?, ?, ?, ?, ?)
+         ON CONFLICT(command_name) DO UPDATE SET
+           description = excluded.description,
+           command_type = excluded.command_type,
+           updated_at = excluded.updated_at`
+      )
+        .bind(newId("bc"), command.name, command.description ?? "", "slash", timestamp)
+        .run();
+    }
+
+    return commands.length;
+  } catch (error) {
+    console.warn("Discord Commands konnten nicht direkt geladen werden", error);
+    return knownCommands;
+  }
+}
+
+function buildAdminRuntime(
+  row: BotRuntimeRow | null,
+  options: {
+    guilds: AdminGuildRuntimeItem[];
+    pterodactyl: PterodactylRuntime | null;
+    installedGuilds: number;
+    knownGuilds: number;
+    knownCommands: number;
+  }
+): Record<string, unknown> | null {
+  const normalized = normalizeBotRuntime(row);
+  const pterodactyl = options.pterodactyl;
+
+  if (normalized) {
+    const details = (normalized.details && typeof normalized.details === "object" ? normalized.details : {}) as Record<string, unknown>;
+    if (!Array.isArray(details.guilds) || details.guilds.length === 0) details.guilds = options.guilds;
+    if (pterodactyl) {
+      details.pterodactyl = pterodactyl;
+      normalized.ramMb = normalized.ramMb ?? pterodactyl.ramMb;
+      normalized.cpuPercent = normalized.cpuPercent ?? pterodactyl.cpuPercent;
+      normalized.uptimeSeconds = normalized.uptimeSeconds ?? pterodactyl.uptimeSeconds;
+      normalized.processUptimeSeconds = normalized.processUptimeSeconds ?? pterodactyl.uptimeSeconds;
+    }
+    normalized.details = details;
+    normalized.guildCount = (finiteNumber(normalized.guildCount) ?? options.installedGuilds) || options.knownGuilds || options.guilds.length;
+    normalized.commandCount = finiteNumber(normalized.commandCount) ?? options.knownCommands;
+    return normalized;
+  }
+
+  if (!pterodactyl && !options.guilds.length && !options.knownCommands && !options.installedGuilds && !options.knownGuilds) {
+    return null;
+  }
+
+  return {
+    id: "fallback",
+    status: pterodactyl ? (pterodactyl.suspended || pterodactyl.state !== "running" ? "offline" : "online") : null,
+    activityType: null,
+    activityText: null,
+    latencyMs: null,
+    ramMb: pterodactyl?.ramMb ?? null,
+    cpuPercent: pterodactyl?.cpuPercent ?? null,
+    guildCount: options.installedGuilds || options.knownGuilds || options.guilds.length,
+    userCount: null,
+    commandCount: options.knownCommands,
+    shardCount: null,
+    pythonVersion: null,
+    discordPyVersion: null,
+    platform: pterodactyl ? "Pterodactyl" : null,
+    botVersion: null,
+    uptimeSeconds: pterodactyl?.uptimeSeconds ?? null,
+    processUptimeSeconds: pterodactyl?.uptimeSeconds ?? null,
+    updatedAt: pterodactyl?.checkedAt ?? null,
+    details: {
+      heartbeat: false,
+      source: pterodactyl ? "pterodactyl" : "database",
+      guilds: options.guilds,
+      pterodactyl
+    }
   };
 }
 
@@ -1611,14 +1832,25 @@ app.get("/api/admin/bot", async (c) => {
   const commandStats = await first<Record<string, unknown>>(
     c.env.DB.prepare("SELECT COUNT(*) AS knownCommands FROM bot_commands")
   );
+  const installedGuilds = Number(guildStats?.installedGuilds ?? 0);
+  const knownGuilds = Number(guildStats?.knownGuilds ?? 0);
+  const fallbackGuilds = await fallbackAdminGuilds(c.env);
+  const knownCommands = await refreshCommandStatsFromDiscord(c.env, Number(commandStats?.knownCommands ?? 0));
+  const pterodactyl = await fetchPterodactylRuntime(c.env);
 
   return json(c, {
-    runtime: normalizeBotRuntime(runtime),
+    runtime: buildAdminRuntime(runtime, {
+      guilds: fallbackGuilds,
+      pterodactyl,
+      installedGuilds,
+      knownGuilds,
+      knownCommands
+    }),
     adminRestricted: adminUserIds(c.env).size > 0,
     stats: {
-      knownGuilds: Number(guildStats?.knownGuilds ?? 0),
-      installedGuilds: Number(guildStats?.installedGuilds ?? 0),
-      knownCommands: Number(commandStats?.knownCommands ?? 0)
+      knownGuilds,
+      installedGuilds,
+      knownCommands
     },
     recentEvents: recentEvents.map((event) => ({
       ...event,

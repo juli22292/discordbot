@@ -1896,21 +1896,62 @@ textarea {
   padding: 12px;
 }
 
+.owner-guild-avatar,
 .owner-guild-initial {
   width: 42px;
   height: 42px;
-  display: grid;
-  place-items: center;
   border: 1px solid rgba(119, 183, 255, 0.22);
   border-radius: 8px;
+}
+
+.owner-guild-avatar {
+  display: block;
+  object-fit: cover;
+  background: rgba(119, 183, 255, 0.08);
+}
+
+.owner-guild-initial {
+  display: grid;
+  place-items: center;
   color: var(--blue);
   font-weight: 800;
   background: rgba(119, 183, 255, 0.1);
 }
 
+.owner-guild-main {
+  min-width: 0;
+}
+
+.owner-guild-main strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .owner-guild-row small {
   display: block;
   margin-top: 4px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.owner-guild-id {
+  font-family: "JetBrains Mono", "SFMono-Regular", Consolas, monospace;
+}
+
+.owner-guild-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.owner-guild-meta span {
+  min-width: 0;
+  max-width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;

@@ -2,7 +2,7 @@ export interface Env {
   DB: D1Database;
   ASSETS?: Fetcher;
   OAUTH_STATE: KVNamespace;
-  BOT_EVENT_NONCES: KVNamespace;
+  BOT_EVENT_NONCES?: KVNamespace;
   GUILD_MEDIA?: R2Bucket;
   SYNC_QUEUE?: Queue<SyncEventMessage>;
   APP_URL: string;
@@ -16,6 +16,9 @@ export interface Env {
   SESSION_TTL_SECONDS?: string;
   BOT_INVITE_PERMISSIONS?: string;
   ADMIN_DISCORD_USER_IDS?: string;
+  PTERODACTYL_PANEL_URL?: string;
+  PTERODACTYL_CLIENT_API_KEY?: string;
+  PTERODACTYL_SERVER_ID?: string;
 }
 
 export interface DiscordUser {
