@@ -973,13 +973,13 @@ function formatDateTime(value: string | null | undefined) {
 function statusLabel(value: string | null | undefined) {
   switch (value) {
     case "online":
-      return "Erreichbar";
+      return "Online";
     case "idle":
       return "Abwesend";
     case "dnd":
-      return "Nicht stören";
+      return "Bitte nicht stören";
     case "offline":
-      return "Unsichtbar";
+      return "Offline";
     default:
       return value || "unbekannt";
   }
@@ -1034,7 +1034,7 @@ function AdminPage() {
         body: JSON.stringify(presence)
       });
       setStatus("Statusänderung wurde an den Bot gesendet.");
-      await admin.reload();
+      window.setTimeout(() => void admin.reload(), 12000);
     } catch (error) {
       setStatus(error instanceof Error ? error.message : "Status konnte nicht geändert werden.");
     } finally {
@@ -1085,12 +1085,12 @@ function AdminPage() {
                 </div>
                 <div className="form-grid">
                   <label>
-                    Sichtbarkeit
+                    Online-Status
                     <select value={presence.status} onChange={(event) => setPresence({ ...presence, status: event.target.value })}>
-                      <option value="online">Erreichbar</option>
+                      <option value="online">Online</option>
                       <option value="idle">Abwesend</option>
-                      <option value="dnd">Nicht stören</option>
-                      <option value="offline">Unsichtbar</option>
+                      <option value="dnd">Bitte nicht stören</option>
+                      <option value="offline">Offline</option>
                     </select>
                   </label>
                   <label>
@@ -1369,7 +1369,7 @@ function AdminPageModern() {
         body: JSON.stringify(presence)
       });
       setSaveStatus("Statusänderung wurde an den Bot gesendet.");
-      await admin.reload();
+      window.setTimeout(() => void admin.reload(), 12000);
     } catch (error) {
       setSaveStatus(error instanceof Error ? error.message : "Status konnte nicht geändert werden.");
     } finally {
@@ -1449,12 +1449,12 @@ function AdminPageModern() {
 
                 <div className="form-grid">
                   <label>
-                    Sichtbarkeit
+                    Online-Status
                     <select value={presence.status} onChange={(event) => setPresence({ ...presence, status: event.target.value })}>
-                      <option value="online">Erreichbar</option>
+                      <option value="online">Online</option>
                       <option value="idle">Abwesend</option>
-                      <option value="dnd">Nicht stören</option>
-                      <option value="offline">Unsichtbar</option>
+                      <option value="dnd">Bitte nicht stören</option>
+                      <option value="offline">Offline</option>
                     </select>
                   </label>
                   <label>
