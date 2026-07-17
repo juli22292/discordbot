@@ -122,6 +122,7 @@ type SelectableGuildChannel = {
   name: string;
   type: string;
   categoryName: string | null;
+  canSend?: boolean | null;
 };
 
 type RoleOption = {
@@ -1169,12 +1170,37 @@ function channelTypeLabel(type: string) {
       return "Thread";
     case "voice":
       return "Voice";
+    case "stage_voice":
+      return "Stage";
     case "category":
     case "kategorie":
       return "Kategorie";
     default:
       return type || "Kanal";
   }
+}
+
+function isTextGuildChannel(channel: SelectableGuildChannel) {
+  const type = channel.type.toLowerCase();
+  return (
+    type === "text" ||
+    type === "news" ||
+    type === "forum" ||
+    type === "public_thread" ||
+    type === "private_thread" ||
+    type === "thread" ||
+    type === "news-thread" ||
+    type === "privater thread"
+  );
+}
+
+function isVoiceGuildChannel(channel: SelectableGuildChannel) {
+  const type = channel.type.toLowerCase();
+  return type === "voice" || type === "stage" || type === "stage_voice" || type === "stage voice";
+}
+
+function isInviteGuildChannel(channel: SelectableGuildChannel) {
+  return isTextGuildChannel(channel) || isVoiceGuildChannel(channel);
 }
 
 function groupedChannels<T extends SelectableGuildChannel>(channels: T[]) {
@@ -1208,7 +1234,7 @@ function ChannelSelectOptions({
         <optgroup label={group.label} key={group.label}>
           {group.items.map((channel) => (
             <option value={channel.id} key={channel.id}>
-              #{channel.name} - {channelTypeLabel(channel.type)}
+              #{channel.name} - {channelTypeLabel(channel.type)}{channel.canSend === false ? " - keine Schreibrechte" : ""}
             </option>
           ))}
         </optgroup>
@@ -1955,7 +1981,7 @@ function AdminGuildViewPage({ path }: { path: string }) {
 
   const inviteChannels = useMemo(() => {
     return (data?.channels ?? []).filter((channel) => {
-      return ["Text", "News", "Forum"].includes(channel.type) && channel.canSend !== false;
+      return isInviteGuildChannel(channel);
     });
   }, [data?.channels]);
 
@@ -2698,10 +2724,7 @@ function LoggingPage({ guildId }: { guildId: string }) {
   }, [logging.data]);
 
   const textChannels = useMemo(
-    () =>
-      (channels.data?.channels ?? []).filter((channel) =>
-        channel.canSend && ["text", "news", "forum", "public_thread", "private_thread"].includes(channel.type)
-      ),
+    () => (channels.data?.channels ?? []).filter(isTextGuildChannel),
     [channels.data]
   );
   const activeEvents = LOG_CATEGORIES.filter((category) => draft.events[category.key]).length;
@@ -2937,10 +2960,7 @@ function WelcomePage({ guildId }: { guildId: string }) {
   }, [welcome.data]);
 
   const textChannels = useMemo(
-    () =>
-      (channels.data?.channels ?? []).filter((channel) =>
-        channel.canSend && ["text", "news", "forum", "public_thread", "private_thread"].includes(channel.type)
-      ),
+    () => (channels.data?.channels ?? []).filter(isTextGuildChannel),
     [channels.data]
   );
   const manageableRoles = useMemo(
