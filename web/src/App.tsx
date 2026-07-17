@@ -19,6 +19,7 @@ import {
   Database,
   ExternalLink,
   Gauge,
+  Gamepad2,
   HardDrive,
   Home,
   Hash,
@@ -29,6 +30,8 @@ import {
   Loader2,
   LogOut,
   MessageSquare,
+  Mic2,
+  Music2,
   Palette,
   Plus,
   Radio,
@@ -112,6 +115,13 @@ type ChannelOption = {
   type: string;
   categoryName: string | null;
   canSend: boolean;
+};
+
+type SelectableGuildChannel = {
+  id: string;
+  name: string;
+  type: string;
+  categoryName: string | null;
 };
 
 type RoleOption = {
@@ -363,6 +373,39 @@ const plannedSections = [
       { kicker: "Schutz", title: "Bestätigungspflicht", text: "Gefährliche Aktionen erst nach klarer Bestätigung ausführen." }
     ],
     tone: "danger"
+  },
+  {
+    section: "temp-voice",
+    label: "Temp-Voice",
+    headline: "Temp-Voice",
+    description: "Temporäre Voice-Kanäle mit Join-to-create, Besitzerrechten und sauberem Auto-Cleanup.",
+    items: [
+      { kicker: "Setup", title: "Join-to-create", text: "Einen Voice-Kanal auswählen, über den Mitglieder eigene Räume erstellen." },
+      { kicker: "Kontrolle", title: "Raumrechte", text: "Besitzer, Limits, Namen, Sperren und Einladungen direkt verwalten." },
+      { kicker: "Cleanup", title: "Auto-Aufräumen", text: "Leere temporäre Kanäle automatisch entfernen und alte Räume sauber schließen." }
+    ]
+  },
+  {
+    section: "spotify-music",
+    label: "Spotify Music",
+    headline: "Spotify Music",
+    description: "Musiksteuerung für Spotify/Lavalink mit Queue, DJ-Regeln und stabilen Player-Einstellungen.",
+    items: [
+      { kicker: "Player", title: "Queue & Playback", text: "Aktuelle Queue, Lautstärke, Loop, Skip und Autoplay über das Panel steuern." },
+      { kicker: "Rechte", title: "DJ-Modus", text: "DJ-Rollen, Vote-Skip und erlaubte Musikkanäle sauber einstellen." },
+      { kicker: "Quelle", title: "Spotify-Fokus", text: "Spotify-Suche, Playlists und Lavalink-Status zentral sichtbar machen." }
+    ]
+  },
+  {
+    section: "games",
+    label: "Games",
+    headline: "Games",
+    description: "Mini-Games, Economy-Aktionen und Spielrunden übersichtlich aktivieren und konfigurieren.",
+    items: [
+      { kicker: "Spiele", title: "Mini-Games", text: "8ball, Würfel, Ship und weitere Fun-Commands pro Server steuern." },
+      { kicker: "Runden", title: "Sessions", text: "Spielkanäle, Cooldowns und Teilnahme-Regeln pro Guild vorbereiten." },
+      { kicker: "Belohnungen", title: "Rewards", text: "XP, Coins oder Rollen später sauber mit Spielaktivität verbinden." }
+    ]
   }
 ] as const;
 
@@ -378,6 +421,12 @@ function plannedIcon(section: string, size = 17) {
       return <Shield size={size} />;
     case "danger-zone":
       return <AlertTriangle size={size} />;
+    case "temp-voice":
+      return <Mic2 size={size} />;
+    case "spotify-music":
+      return <Music2 size={size} />;
+    case "games":
+      return <Gamepad2 size={size} />;
     default:
       return <Settings size={size} />;
   }
@@ -1104,6 +1153,68 @@ function formatInviteUses(uses: number | null | undefined, maxUses: number | nul
 function formatDateTime(value: string | null | undefined) {
   if (!value) return "unbekannt";
   return new Date(value).toLocaleString("de-DE");
+}
+
+function channelTypeLabel(type: string) {
+  switch (type.toLowerCase()) {
+    case "text":
+      return "Textkanal";
+    case "news":
+      return "Ankündigungen";
+    case "forum":
+      return "Forum";
+    case "public_thread":
+    case "private_thread":
+    case "thread":
+      return "Thread";
+    case "voice":
+      return "Voice";
+    case "category":
+    case "kategorie":
+      return "Kategorie";
+    default:
+      return type || "Kanal";
+  }
+}
+
+function groupedChannels<T extends SelectableGuildChannel>(channels: T[]) {
+  const groups = new Map<string, T[]>();
+
+  for (const channel of channels) {
+    const label = channel.categoryName?.trim() || "Ohne Kategorie";
+    groups.set(label, [...(groups.get(label) ?? []), channel]);
+  }
+
+  return Array.from(groups.entries()).map(([label, items]) => ({ label, items }));
+}
+
+function ChannelSelectOptions({
+  channels,
+  noneLabel = "Nicht gesetzt",
+  emptyLabel = "Keine passenden Kanäle sichtbar",
+  includeNone = true
+}: {
+  channels: SelectableGuildChannel[];
+  noneLabel?: string;
+  emptyLabel?: string;
+  includeNone?: boolean;
+}) {
+  if (!channels.length) return <option value="">{emptyLabel}</option>;
+
+  return (
+    <>
+      {includeNone && <option value="">{noneLabel}</option>}
+      {groupedChannels(channels).map((group) => (
+        <optgroup label={group.label} key={group.label}>
+          {group.items.map((channel) => (
+            <option value={channel.id} key={channel.id}>
+              #{channel.name} - {channelTypeLabel(channel.type)}
+            </option>
+          ))}
+        </optgroup>
+      ))}
+    </>
+  );
 }
 
 function statusLabel(value: string | null | undefined) {
@@ -2051,15 +2162,7 @@ function AdminGuildViewPage({ path }: { path: string }) {
                 <label>
                   Kanal
                   <select value={inviteChannelId} onChange={(event) => setInviteChannelId(event.target.value)} disabled={!inviteChannels.length}>
-                    {inviteChannels.length === 0 ? (
-                      <option value="">Kein passender Kanal sichtbar</option>
-                    ) : (
-                      inviteChannels.map((channel) => (
-                        <option value={channel.id} key={channel.id}>
-                          #{channel.name} · {channel.type}
-                        </option>
-                      ))
-                    )}
+                    <ChannelSelectOptions channels={inviteChannels} emptyLabel="Kein passender Kanal sichtbar" includeNone={false} />
                   </select>
                 </label>
                 <label>
@@ -2730,10 +2833,7 @@ function LoggingPage({ guildId }: { guildId: string }) {
               <label>
                 Standard-Logkanal
                 <select value={defaultChannelId ?? ""} onChange={(event) => updateChannel("general", event.target.value)}>
-                  <option value="">Nicht gesetzt</option>
-                  {textChannels.map((channel) => (
-                    <option value={channel.id} key={channel.id}>#{channel.name}</option>
-                  ))}
+                  <ChannelSelectOptions channels={textChannels} noneLabel="Nicht gesetzt" />
                 </select>
               </label>
               <label>
@@ -2799,10 +2899,10 @@ function LoggingPage({ guildId }: { guildId: string }) {
                   <label>
                     Zielkanal
                     <select value={draft.channelMappings[category.key] ?? ""} onChange={(event) => updateChannel(category.key, event.target.value)}>
-                      <option value="">{category.key === "general" ? "Nicht gesetzt" : "Fallback nutzen"}</option>
-                      {textChannels.map((channel) => (
-                        <option value={channel.id} key={channel.id}>#{channel.name}</option>
-                      ))}
+                      <ChannelSelectOptions
+                        channels={textChannels}
+                        noneLabel={category.key === "general" ? "Nicht gesetzt" : "Fallback nutzen"}
+                      />
                     </select>
                   </label>
                   <small className="logging-category-route">
@@ -2944,12 +3044,7 @@ function WelcomePage({ guildId }: { guildId: string }) {
                 <label>
                   Zielkanal
                   <select value={draft.channelId ?? ""} onChange={(event) => setDraft({ ...draft, channelId: event.target.value || null })}>
-                    <option value="">Kanal auswählen</option>
-                    {textChannels.map((channel) => (
-                      <option value={channel.id} key={channel.id}>
-                        #{channel.name}{channel.categoryName ? ` - ${channel.categoryName}` : ""}
-                      </option>
-                    ))}
+                    <ChannelSelectOptions channels={textChannels} noneLabel="Kanal auswählen" />
                   </select>
                 </label>
                 <label>
