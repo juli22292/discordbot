@@ -142,6 +142,28 @@ type WelcomeSettings = {
   };
 };
 
+const LOG_CATEGORIES = [
+  { key: "general", label: "Allgemein", text: "Fallback für alles ohne eigene Kategorie.", icon: Settings },
+  { key: "messages", label: "Nachrichten", text: "Nachrichtenänderungen und gelöschte Inhalte.", icon: MessageSquare },
+  { key: "moderation", label: "Moderation", text: "Warns, Kicks, Bans, Timeouts und Modcases.", icon: Shield },
+  { key: "security", label: "Sicherheit", text: "Automod, Raidmode, Antinuke und kritische Schutzereignisse.", icon: ShieldCheck },
+  { key: "tickets", label: "Tickets", text: "Ticket-Erstellung, Schließung und Support-Flows.", icon: LifeBuoy },
+  { key: "voice", label: "Voice", text: "Voice-Bewegungen und Sprachkanal-Aktionen.", icon: Radio },
+  { key: "members", label: "Mitglieder", text: "Joins, Leaves und mitgliederbezogene Ereignisse.", icon: UserRound },
+  { key: "roles", label: "Rollen", text: "Rollenänderungen und Rollenverwaltung.", icon: BadgeCheck },
+  { key: "channels", label: "Kanäle", text: "Kanaländerungen, Erstellungen und Löschungen.", icon: Hash },
+  { key: "commands", label: "Befehle", text: "Slash- und Textbefehle aus dem Bot.", icon: Command },
+  { key: "system", label: "System", text: "Setup, Bot-Updates, Backups und Systemaktionen.", icon: Cpu }
+] as const;
+
+type LogCategory = (typeof LOG_CATEGORIES)[number]["key"];
+
+type LoggingSettings = {
+  enabled: boolean;
+  channelMappings: Record<LogCategory, string | null>;
+  events: Record<LogCategory, boolean>;
+};
+
 type AdminRuntime = {
   id: string;
   status: string | null;
@@ -2251,10 +2273,11 @@ function Dashboard({ path }: { path: string }) {
           <SideLink icon={<Bot size={17} />} label="Bot-Profil" section="profile" current={section} guildId={guildId} />
           <SideLink icon={<Command size={17} />} label="Slash-Befehle" section="commands" current={section} guildId={guildId} />
           <SideLink icon={<ClipboardList size={17} />} label="Custom Commands" section="custom-commands" current={section} guildId={guildId} />
+          <SideLink icon={<ListFilter size={17} />} label="Logging" section="logging" current={section} guildId={guildId} />
           <SideLink icon={<Shield size={17} />} label="Audit-Log" section="audit-log" current={section} guildId={guildId} />
           <SideLink icon={<Sparkles size={17} />} label="Begrüßung" section="welcome" current={section} guildId={guildId} />
           <div className="sidebar-group-title">Geplant</div>
-          {plannedSections.filter((item) => item.section !== "welcome").map((item) => (
+          {plannedSections.filter((item) => item.section !== "welcome" && item.section !== "logging").map((item) => (
             <SideLink
               icon={plannedIcon(item.section)}
               label={item.label}
@@ -2289,9 +2312,10 @@ function Dashboard({ path }: { path: string }) {
               {section === "profile" && <ProfilePage guildId={guildId} settings={detail.data.settings} onSaved={detail.reload} />}
               {section === "commands" && <CommandsPage guildId={guildId} />}
               {section === "custom-commands" && <CustomCommandsPage guildId={guildId} />}
+              {section === "logging" && <LoggingPage guildId={guildId} />}
               {section === "audit-log" && <AuditLogPage guildId={guildId} />}
               {section === "welcome" && <WelcomePage guildId={guildId} />}
-              {plannedSection && section !== "welcome" && <PlannedPage section={plannedSection} />}
+              {plannedSection && section !== "welcome" && section !== "logging" && <PlannedPage section={plannedSection} />}
             </>
           )}
         </main>
@@ -2549,6 +2573,253 @@ function replaceTemplateTokens(value: string) {
 
 function roleColor(role: RoleOption) {
   return role.color ? `#${role.color.toString(16).padStart(6, "0")}` : "#7b8494";
+}
+
+function defaultLoggingSettings(): LoggingSettings {
+  const channelMappings = Object.fromEntries(LOG_CATEGORIES.map((category) => [category.key, null])) as Record<LogCategory, string | null>;
+  const events = Object.fromEntries(LOG_CATEGORIES.map((category) => [category.key, true])) as Record<LogCategory, boolean>;
+  return { enabled: false, channelMappings, events };
+}
+
+function LoggingPage({ guildId }: { guildId: string }) {
+  const logging = useApi<{ logging: LoggingSettings }>(`/api/guilds/${guildId}/logging`, [guildId]);
+  const channels = useApi<{ channels: ChannelOption[] }>(`/api/guilds/${guildId}/channels`, [guildId]);
+  const [draft, setDraft] = useState<LoggingSettings>(defaultLoggingSettings);
+  const [status, setStatus] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [testing, setTesting] = useState(false);
+  const [testCategory, setTestCategory] = useState<LogCategory>("general");
+
+  useEffect(() => {
+    if (logging.data?.logging) setDraft(logging.data.logging);
+  }, [logging.data]);
+
+  const textChannels = useMemo(
+    () =>
+      (channels.data?.channels ?? []).filter((channel) =>
+        channel.canSend && ["text", "news", "forum", "public_thread", "private_thread"].includes(channel.type)
+      ),
+    [channels.data]
+  );
+  const activeEvents = LOG_CATEGORIES.filter((category) => draft.events[category.key]).length;
+  const mappedChannels = LOG_CATEGORIES.filter((category) => draft.channelMappings[category.key]).length;
+  const defaultChannelId = draft.channelMappings.general;
+
+  function updateChannel(category: LogCategory, channelId: string) {
+    setDraft((current) => ({
+      ...current,
+      channelMappings: {
+        ...current.channelMappings,
+        [category]: channelId || null
+      }
+    }));
+  }
+
+  function updateEvent(category: LogCategory, enabled: boolean) {
+    setDraft((current) => ({
+      ...current,
+      events: {
+        ...current.events,
+        [category]: enabled
+      }
+    }));
+  }
+
+  function setAllEvents(enabled: boolean) {
+    setDraft((current) => ({
+      ...current,
+      events: Object.fromEntries(LOG_CATEGORIES.map((category) => [category.key, enabled])) as Record<LogCategory, boolean>
+    }));
+  }
+
+  function applyCoreProfile() {
+    const core = new Set<LogCategory>(["general", "moderation", "security", "members", "system"]);
+    setDraft((current) => ({
+      ...current,
+      enabled: true,
+      events: Object.fromEntries(LOG_CATEGORIES.map((category) => [category.key, core.has(category.key)])) as Record<LogCategory, boolean>
+    }));
+  }
+
+  function resetCategoryChannels() {
+    setDraft((current) => ({
+      ...current,
+      channelMappings: {
+        ...Object.fromEntries(LOG_CATEGORIES.map((category) => [category.key, null])),
+        general: current.channelMappings.general
+      } as Record<LogCategory, string | null>
+    }));
+  }
+
+  async function save() {
+    setSaving(true);
+    setStatus(null);
+    try {
+      const response = await api<{ logging: LoggingSettings }>(`/api/guilds/${guildId}/logging`, {
+        method: "PUT",
+        body: JSON.stringify(draft)
+      });
+      setDraft(response.logging);
+      setStatus("Logging gespeichert und zur Bot-Synchronisierung vorgemerkt.");
+      await logging.reload();
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : "Logging konnte nicht gespeichert werden.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function sendTest() {
+    setTesting(true);
+    setStatus(null);
+    try {
+      await api(`/api/guilds/${guildId}/logging/test`, {
+        method: "POST",
+        body: JSON.stringify({ category: testCategory })
+      });
+      setStatus("Log-Test wurde an den Bot gesendet.");
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : "Log-Test konnte nicht gesendet werden.");
+    } finally {
+      setTesting(false);
+    }
+  }
+
+  return (
+    <section className="logging-page">
+      <div className="logging-hero">
+        <div>
+          <p className="eyebrow">
+            <ListFilter size={15} />
+            Logging Center
+          </p>
+          <h2>Logging</h2>
+          <p>Kategorien, Logkanäle und Testlauf zentral steuern. Die Änderungen werden als Sync-Job an den laufenden Bot geschickt.</p>
+        </div>
+        <label className="welcome-switch logging-switch">
+          <input type="checkbox" checked={draft.enabled} onChange={(event) => setDraft({ ...draft, enabled: event.target.checked })} />
+          <span>{draft.enabled ? "Aktiv" : "Inaktiv"}</span>
+        </label>
+      </div>
+
+      {((logging.loading && !logging.data) || (channels.loading && !channels.data)) && <LoadingBlock />}
+      {(logging.error || channels.error) && <Notice tone="danger" text={logging.error || channels.error || "Fehler beim Laden."} />}
+
+      {!logging.loading && (
+        <>
+          <section className="logging-summary-grid">
+            <StatusTile icon={<ListFilter size={19} />} label="Status" value={draft.enabled ? "aktiv" : "inaktiv"} tone={draft.enabled ? "ok" : "warn"} />
+            <StatusTile icon={<Check size={19} />} label="Events" value={`${activeEvents}/${LOG_CATEGORIES.length}`} />
+            <StatusTile icon={<Hash size={19} />} label="Ziele" value={String(mappedChannels)} />
+            <StatusTile icon={<MessageSquare size={19} />} label="Kanäle" value={String(textChannels.length)} tone={textChannels.length ? "ok" : "warn"} />
+          </section>
+
+          <section className="panel logging-control-panel">
+            <div className="panel-title">
+              <div>
+                <h2>Steuerung</h2>
+                <p className="muted">Standardkanal setzen, Profile anwenden und einen echten Bot-Test auslösen.</p>
+              </div>
+              <RefreshButton loading={(logging.loading && Boolean(logging.data)) || (channels.loading && Boolean(channels.data))} onClick={async () => {
+                await logging.reload();
+                await channels.reload();
+              }} label="Neu laden" />
+            </div>
+
+            <div className="logging-toolbar">
+              <label>
+                Standard-Logkanal
+                <select value={defaultChannelId ?? ""} onChange={(event) => updateChannel("general", event.target.value)}>
+                  <option value="">Nicht gesetzt</option>
+                  {textChannels.map((channel) => (
+                    <option value={channel.id} key={channel.id}>#{channel.name}</option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                Test-Kategorie
+                <select value={testCategory} onChange={(event) => setTestCategory(event.target.value as LogCategory)}>
+                  {LOG_CATEGORIES.map((category) => (
+                    <option value={category.key} key={category.key}>{category.label}</option>
+                  ))}
+                </select>
+              </label>
+              <div className="logging-action-stack">
+                <button className="primary-action inline" onClick={save} disabled={saving}>
+                  {saving ? <Loader2 className="spin" size={16} /> : <Save size={16} />}
+                  Logging speichern
+                </button>
+                <button className="secondary-action inline" onClick={sendTest} disabled={testing || !draft.enabled}>
+                  {testing ? <Loader2 className="spin" size={16} /> : <Radio size={16} />}
+                  Test senden
+                </button>
+              </div>
+            </div>
+
+            <div className="token-bar logging-quick-actions">
+              <button type="button" className="secondary-action inline" onClick={() => setAllEvents(true)}>
+                <Check size={15} />
+                Alle Events
+              </button>
+              <button type="button" className="secondary-action inline" onClick={applyCoreProfile}>
+                <ShieldCheck size={15} />
+                Kernlogs
+              </button>
+              <button type="button" className="secondary-action inline" onClick={resetCategoryChannels}>
+                <Hash size={15} />
+                Kategorien zurücksetzen
+              </button>
+            </div>
+
+            <ActionStatus status={status} />
+          </section>
+
+          <section className="logging-category-grid">
+            {LOG_CATEGORIES.map((category) => {
+              const Icon = category.icon;
+              return (
+                <article className={`logging-category-card ${draft.events[category.key] ? "active" : ""}`} key={category.key}>
+                  <div className="logging-category-head">
+                    <span>
+                      <Icon size={17} />
+                    </span>
+                    <div>
+                      <h3>{category.label}</h3>
+                      <p>{category.text}</p>
+                    </div>
+                    <label className="toggle logging-category-toggle">
+                      <input
+                        type="checkbox"
+                        checked={draft.events[category.key]}
+                        onChange={(event) => updateEvent(category.key, event.target.checked)}
+                      />
+                      Aktiv
+                    </label>
+                  </div>
+                  <label>
+                    Zielkanal
+                    <select value={draft.channelMappings[category.key] ?? ""} onChange={(event) => updateChannel(category.key, event.target.value)}>
+                      <option value="">{category.key === "general" ? "Nicht gesetzt" : "Fallback nutzen"}</option>
+                      {textChannels.map((channel) => (
+                        <option value={channel.id} key={channel.id}>#{channel.name}</option>
+                      ))}
+                    </select>
+                  </label>
+                  <small className="logging-category-route">
+                    {draft.channelMappings[category.key]
+                      ? "eigener Kanal"
+                      : category.key === "general"
+                        ? "kein Standardkanal"
+                        : "nutzt Fallback"}
+                  </small>
+                </article>
+              );
+            })}
+          </section>
+        </>
+      )}
+    </section>
+  );
 }
 
 function WelcomePage({ guildId }: { guildId: string }) {

@@ -8,6 +8,22 @@ const nullableSnowflakeSchema = z
   .union([snowflakeSchema, z.literal(""), z.null(), z.undefined()])
   .transform((value) => (typeof value === "string" && value.trim() ? value.trim() : null));
 
+export const logCategories = [
+  "general",
+  "messages",
+  "moderation",
+  "security",
+  "tickets",
+  "voice",
+  "members",
+  "roles",
+  "channels",
+  "commands",
+  "system"
+] as const;
+
+export const logCategorySchema = z.enum(logCategories);
+
 const hexColorSchema = z
   .string()
   .trim()
@@ -111,6 +127,16 @@ export const inviteCreateSchema = z.object({
   maxAge: z.number().int().min(0).max(604800).default(604800),
   maxUses: z.number().int().min(0).max(100).default(0),
   temporary: z.boolean().default(false)
+});
+
+export const loggingSettingsSchema = z.object({
+  enabled: z.boolean().default(false),
+  channelMappings: z.record(logCategorySchema, nullableSnowflakeSchema).default({}),
+  events: z.record(logCategorySchema, z.boolean()).default({})
+});
+
+export const loggingTestSchema = z.object({
+  category: logCategorySchema.default("general")
 });
 
 export function assertSameGuild(routeGuildId: string, rowGuildId: string): void {

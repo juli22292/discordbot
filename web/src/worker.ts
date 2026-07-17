@@ -36,6 +36,9 @@ import {
   commandConfigSchema,
   customCommandSchema,
   inviteCreateSchema,
+  logCategories,
+  loggingSettingsSchema,
+  loggingTestSchema,
   nicknameSchema,
   partialCustomCommandSchema,
   presenceSchema,
@@ -143,6 +146,20 @@ interface WelcomeSettingsResponse {
   message: string;
   autoRoleId: string | null;
   embed: WelcomeEmbedConfig;
+}
+
+type LogCategory = (typeof logCategories)[number];
+
+interface LoggingSettingsRow {
+  guild_id: string;
+  enabled_events: string;
+  channel_mappings: string;
+}
+
+interface LoggingSettingsResponse {
+  enabled: boolean;
+  channelMappings: Record<LogCategory, string | null>;
+  events: Record<LogCategory, boolean>;
 }
 
 interface BotRuntimeRow {
@@ -717,6 +734,69 @@ async function ensureWelcomeSettings(env: Env, guildId: string): Promise<Welcome
     .run();
 
   return DEFAULT_WELCOME_SETTINGS;
+}
+
+function emptyLogChannelMappings(): Record<LogCategory, string | null> {
+  return Object.fromEntries(logCategories.map((category) => [category, null])) as Record<LogCategory, string | null>;
+}
+
+function defaultLogEvents(enabled = true): Record<LogCategory, boolean> {
+  return Object.fromEntries(logCategories.map((category) => [category, enabled])) as Record<LogCategory, boolean>;
+}
+
+function normalizeLogCategoryMap(value: Record<string, unknown>): Record<LogCategory, string | null> {
+  const mappings = emptyLogChannelMappings();
+
+  for (const category of logCategories) {
+    const channelId = value[category];
+    mappings[category] = typeof channelId === "string" && /^\d{17,20}$/.test(channelId) ? channelId : null;
+  }
+
+  return mappings;
+}
+
+function normalizeLoggingSettings(row: LoggingSettingsRow | null | undefined): LoggingSettingsResponse {
+  const rawMappings = parseJson<Record<string, unknown>>(row?.channel_mappings ?? "", {});
+  const savedEnabledEvents = parseJson<string[]>(row?.enabled_events ?? "", []);
+  const configured = rawMappings.__configured === true;
+  const enabledEvents = new Set(
+    (configured || savedEnabledEvents.length ? savedEnabledEvents : [...logCategories]).filter((category): category is LogCategory => {
+      return (logCategories as readonly string[]).includes(category);
+    })
+  );
+
+  return {
+    enabled: rawMappings.__enabled === true,
+    channelMappings: normalizeLogCategoryMap(rawMappings),
+    events: Object.fromEntries(logCategories.map((category) => [category, enabledEvents.has(category)])) as Record<LogCategory, boolean>
+  };
+}
+
+async function ensureLoggingSettings(env: Env, guildId: string): Promise<LoggingSettingsResponse> {
+  const db = requireDb(env);
+  const existing = await first<LoggingSettingsRow>(
+    db.prepare(
+      `SELECT guild_id, enabled_events, channel_mappings
+         FROM logging_settings
+        WHERE guild_id = ?`
+    ).bind(guildId)
+  );
+
+  if (existing) return normalizeLoggingSettings(existing);
+
+  const timestamp = nowIso();
+  await db.prepare(
+    `INSERT INTO logging_settings (guild_id, enabled_events, channel_mappings, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?)`
+  )
+    .bind(guildId, asJson([...logCategories]), asJson({ __configured: true, __enabled: false, ...emptyLogChannelMappings() }), timestamp, timestamp)
+    .run();
+
+  return {
+    enabled: false,
+    channelMappings: emptyLogChannelMappings(),
+    events: defaultLogEvents(true)
+  };
 }
 
 function mediaPreviewUrl(discordGuildId: string, mediaKey: string): string {
@@ -1601,6 +1681,99 @@ app.get("/api/guilds/:guildId/welcome", async (c) => {
   const access = await requireGuildManagementAccess(c, c.req.param("guildId"));
   const welcome = await ensureWelcomeSettings(c.env, access.guild.id);
   return json(c, { welcome });
+});
+
+app.get("/api/guilds/:guildId/logging", async (c) => {
+  const access = await requireGuildManagementAccess(c, c.req.param("guildId"));
+  const logging = await ensureLoggingSettings(c.env, access.guild.id);
+  return json(c, { logging });
+});
+
+app.put("/api/guilds/:guildId/logging", async (c) => {
+  const access = await requireGuildManagementAccess(c, c.req.param("guildId"));
+  const data = loggingSettingsSchema.parse(await readJsonBody(c));
+  const oldValue = await ensureLoggingSettings(c.env, access.guild.id);
+  const channelMappings = emptyLogChannelMappings();
+  const events = defaultLogEvents(true);
+
+  for (const category of logCategories) {
+    channelMappings[category] = data.channelMappings[category] ?? null;
+    events[category] = data.events[category] ?? true;
+  }
+
+  const selectedChannelIds = [...new Set(Object.values(channelMappings).filter((channelId): channelId is string => Boolean(channelId)))];
+
+  if (data.enabled && selectedChannelIds.length === 0) {
+    throw new HttpError(400, "logging_channel_required", "Bitte wähle mindestens einen Logkanal aus.");
+  }
+
+  if (selectedChannelIds.length > 0) {
+    const placeholders = selectedChannelIds.map(() => "?").join(", ");
+    const rows = await all<{ id: string; can_send: number }>(
+      c.env.DB.prepare(
+        `SELECT discord_channel_id AS id, can_send
+           FROM guild_channels
+          WHERE guild_id = ? AND discord_channel_id IN (${placeholders})`
+      ).bind(access.guild.id, ...selectedChannelIds)
+    );
+    const byId = new Map(rows.map((row) => [row.id, row]));
+
+    for (const channelId of selectedChannelIds) {
+      const channel = byId.get(channelId);
+      if (!channel) throw new HttpError(400, "logging_channel_invalid", "Ein ausgewählter Logkanal wurde im Bot-Snapshot nicht gefunden.");
+      if (!channel.can_send) throw new HttpError(400, "logging_channel_forbidden", "Der Bot kann in mindestens einem ausgewählten Logkanal nicht schreiben.");
+    }
+  }
+
+  const saved: LoggingSettingsResponse = {
+    enabled: data.enabled,
+    channelMappings,
+    events
+  };
+  const enabledEvents = logCategories.filter((category) => saved.events[category]);
+  const storedMappings = {
+    __configured: true,
+    __enabled: saved.enabled,
+    ...saved.channelMappings
+  };
+  const timestamp = nowIso();
+
+  await c.env.DB.prepare(
+    `INSERT INTO logging_settings (guild_id, enabled_events, channel_mappings, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?)
+     ON CONFLICT(guild_id) DO UPDATE SET
+       enabled_events = excluded.enabled_events,
+       channel_mappings = excluded.channel_mappings,
+       updated_at = excluded.updated_at`
+  )
+    .bind(access.guild.id, asJson(enabledEvents), asJson(storedMappings), timestamp, timestamp)
+    .run();
+
+  const eventId = await enqueueSyncEvent(c.env, access.guild, "logging_settings.upsert", {
+    discordGuildId: access.guild.discordGuildId,
+    settings: saved
+  });
+
+  await audit(c.env, access.guild.id, access.session.user.discordUserId, "logging.update", "logging_settings", oldValue, saved);
+  return json(c, { ok: true, eventId, logging: saved });
+});
+
+app.post("/api/guilds/:guildId/logging/test", async (c) => {
+  const access = await requireGuildManagementAccess(c, c.req.param("guildId"));
+  const data = loggingTestSchema.parse(await readJsonBody(c));
+  const logging = await ensureLoggingSettings(c.env, access.guild.id);
+
+  if (!logging.enabled) {
+    throw new HttpError(400, "logging_disabled", "Logging ist auf dieser Guild noch deaktiviert.");
+  }
+
+  const eventId = await enqueueSyncEvent(c.env, access.guild, "logging_settings.test", {
+    discordGuildId: access.guild.discordGuildId,
+    category: data.category
+  });
+
+  await audit(c.env, access.guild.id, access.session.user.discordUserId, "logging.test", data.category, null, { eventId });
+  return json(c, { ok: true, eventId });
 });
 
 app.put("/api/guilds/:guildId/welcome", async (c) => {
