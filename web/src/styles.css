@@ -1691,14 +1691,15 @@ textarea {
 
 .owner-health-summary {
   display: grid;
-  grid-template-columns: 132px minmax(0, 1fr);
-  gap: 14px;
-  align-items: stretch;
-  margin-bottom: 14px;
+  grid-template-columns: 124px minmax(0, 1fr);
+  gap: 12px;
+  align-items: start;
+  margin-bottom: 16px;
 }
 
 .owner-health-score {
-  aspect-ratio: 1;
+  width: 124px;
+  min-height: 124px;
   display: grid;
   place-items: center;
   align-content: center;
@@ -1738,7 +1739,7 @@ textarea {
 .owner-runtime-mini {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 8px;
+  gap: 10px;
   margin: 0;
 }
 
@@ -1746,7 +1747,8 @@ textarea {
   min-width: 0;
   display: grid;
   gap: 5px;
-  padding: 10px;
+  min-height: 64px;
+  padding: 11px;
   border: 1px solid var(--border-soft);
   border-radius: 8px;
   background: rgba(9, 11, 16, 0.48);
@@ -1783,19 +1785,25 @@ textarea {
 
 .owner-health-item {
   display: grid;
-  grid-template-columns: 32px minmax(0, 1fr) auto;
+  grid-template-columns: 34px minmax(0, 1fr) minmax(78px, auto);
   align-items: center;
-  gap: 10px;
-  padding: 11px;
+  gap: 12px;
+  padding: 12px;
 }
 
 .owner-health-item > span {
-  width: 32px;
-  height: 32px;
+  width: 34px;
+  height: 34px;
   display: grid;
   place-items: center;
   border-radius: 8px;
   background: rgba(119, 183, 255, 0.1);
+}
+
+.owner-health-item > div {
+  min-width: 0;
+  display: grid;
+  gap: 3px;
 }
 
 .owner-health-item.ok > span {
@@ -1816,6 +1824,7 @@ textarea {
 .owner-health-item strong,
 .owner-guild-row strong,
 .owner-event-row strong {
+  display: block;
   color: var(--text);
 }
 
@@ -1827,9 +1836,18 @@ textarea {
   color: var(--muted);
 }
 
+.owner-health-item small {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .owner-health-item em {
   color: var(--muted-strong);
   font-style: normal;
+  justify-self: end;
+  text-align: right;
   white-space: nowrap;
 }
 
@@ -2577,6 +2595,17 @@ textarea {
     grid-column: 1 / -1;
     min-width: 0;
     justify-content: flex-start;
+  }
+
+  .owner-health-item {
+    grid-template-columns: 34px minmax(0, 1fr);
+    align-items: start;
+  }
+
+  .owner-health-item em {
+    grid-column: 2;
+    justify-self: start;
+    text-align: left;
   }
 }
 
