@@ -1,25 +1,25 @@
 :root {
   color-scheme: dark;
-  --bg: #0b0e13;
-  --bg-strong: #090b10;
-  --surface: #151922;
-  --surface-soft: #1b202b;
-  --surface-strong: #222936;
-  --border: #303848;
-  --border-soft: rgba(255, 255, 255, 0.08);
-  --text: #f7f9ff;
-  --muted: #a9b2c3;
-  --muted-strong: #c3cad7;
-  --blue: #77b7ff;
-  --green: #4ddb8f;
+  --bg: #05070c;
+  --bg-strong: #03050a;
+  --surface: #10141d;
+  --surface-soft: #151a24;
+  --surface-strong: #1b2230;
+  --border: #252f42;
+  --border-soft: rgba(210, 223, 255, 0.075);
+  --text: #f4f7ff;
+  --muted: #8f9aae;
+  --muted-strong: #c2cad9;
+  --blue: #68a8ff;
+  --green: #2fbf7a;
   --amber: #f4bd63;
   --red: #ff7474;
-  --violet: #b39cff;
-  --shadow: 0 18px 54px rgba(0, 0, 0, 0.34);
-  --soft-shadow: 0 12px 32px rgba(0, 0, 0, 0.22);
-  --focus-ring: 0 0 0 4px rgba(119, 183, 255, 0.15);
-  --green-glow: 0 0 30px rgba(77, 219, 143, 0.18);
-  --blue-glow: 0 0 28px rgba(119, 183, 255, 0.18);
+  --violet: #9b8cff;
+  --shadow: 0 22px 64px rgba(0, 0, 0, 0.48);
+  --soft-shadow: 0 14px 38px rgba(0, 0, 0, 0.34);
+  --focus-ring: 0 0 0 4px rgba(104, 168, 255, 0.16);
+  --green-glow: 0 0 24px rgba(47, 191, 122, 0.12);
+  --blue-glow: 0 0 32px rgba(104, 168, 255, 0.2);
   font-family:
     Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 }
@@ -37,8 +37,8 @@ body {
   min-width: 320px;
   min-height: 100vh;
   background:
-    linear-gradient(135deg, rgba(119, 183, 255, 0.08), transparent 34%),
-    linear-gradient(215deg, rgba(77, 219, 143, 0.07), transparent 42%),
+    linear-gradient(135deg, rgba(104, 168, 255, 0.055), transparent 34%),
+    linear-gradient(215deg, rgba(155, 140, 255, 0.045), transparent 42%),
     var(--bg);
   color: var(--text);
 }
@@ -75,10 +75,10 @@ p {
 .app-shell {
   min-height: 100vh;
   background:
-    linear-gradient(135deg, rgba(77, 219, 143, 0.1), transparent 32%),
-    linear-gradient(225deg, rgba(119, 183, 255, 0.1), transparent 34%),
-    repeating-linear-gradient(90deg, rgba(255, 255, 255, 0.03) 0 1px, transparent 1px 80px),
-    repeating-linear-gradient(0deg, rgba(255, 255, 255, 0.018) 0 1px, transparent 1px 80px),
+    linear-gradient(135deg, rgba(104, 168, 255, 0.06), transparent 31%),
+    linear-gradient(225deg, rgba(155, 140, 255, 0.045), transparent 35%),
+    repeating-linear-gradient(90deg, rgba(210, 223, 255, 0.024) 0 1px, transparent 1px 80px),
+    repeating-linear-gradient(0deg, rgba(210, 223, 255, 0.014) 0 1px, transparent 1px 80px),
     transparent;
 }
 
@@ -90,8 +90,8 @@ p {
   overflow: hidden;
   padding: 28px;
   background:
-    linear-gradient(120deg, rgba(119, 183, 255, 0.12), transparent 28%),
-    linear-gradient(300deg, rgba(77, 219, 143, 0.12), transparent 32%),
+    linear-gradient(120deg, rgba(104, 168, 255, 0.095), transparent 28%),
+    linear-gradient(300deg, rgba(155, 140, 255, 0.08), transparent 32%),
     var(--bg-strong);
 }
 
@@ -136,7 +136,7 @@ p {
 .sidebar {
   border: 1px solid var(--border-soft);
   border-radius: 8px;
-  background: rgba(21, 25, 34, 0.88);
+  background: rgba(12, 16, 24, 0.9);
   box-shadow: var(--soft-shadow);
 }
 
@@ -174,11 +174,11 @@ p {
   height: 52px;
   display: grid;
   place-items: center;
-  border: 1px solid rgba(119, 183, 255, 0.34);
+  border: 1px solid rgba(104, 168, 255, 0.32);
   border-radius: 8px;
   color: var(--blue);
   background:
-    linear-gradient(135deg, rgba(119, 183, 255, 0.16), rgba(77, 219, 143, 0.08)),
+    linear-gradient(135deg, rgba(104, 168, 255, 0.18), rgba(155, 140, 255, 0.08)),
     var(--surface-strong);
 }
 
@@ -255,7 +255,8 @@ p {
 .nav-status,
 .pill.live {
   color: var(--green);
-  border-color: rgba(77, 219, 143, 0.28);
+  border-color: rgba(47, 191, 122, 0.24);
+  background: rgba(47, 191, 122, 0.055);
 }
 
 .auth-status-strip {
@@ -278,9 +279,9 @@ p {
   overflow: hidden;
   padding: 20px;
   background:
-    linear-gradient(145deg, rgba(119, 183, 255, 0.12), transparent 34%),
-    linear-gradient(315deg, rgba(244, 189, 99, 0.1), transparent 32%),
-    rgba(18, 22, 31, 0.9);
+    linear-gradient(145deg, rgba(104, 168, 255, 0.105), transparent 34%),
+    linear-gradient(315deg, rgba(155, 140, 255, 0.075), transparent 32%),
+    rgba(9, 12, 19, 0.94);
   backdrop-filter: blur(18px);
 }
 
@@ -333,18 +334,18 @@ p {
   height: 190px;
   display: grid;
   place-items: center;
-  border: 1px solid rgba(119, 183, 255, 0.18);
+  border: 1px solid rgba(104, 168, 255, 0.2);
   border-radius: 50%;
-  color: var(--green);
+  color: var(--blue);
   background:
-    linear-gradient(180deg, rgba(77, 219, 143, 0.1), transparent),
+    linear-gradient(180deg, rgba(104, 168, 255, 0.12), transparent),
     rgba(11, 14, 19, 0.58);
 }
 
 .bot-radar span {
   position: absolute;
   inset: 26px;
-  border: 1px solid rgba(119, 183, 255, 0.28);
+  border: 1px solid rgba(104, 168, 255, 0.26);
   border-radius: 50%;
   animation: radarPulse 2.8s ease-out infinite;
 }
@@ -376,7 +377,7 @@ p {
 }
 
 .activity-row strong {
-  color: var(--green);
+  color: var(--blue);
   font-size: 13px;
 }
 
@@ -496,12 +497,12 @@ p {
   align-items: stretch;
   min-height: 360px;
   padding: 28px;
-  border: 1px solid rgba(77, 219, 143, 0.18);
+  border: 1px solid rgba(104, 168, 255, 0.18);
   border-radius: 8px;
   background:
-    linear-gradient(135deg, rgba(77, 219, 143, 0.16), transparent 38%),
-    linear-gradient(225deg, rgba(119, 183, 255, 0.1), transparent 34%),
-    rgba(21, 25, 34, 0.9);
+    linear-gradient(135deg, rgba(104, 168, 255, 0.13), transparent 38%),
+    linear-gradient(225deg, rgba(155, 140, 255, 0.065), transparent 34%),
+    rgba(10, 14, 22, 0.93);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05), var(--shadow);
 }
 
@@ -560,7 +561,7 @@ p {
   height: 12px;
   border-radius: 50%;
   background: var(--green);
-  box-shadow: 0 0 0 5px rgba(77, 219, 143, 0.12);
+  box-shadow: 0 0 0 5px rgba(47, 191, 122, 0.08);
 }
 
 .docs-status-top svg {
@@ -593,7 +594,7 @@ p {
   height: 38px;
   border-radius: 8px;
   color: var(--green);
-  background: rgba(77, 219, 143, 0.1);
+  background: rgba(47, 191, 122, 0.07);
   font-weight: 850;
 }
 
@@ -627,10 +628,10 @@ p {
 
 .docs-highlight:hover {
   transform: translateY(-2px);
-  border-color: rgba(77, 219, 143, 0.26);
+  border-color: rgba(104, 168, 255, 0.26);
   background:
-    linear-gradient(145deg, rgba(77, 219, 143, 0.08), transparent 48%),
-    rgba(21, 25, 34, 0.9);
+    linear-gradient(145deg, rgba(104, 168, 255, 0.08), transparent 48%),
+    rgba(10, 14, 22, 0.92);
 }
 
 .docs-highlight > span {
@@ -639,8 +640,8 @@ p {
   width: 36px;
   height: 36px;
   border-radius: 8px;
-  color: var(--green);
-  background: rgba(77, 219, 143, 0.1);
+  color: var(--blue);
+  background: rgba(104, 168, 255, 0.09);
 }
 
 .docs-highlight h2 {
@@ -708,9 +709,9 @@ p {
   margin-bottom: 22px;
   padding: 24px;
   background:
-    linear-gradient(135deg, rgba(119, 183, 255, 0.12), transparent 38%),
-    linear-gradient(315deg, rgba(77, 219, 143, 0.1), transparent 34%),
-    rgba(21, 25, 34, 0.92);
+    linear-gradient(135deg, rgba(104, 168, 255, 0.11), transparent 38%),
+    linear-gradient(315deg, rgba(155, 140, 255, 0.075), transparent 34%),
+    rgba(10, 14, 22, 0.94);
 }
 
 .metric-strip,
@@ -733,15 +734,15 @@ p {
   border: 1px solid var(--border-soft);
   border-radius: 8px;
   background:
-    linear-gradient(145deg, rgba(255, 255, 255, 0.055), transparent 42%),
-    rgba(9, 11, 16, 0.48);
+    linear-gradient(145deg, rgba(210, 223, 255, 0.045), transparent 42%),
+    rgba(5, 8, 14, 0.62);
   transition: transform 180ms ease, border-color 180ms ease, background 180ms ease;
 }
 
 .metric-card:hover,
 .status-tile:hover {
   transform: translateY(-2px);
-  border-color: rgba(119, 183, 255, 0.25);
+  border-color: rgba(104, 168, 255, 0.28);
 }
 
 .metric-card span,
@@ -803,8 +804,8 @@ p {
 
 .guild-card:hover {
   transform: translateY(-3px);
-  border-color: rgba(119, 183, 255, 0.32);
-  background: rgba(26, 31, 42, 0.95);
+  border-color: rgba(104, 168, 255, 0.34);
+  background: rgba(14, 19, 30, 0.96);
   box-shadow: var(--blue-glow), var(--soft-shadow);
 }
 
@@ -883,16 +884,16 @@ p {
 }
 
 .guild-card .primary-action {
-  color: #03130a;
-  border-color: rgba(77, 219, 143, 0.42);
+  color: #06101f;
+  border-color: rgba(104, 168, 255, 0.48);
   background:
-    linear-gradient(135deg, rgba(255, 255, 255, 0.24), transparent 42%),
-    linear-gradient(135deg, #58e29a, #24b96f);
-  box-shadow: 0 0 28px rgba(77, 219, 143, 0.18), inset 0 1px 0 rgba(255, 255, 255, 0.34);
+    linear-gradient(135deg, rgba(255, 255, 255, 0.22), transparent 42%),
+    linear-gradient(135deg, #8bc2ff, #5f8dff);
+  box-shadow: 0 0 28px rgba(104, 168, 255, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.3);
 }
 
 .guild-card .primary-action:hover {
-  border-color: rgba(77, 219, 143, 0.68);
+  border-color: rgba(104, 168, 255, 0.72);
   filter: brightness(1.05);
 }
 
@@ -964,7 +965,7 @@ p {
 .status-light.ok {
   color: var(--green);
   background: var(--green);
-  box-shadow: 0 0 0 5px rgba(77, 219, 143, 0.12), 0 0 16px rgba(77, 219, 143, 0.34);
+  box-shadow: 0 0 0 5px rgba(47, 191, 122, 0.08), 0 0 14px rgba(47, 191, 122, 0.24);
 }
 
 .status-light.unknown {
@@ -981,7 +982,8 @@ p {
 
 .pill.ok {
   color: var(--green);
-  border-color: rgba(77, 219, 143, 0.35);
+  border-color: rgba(47, 191, 122, 0.3);
+  background: rgba(47, 191, 122, 0.065);
 }
 
 .pill.neutral {
@@ -1022,13 +1024,13 @@ p {
 }
 
 .primary-action {
-  color: #06110b;
-  border-color: rgba(77, 219, 143, 0.42);
+  color: #06101f;
+  border-color: rgba(104, 168, 255, 0.48);
   background:
-    linear-gradient(135deg, rgba(255, 255, 255, 0.24), transparent 42%),
-    linear-gradient(135deg, #58e29a, #24b96f);
+    linear-gradient(135deg, rgba(255, 255, 255, 0.22), transparent 42%),
+    linear-gradient(135deg, #8bc2ff, #5f8dff);
   font-weight: 800;
-  box-shadow: 0 0 28px rgba(77, 219, 143, 0.18), inset 0 1px 0 rgba(255, 255, 255, 0.34);
+  box-shadow: 0 0 30px rgba(104, 168, 255, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.3);
 }
 
 .primary-action:hover,
@@ -1188,7 +1190,7 @@ p {
 .side-link:hover:not(.disabled) {
   color: var(--text);
   background:
-    linear-gradient(90deg, rgba(77, 219, 143, 0.16), transparent 88%),
+    linear-gradient(90deg, rgba(104, 168, 255, 0.16), transparent 88%),
     rgba(255, 255, 255, 0.065);
 }
 
@@ -1204,12 +1206,12 @@ p {
   bottom: 9px;
   width: 3px;
   border-radius: 999px;
-  background: var(--green);
-  box-shadow: 0 0 16px rgba(77, 219, 143, 0.55);
+  background: var(--blue);
+  box-shadow: 0 0 16px rgba(104, 168, 255, 0.42);
 }
 
 .side-link.active svg {
-  color: var(--green);
+  color: var(--blue);
 }
 
 .side-link-label {
@@ -1233,9 +1235,9 @@ p {
 }
 
 .side-link.active .side-badge {
-  color: var(--green);
-  border-color: rgba(77, 219, 143, 0.34);
-  background: rgba(77, 219, 143, 0.1);
+  color: var(--blue);
+  border-color: rgba(104, 168, 255, 0.34);
+  background: rgba(104, 168, 255, 0.09);
 }
 
 .side-link.disabled {
@@ -1264,12 +1266,12 @@ p {
   flex-wrap: wrap;
   margin-bottom: 22px;
   padding: 20px;
-  border: 1px solid rgba(119, 183, 255, 0.18);
+  border: 1px solid rgba(104, 168, 255, 0.18);
   border-radius: 8px;
   background:
-    linear-gradient(135deg, rgba(119, 183, 255, 0.18), transparent 38%),
-    linear-gradient(315deg, rgba(77, 219, 143, 0.1), transparent 34%),
-    rgba(21, 25, 34, 0.82);
+    linear-gradient(135deg, rgba(104, 168, 255, 0.15), transparent 38%),
+    linear-gradient(315deg, rgba(155, 140, 255, 0.075), transparent 34%),
+    rgba(10, 14, 22, 0.9);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05), var(--soft-shadow);
 }
 
@@ -1337,7 +1339,7 @@ p {
 }
 
 .status-tile.ok span {
-  background: rgba(77, 219, 143, 0.1);
+  background: rgba(47, 191, 122, 0.075);
 }
 
 .status-tile.warn span {
@@ -1353,7 +1355,7 @@ p {
 .panel {
   background:
     linear-gradient(145deg, rgba(255, 255, 255, 0.035), transparent 48%),
-    rgba(21, 25, 34, 0.9);
+    rgba(10, 14, 22, 0.92);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.035), var(--soft-shadow);
 }
 
@@ -1525,12 +1527,12 @@ textarea {
   gap: 18px;
   min-height: 156px;
   padding: 22px;
-  border: 1px solid rgba(119, 183, 255, 0.2);
+  border: 1px solid rgba(104, 168, 255, 0.2);
   border-radius: 8px;
   background:
-    linear-gradient(135deg, rgba(119, 183, 255, 0.14), transparent 38%),
-    linear-gradient(315deg, rgba(77, 219, 143, 0.1), transparent 34%),
-    rgba(21, 25, 34, 0.9);
+    linear-gradient(135deg, rgba(104, 168, 255, 0.13), transparent 38%),
+    linear-gradient(315deg, rgba(155, 140, 255, 0.065), transparent 34%),
+    rgba(10, 14, 22, 0.93);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.045), var(--soft-shadow);
 }
 
@@ -1604,12 +1606,12 @@ textarea {
   gap: 18px;
   min-height: 146px;
   padding: 22px;
-  border: 1px solid rgba(119, 183, 255, 0.22);
+  border: 1px solid rgba(104, 168, 255, 0.22);
   border-radius: 8px;
   background:
-    linear-gradient(135deg, rgba(119, 183, 255, 0.12), transparent 36%),
-    linear-gradient(315deg, rgba(77, 219, 143, 0.08), transparent 34%),
-    rgba(21, 25, 34, 0.92);
+    linear-gradient(135deg, rgba(104, 168, 255, 0.12), transparent 36%),
+    linear-gradient(315deg, rgba(155, 140, 255, 0.06), transparent 34%),
+    rgba(10, 14, 22, 0.94);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.045), var(--soft-shadow);
 }
 
@@ -1632,9 +1634,9 @@ textarea {
 }
 
 .secondary-action.inline.is-active {
-  color: var(--green);
-  border-color: rgba(77, 219, 143, 0.34);
-  background: rgba(77, 219, 143, 0.1);
+  color: var(--blue);
+  border-color: rgba(104, 168, 255, 0.34);
+  background: rgba(104, 168, 255, 0.09);
 }
 
 .owner-overview-grid {
@@ -1722,8 +1724,8 @@ textarea {
 }
 
 .owner-health-score.ok {
-  border-color: rgba(77, 219, 143, 0.34);
-  background: linear-gradient(180deg, rgba(77, 219, 143, 0.14), rgba(9, 11, 16, 0.58));
+  border-color: rgba(47, 191, 122, 0.28);
+  background: linear-gradient(180deg, rgba(47, 191, 122, 0.09), rgba(5, 8, 14, 0.66));
 }
 
 .owner-health-score.warn {
@@ -1808,7 +1810,7 @@ textarea {
 
 .owner-health-item.ok > span {
   color: var(--green);
-  background: rgba(77, 219, 143, 0.1);
+  background: rgba(47, 191, 122, 0.08);
 }
 
 .owner-health-item.warn > span {
@@ -2009,12 +2011,12 @@ textarea {
   gap: 18px;
   min-height: 148px;
   padding: 22px;
-  border: 1px solid rgba(77, 219, 143, 0.2);
+  border: 1px solid rgba(104, 168, 255, 0.2);
   border-radius: 8px;
   background:
-    linear-gradient(135deg, rgba(77, 219, 143, 0.13), transparent 36%),
-    linear-gradient(315deg, rgba(119, 183, 255, 0.09), transparent 34%),
-    rgba(21, 25, 34, 0.9);
+    linear-gradient(135deg, rgba(104, 168, 255, 0.12), transparent 36%),
+    linear-gradient(315deg, rgba(155, 140, 255, 0.065), transparent 34%),
+    rgba(10, 14, 22, 0.93);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.045), var(--soft-shadow);
 }
 
@@ -2035,10 +2037,10 @@ textarea {
   gap: 10px;
   min-width: 126px;
   padding: 10px 12px;
-  border: 1px solid rgba(77, 219, 143, 0.28);
+  border: 1px solid rgba(47, 191, 122, 0.24);
   border-radius: 8px;
   color: var(--green);
-  background: rgba(77, 219, 143, 0.08);
+  background: rgba(47, 191, 122, 0.055);
 }
 
 .welcome-switch input {
@@ -2095,11 +2097,11 @@ textarea {
 }
 
 .role-chip.active {
-  color: #06110b;
-  border-color: rgba(77, 219, 143, 0.42);
+  color: #06101f;
+  border-color: rgba(104, 168, 255, 0.48);
   background:
     linear-gradient(135deg, rgba(255, 255, 255, 0.2), transparent 42%),
-    linear-gradient(135deg, #58e29a, #24b96f);
+    linear-gradient(135deg, #8bc2ff, #5f8dff);
   font-weight: 800;
 }
 
@@ -2137,9 +2139,9 @@ textarea {
   display: grid;
   place-items: center;
   border-radius: 50%;
-  color: #06110b;
+  color: #06101f;
   font-weight: 900;
-  background: linear-gradient(135deg, #58e29a, #24b96f);
+  background: linear-gradient(135deg, #8bc2ff, #5f8dff);
 }
 
 .discord-message-body {
@@ -2163,7 +2165,7 @@ textarea {
   display: grid;
   gap: 12px;
   padding: 12px;
-  border-left: 4px solid var(--green);
+  border-left: 4px solid var(--blue);
   border-radius: 8px;
   background: rgba(34, 41, 54, 0.62);
 }
@@ -2213,9 +2215,9 @@ textarea {
 }
 
 .welcome-mention-preview span.on {
-  color: var(--green);
-  border-color: rgba(77, 219, 143, 0.32);
-  background: rgba(77, 219, 143, 0.08);
+  color: var(--blue);
+  border-color: rgba(104, 168, 255, 0.3);
+  background: rgba(104, 168, 255, 0.075);
 }
 
 .welcome-mention-preview span.danger {

@@ -628,7 +628,7 @@ const DEFAULT_WELCOME_SETTINGS = welcomeSettingsSchema.parse({
     useEmbed: true,
     title: "Willkommen auf {server}",
     description: "{member_mention}, mach es dir gemütlich. Du bist unser **{member_count}. Mitglied**.",
-    color: "#4ddb8f",
+    color: "#68a8ff",
     imageMode: "banner",
     imageMediaKey: null,
     imageUrl: null,
