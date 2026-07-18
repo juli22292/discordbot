@@ -400,6 +400,7 @@ type User = {
   username: string;
   displayName: string | null;
   avatar: string | null;
+  ownerAdmin?: boolean;
 };
 
 type ApiError = {
@@ -668,7 +669,6 @@ function App() {
 function LoginPage() {
   const searchParams = new URLSearchParams(window.location.search);
   const returnTo = safeClientReturnTo(searchParams.get("returnTo"));
-  const loginError = searchParams.get("error");
   const [sessionUser, setSessionUser] = useState<User | null>(null);
   const [checkingSession, setCheckingSession] = useState(true);
 
@@ -716,9 +716,6 @@ function LoginPage() {
             <h1>EclipseBot Webpanel</h1>
             <p>Server verwalten, Slash-Befehle steuern und das Bot-Profil pro Guild sauber synchronisieren.</p>
           </div>
-          {loginError === "not_allowed" && (
-            <Notice tone="danger" text="Dieses Webpanel ist nur für den freigeschalteten Bot-Owner verfügbar." />
-          )}
           {checkingSession ? (
             <button className="primary-action full hero-action" disabled>
               <Loader2 className="spin" size={18} />
@@ -799,10 +796,12 @@ function TopNav({ user }: { user?: User | null }) {
           <Home size={17} />
           Panel
         </button>
-        <button onClick={() => navigate("/admin")}>
-          <Gauge size={17} />
-          Admin
-        </button>
+        {user?.ownerAdmin && (
+          <button onClick={() => navigate("/admin")}>
+            <Gauge size={17} />
+            Admin
+          </button>
+        )}
         <button onClick={() => navigate("/dokumentation")}>
           <ClipboardList size={17} />
           Dokumentation

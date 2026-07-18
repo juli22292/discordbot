@@ -30,7 +30,7 @@ import {
   updateDiscordGuildRole,
   updateDiscordBotGuildNickname
 } from "./server/discord";
-import { PANEL_OWNER_DISCORD_USER_ID, canManageGuild, canUsePanel, permissionLabel } from "./server/permissions";
+import { PANEL_OWNER_DISCORD_USER_ID, canManageGuild, canUseOwnerAdmin, permissionLabel } from "./server/permissions";
 import type { ActiveSession, DiscordGuild, Env, GuildAccess, SessionUser, TokenData } from "./server/types";
 import {
   assertSameGuild,
@@ -445,9 +445,6 @@ async function getSession(c: HonoContext): Promise<ActiveSession | null> {
 async function requireSession(c: HonoContext): Promise<ActiveSession> {
   const session = await getSession(c);
   if (!session) throw new HttpError(401, "session_required", "Bitte melde dich erneut mit Discord an.");
-  if (!canUsePanel(session.user.discordUserId)) {
-    throw new HttpError(403, "panel_forbidden", "Dieses Webpanel ist nur für den freigeschalteten Bot-Owner verfügbar.");
-  }
   return session;
 }
 
@@ -847,7 +844,7 @@ async function requireAdminSession(c: HonoContext): Promise<ActiveSession> {
   const allowedIds = adminUserIds(c.env);
 
   if (allowedIds.size > 0) {
-    if (!allowedIds.has(session.user.discordUserId)) {
+    if (!allowedIds.has(session.user.discordUserId) || !canUseOwnerAdmin(session.user.discordUserId)) {
       throw new HttpError(403, "admin_forbidden", "Du bist für den Admin-Bereich nicht freigeschaltet.");
     }
 
@@ -1502,7 +1499,13 @@ app.onError((error, c) => {
 
 app.get("/api/me", async (c) => {
   const session = await requireSession(c);
-  return json(c, { user: publicUser(session), expiresAt: session.expiresAt });
+  return json(c, {
+    user: {
+      ...publicUser(session),
+      ownerAdmin: canUseOwnerAdmin(session.user.discordUserId)
+    },
+    expiresAt: session.expiresAt
+  });
 });
 
 app.get("/api/auth/discord", async (c) => {
@@ -1543,13 +1546,6 @@ app.get("/api/auth/discord/callback", async (c) => {
 
   const tokenData = await exchangeDiscordCode(c.env, code);
   const user = await fetchDiscordUser(tokenData);
-  if (!canUsePanel(user.id)) {
-    const response = c.redirect("/login?error=not_allowed");
-    response.headers.append("Set-Cookie", clearCookieHeader(OAUTH_STATE_COOKIE, c.env));
-    response.headers.append("Set-Cookie", clearCookieHeader(SESSION_COOKIE, c.env));
-    return response;
-  }
-
   const sessionId = randomToken(32);
   const ttl = sessionTtl(c.env);
   const expiresAt = new Date(Date.now() + ttl * 1000).toISOString();

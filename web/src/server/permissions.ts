@@ -7,7 +7,7 @@ export const DISCORD_PERMISSIONS = {
 
 export const PANEL_OWNER_DISCORD_USER_ID = "1267171819362717828";
 
-export function canUsePanel(discordUserId?: string | null): boolean {
+export function canUseOwnerAdmin(discordUserId?: string | null): boolean {
   return discordUserId === PANEL_OWNER_DISCORD_USER_ID;
 }
 
