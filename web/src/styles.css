@@ -1685,10 +1685,17 @@ textarea {
   grid-template-columns: minmax(0, 1.22fr) minmax(360px, 0.78fr);
 }
 
+.owner-tools-grid {
+  grid-template-columns: minmax(0, 0.9fr) minmax(380px, 1.1fr);
+}
+
 .owner-presence-panel,
 .owner-health-panel,
 .owner-guilds-panel,
-.owner-events-panel {
+.owner-events-panel,
+.owner-quick-panel,
+.owner-music-panel,
+.owner-live-log-panel {
   min-width: 0;
 }
 
@@ -1955,6 +1962,88 @@ textarea {
   font-style: normal;
   justify-self: end;
   text-align: right;
+  white-space: nowrap;
+}
+
+.owner-action-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.owner-action-button {
+  justify-content: flex-start;
+}
+
+.owner-mini-metrics {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.owner-music-facts {
+  margin-bottom: 12px;
+}
+
+.owner-player-list {
+  max-height: 270px;
+  overflow: auto;
+}
+
+.owner-live-log-panel {
+  overflow: hidden;
+}
+
+.owner-log-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.owner-log-column {
+  min-width: 0;
+  display: grid;
+  gap: 10px;
+}
+
+.owner-log-column h3 {
+  margin: 0;
+  color: var(--text);
+  font-size: 15px;
+}
+
+.owner-log-row {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  padding: 11px;
+  border: 1px solid var(--border-soft);
+  border-radius: 8px;
+  background: rgba(9, 11, 16, 0.52);
+}
+
+.owner-log-row strong,
+.owner-log-row small {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.owner-log-row strong {
+  color: var(--text);
+}
+
+.owner-log-row small,
+.owner-log-row time {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.owner-log-row time {
   white-space: nowrap;
 }
 
@@ -2271,10 +2360,101 @@ textarea {
   align-items: start;
 }
 
+.owner-guild-ops-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.1fr) minmax(360px, 0.9fr);
+  gap: 16px;
+  align-items: start;
+}
+
 .owner-guild-profile-panel,
 .owner-guild-facts-panel,
-.owner-guild-browser-panel {
+.owner-guild-browser-panel,
+.owner-permission-panel,
+.owner-modules-panel {
   min-width: 0;
+}
+
+.owner-permission-grid,
+.owner-module-grid {
+  display: grid;
+  gap: 10px;
+}
+
+.owner-permission-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.owner-permission-card,
+.owner-module-card {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 11px;
+  padding: 11px;
+  border: 1px solid var(--border-soft);
+  border-radius: 8px;
+  background: rgba(9, 11, 16, 0.52);
+}
+
+.owner-permission-card > span,
+.owner-module-card > span {
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  border-radius: 8px;
+  color: var(--blue);
+  background: rgba(119, 183, 255, 0.1);
+}
+
+.owner-permission-card.ok > span,
+.owner-module-card.active > span {
+  color: var(--green);
+  background: rgba(47, 191, 122, 0.09);
+}
+
+.owner-permission-card.warn > span {
+  color: var(--amber);
+  background: rgba(244, 189, 99, 0.11);
+}
+
+.owner-permission-card strong,
+.owner-module-card strong {
+  display: block;
+  color: var(--text);
+}
+
+.owner-permission-card small,
+.owner-module-card small {
+  display: block;
+  margin-top: 3px;
+  color: var(--muted);
+  line-height: 1.35;
+}
+
+.owner-permission-card em {
+  color: var(--muted);
+  font-size: 12px;
+  font-style: normal;
+  white-space: nowrap;
+}
+
+.owner-module-card {
+  grid-template-columns: 18px 34px minmax(0, 1fr);
+  cursor: pointer;
+}
+
+.owner-module-card input {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--green);
+}
+
+.owner-module-card.active {
+  border-color: rgba(47, 191, 122, 0.27);
+  background: linear-gradient(90deg, rgba(47, 191, 122, 0.09), rgba(9, 11, 16, 0.54));
 }
 
 .owner-guild-facts {
@@ -2441,6 +2621,40 @@ textarea {
   color: var(--muted-strong);
   background: rgba(119, 183, 255, 0.06);
   font-size: 12px;
+}
+
+.mini-text-button {
+  min-height: 28px;
+  padding: 5px 9px;
+  border: 1px solid rgba(119, 183, 255, 0.2);
+  border-radius: 999px;
+  color: var(--blue);
+  background: rgba(119, 183, 255, 0.08);
+  cursor: pointer;
+}
+
+.mini-text-button:hover,
+.mini-text-button:focus-visible {
+  border-color: rgba(119, 183, 255, 0.42);
+  color: var(--text);
+  outline: none;
+}
+
+.owner-role-editor {
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid rgba(119, 183, 255, 0.24);
+  border-radius: 8px;
+  background:
+    linear-gradient(135deg, rgba(119, 183, 255, 0.08), transparent 44%),
+    rgba(9, 11, 16, 0.58);
+}
+
+.owner-role-editor h3 {
+  margin: 0;
+  color: var(--text);
+  font-size: 18px;
 }
 
 .role-dot {
@@ -3102,7 +3316,10 @@ textarea {
   .admin-grid,
   .owner-admin-grid,
   .owner-admin-grid-wide,
+  .owner-tools-grid,
   .owner-guild-detail-grid,
+  .owner-guild-ops-grid,
+  .owner-log-grid,
   .welcome-grid {
     grid-template-columns: 1fr;
   }
@@ -3138,6 +3355,10 @@ textarea {
   .logging-summary-grid,
   .logging-toolbar,
   .logging-category-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .owner-permission-grid {
     grid-template-columns: 1fr;
   }
 
@@ -3208,6 +3429,8 @@ textarea {
   .owner-overview-grid,
   .owner-presets,
   .owner-runtime-mini,
+  .owner-action-grid,
+  .owner-mini-metrics,
   .owner-panel-toolbar,
   .owner-segmented,
   .guild-card,

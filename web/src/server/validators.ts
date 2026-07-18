@@ -129,6 +129,39 @@ export const inviteCreateSchema = z.object({
   temporary: z.boolean().default(false)
 });
 
+export const botAdminActionSchema = z.object({
+  action: z.enum([
+    "snapshot.refresh",
+    "runtime.refresh",
+    "commands.sync",
+    "music.reconnect",
+    "music.disconnect_all",
+    "restart.request"
+  ])
+});
+
+export const pterodactylPowerSchema = z.object({
+  signal: z.enum(["start", "stop", "restart", "kill"])
+});
+
+export const guildModuleSettingsSchema = z.object({
+  modules: z.object({
+    logging: z.boolean().default(false),
+    welcome: z.boolean().default(false),
+    tempVoice: z.boolean().default(false),
+    spotifyMusic: z.boolean().default(false),
+    games: z.boolean().default(false),
+    moderation: z.boolean().default(false)
+  })
+});
+
+export const adminRoleUpdateSchema = z.object({
+  name: z.string().trim().min(1, "Der Rollenname darf nicht leer sein.").max(100, "Der Rollenname darf maximal 100 Zeichen lang sein."),
+  color: hexColorSchema,
+  hoist: z.boolean().default(false),
+  mentionable: z.boolean().default(false)
+});
+
 export const loggingSettingsSchema = z.object({
   enabled: z.boolean().default(false),
   channelMappings: z.record(logCategorySchema, nullableSnowflakeSchema).default({}),

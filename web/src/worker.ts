@@ -27,20 +27,25 @@ import {
   fetchDiscordGuilds,
   fetchDiscordUser,
   refreshDiscordToken,
+  updateDiscordGuildRole,
   updateDiscordBotGuildNickname
 } from "./server/discord";
 import { canManageGuild, permissionLabel } from "./server/permissions";
 import type { ActiveSession, DiscordGuild, Env, GuildAccess, SessionUser, TokenData } from "./server/types";
 import {
   assertSameGuild,
+  adminRoleUpdateSchema,
+  botAdminActionSchema,
   commandConfigSchema,
   customCommandSchema,
+  guildModuleSettingsSchema,
   inviteCreateSchema,
   logCategories,
   loggingSettingsSchema,
   loggingTestSchema,
   nicknameSchema,
   partialCustomCommandSchema,
+  pterodactylPowerSchema,
   presenceSchema,
   safeRedirectPath,
   settingsSchema,
@@ -206,6 +211,23 @@ interface PterodactylRuntime {
   diskMb: number | null;
   uptimeSeconds: number | null;
   checkedAt: string;
+}
+
+interface AdminPermissionCheck {
+  key: string;
+  label: string;
+  description: string;
+  ok: boolean | null;
+  group: string;
+}
+
+interface AdminGuildModules {
+  logging: boolean;
+  welcome: boolean;
+  tempVoice: boolean;
+  spotifyMusic: boolean;
+  games: boolean;
+  moderation: boolean;
 }
 
 interface CookieSessionData {
@@ -971,6 +993,31 @@ async function fetchPterodactylRuntime(env: Env): Promise<PterodactylRuntime | n
   }
 }
 
+async function sendPterodactylPowerSignal(env: Env, signal: "start" | "stop" | "restart" | "kill"): Promise<void> {
+  const panelUrl = pterodactylPanelUrl(env);
+  const apiKey = env.PTERODACTYL_CLIENT_API_KEY?.trim();
+  const serverId = env.PTERODACTYL_SERVER_ID?.trim();
+
+  if (!panelUrl || !apiKey || !serverId) {
+    throw new HttpError(503, "pterodactyl_not_configured", "Pterodactyl ist im Webpanel noch nicht vollständig konfiguriert.");
+  }
+
+  const response = await fetch(`${panelUrl}/api/client/servers/${encodeURIComponent(serverId)}/power`, {
+    method: "POST",
+    headers: {
+      Accept: "application/json",
+      Authorization: `Bearer ${apiKey}`,
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({ signal })
+  });
+
+  if (!response.ok) {
+    const text = await response.text();
+    throw new HttpError(response.status, "pterodactyl_power_failed", `Pterodactyl ${response.status}: ${text.slice(0, 300)}`);
+  }
+}
+
 async function fallbackAdminGuilds(env: Env): Promise<AdminGuildRuntimeItem[]> {
   const rows = await all<Record<string, unknown>>(
     requireDb(env).prepare(
@@ -1060,6 +1107,101 @@ function discordRoleColor(value: unknown): string {
   return `#${Math.max(0, Math.min(0xffffff, color)).toString(16).padStart(6, "0").toUpperCase()}`;
 }
 
+function discordRoleColorInt(value: string): number {
+  return parseInt(value.replace("#", ""), 16);
+}
+
+const DISCORD_PERMISSION_BITS = {
+  createInstantInvite: 1n,
+  kickMembers: 2n,
+  banMembers: 4n,
+  administrator: 8n,
+  manageChannels: 16n,
+  manageGuild: 32n,
+  viewAuditLog: 128n,
+  viewChannel: 1024n,
+  sendMessages: 2048n,
+  manageMessages: 8192n,
+  connect: 1048576n,
+  speak: 2097152n,
+  manageRoles: 268435456n,
+  moderateMembers: 1099511627776n
+} as const;
+
+const permissionChecks: Array<{ key: keyof typeof DISCORD_PERMISSION_BITS; label: string; description: string; group: string }> = [
+  { key: "viewChannel", label: "Kanäle sehen", description: "Basis für Browser, Logging-Auswahl und normale Bot-Aktionen.", group: "Basis" },
+  { key: "sendMessages", label: "Nachrichten senden", description: "Nötig für Logs, Welcome, Hinweise und Bot-Antworten.", group: "Basis" },
+  { key: "createInstantInvite", label: "Invites erstellen", description: "Nötig für Invite-Manager und Bot-erstellte Einladungen.", group: "Guild" },
+  { key: "manageRoles", label: "Rollen verwalten", description: "Nötig für Role-Aktionen und Webpanel-Rollenbearbeitung.", group: "Guild" },
+  { key: "manageChannels", label: "Kanäle verwalten", description: "Nötig für Temp-Voice, Setup-Kanäle und Channel-Automation.", group: "Guild" },
+  { key: "viewAuditLog", label: "Audit-Log lesen", description: "Nötig für Antinuke, Moderationsnachweise und Logging.", group: "Moderation" },
+  { key: "manageMessages", label: "Nachrichten verwalten", description: "Nötig für Cleanup, Moderation und gelöschte Inhalte.", group: "Moderation" },
+  { key: "kickMembers", label: "Mitglieder kicken", description: "Nötig für Kick-Moderation.", group: "Moderation" },
+  { key: "banMembers", label: "Mitglieder bannen", description: "Nötig für Ban-Moderation.", group: "Moderation" },
+  { key: "moderateMembers", label: "Timeouts setzen", description: "Nötig für Timeouts und Auto-Moderation.", group: "Moderation" },
+  { key: "connect", label: "Voice verbinden", description: "Nötig für Musik und Voice-Funktionen.", group: "Voice" },
+  { key: "speak", label: "Voice sprechen", description: "Nötig für Musik-Wiedergabe.", group: "Voice" }
+];
+
+function parsePermissionBits(value: unknown): bigint | null {
+  try {
+    const text = String(value ?? "0");
+    if (!/^\d+$/.test(text)) return null;
+    return BigInt(text);
+  } catch {
+    return null;
+  }
+}
+
+function computeBotPermissionBits(guildId: string, roles: Array<Record<string, unknown>>, botMember: Record<string, unknown> | null): bigint | null {
+  if (!botMember) return null;
+  const roleIds = new Set<string>([guildId]);
+  const memberRoles = Array.isArray(botMember.roles) ? botMember.roles : [];
+
+  for (const roleId of memberRoles) {
+    roleIds.add(String(roleId));
+  }
+
+  let bits = 0n;
+  let sawPermission = false;
+
+  for (const role of roles) {
+    const roleId = String(role.id ?? "");
+    if (!roleIds.has(roleId)) continue;
+    const permissions = parsePermissionBits(role.permissions);
+    if (permissions === null) continue;
+    bits |= permissions;
+    sawPermission = true;
+  }
+
+  return sawPermission ? bits : null;
+}
+
+function buildPermissionChecks(guildId: string, roles: Array<Record<string, unknown>>, botMember: Record<string, unknown> | null): AdminPermissionCheck[] {
+  const bits = computeBotPermissionBits(guildId, roles, botMember);
+  const hasAdmin = bits !== null && (bits & DISCORD_PERMISSION_BITS.administrator) === DISCORD_PERMISSION_BITS.administrator;
+
+  return permissionChecks.map((check) => ({
+    key: check.key,
+    label: check.label,
+    description: check.description,
+    group: check.group,
+    ok: bits === null ? null : hasAdmin || (bits & DISCORD_PERMISSION_BITS[check.key]) === DISCORD_PERMISSION_BITS[check.key]
+  }));
+}
+
+function normalizeGuildModules(value: unknown): AdminGuildModules {
+  const raw = value && typeof value === "object" ? value as Record<string, unknown> : {};
+  return {
+    logging: Boolean(raw.logging),
+    welcome: Boolean(raw.welcome),
+    tempVoice: Boolean(raw.tempVoice ?? raw.temp_voice),
+    spotifyMusic: Boolean(raw.spotifyMusic ?? raw.spotify_music),
+    games: Boolean(raw.games),
+    moderation: Boolean(raw.moderation)
+  };
+}
+
 function discordChannelTypeLabel(value: unknown): string {
   const numeric = Number(value);
   if (Number.isFinite(numeric)) {
@@ -1103,6 +1245,7 @@ function normalizeAdminRole(role: Record<string, unknown>) {
     position: Number(role.position ?? 0),
     managed: Boolean(role.managed),
     botCanManage: Boolean(role.botCanManage ?? role.bot_can_manage),
+    permissions: role.permissions !== undefined && role.permissions !== null ? String(role.permissions) : null,
     mentionable: Boolean(role.mentionable),
     hoist: Boolean(role.hoist)
   };
@@ -2224,6 +2367,90 @@ app.get("/api/admin/bot", async (c) => {
   });
 });
 
+app.get("/api/admin/bot/logs", async (c) => {
+  await requireAdminSession(c);
+  await ensureBotRuntimeTable(c.env);
+
+  const runtime = await first<BotRuntimeRow>(
+    c.env.DB.prepare("SELECT payload FROM bot_runtime_status WHERE id = 'latest'")
+  );
+  const payload = parseJson<Record<string, unknown>>(runtime?.payload ?? "", {});
+  const detailsLogs = Array.isArray(payload.logs) ? payload.logs : [];
+  const syncEvents = await all<Record<string, unknown>>(
+    c.env.DB.prepare(
+      `SELECT e.id, e.action, e.status, e.last_error AS lastError, e.created_at AS createdAt,
+              e.completed_at AS completedAt, g.discord_guild_id AS guildId, g.name AS guildName
+         FROM sync_events e
+         LEFT JOIN guilds g ON g.id = e.guild_id
+        ORDER BY e.created_at DESC
+        LIMIT 40`
+    )
+  );
+  const auditRows = await all<Record<string, unknown>>(
+    c.env.DB.prepare(
+      `SELECT a.id, a.action, a.target, a.actor_discord_user_id AS actorDiscordUserId,
+              a.created_at AS createdAt, g.discord_guild_id AS guildId, g.name AS guildName
+         FROM audit_logs a
+         LEFT JOIN guilds g ON g.id = a.guild_id
+        ORDER BY a.created_at DESC
+        LIMIT 40`
+    )
+  );
+
+  return json(c, {
+    logs: detailsLogs.slice(-80),
+    syncEvents,
+    auditLog: auditRows
+  });
+});
+
+app.post("/api/admin/bot/actions", async (c) => {
+  const session = await requireAdminSession(c);
+  const data = botAdminActionSchema.parse(await readJsonBody(c));
+  const eventId = await enqueueBotAdminEvent(c.env, `bot.admin.${data.action}`, {
+    requestedAction: data.action,
+    actorDiscordUserId: session.user.discordUserId,
+    actorUsername: session.user.displayName || session.user.username
+  });
+
+  return json(c, { ok: true, eventId, action: data.action });
+});
+
+app.post("/api/admin/pterodactyl/power", async (c) => {
+  await requireAdminSession(c);
+  const data = pterodactylPowerSchema.parse(await readJsonBody(c));
+  await sendPterodactylPowerSignal(c.env, data.signal);
+  return json(c, { ok: true, signal: data.signal });
+});
+
+app.get("/api/admin/bot/export", async (c) => {
+  await requireAdminSession(c);
+  await ensureBotRuntimeTable(c.env);
+
+  const [guilds, commands, runtime, events] = await Promise.all([
+    all<Record<string, unknown>>(c.env.DB.prepare("SELECT discord_guild_id, name, icon, bot_joined_at, last_seen_at FROM guilds ORDER BY LOWER(name) ASC")),
+    all<Record<string, unknown>>(c.env.DB.prepare("SELECT command_name, description, command_type, updated_at FROM bot_commands ORDER BY command_name ASC")),
+    first<BotRuntimeRow>(c.env.DB.prepare("SELECT * FROM bot_runtime_status WHERE id = 'latest'")),
+    all<Record<string, unknown>>(
+      c.env.DB.prepare(
+        `SELECT action, status, attempts, max_attempts AS maxAttempts, last_error AS lastError, created_at AS createdAt, completed_at AS completedAt
+           FROM sync_events
+          ORDER BY created_at DESC
+          LIMIT 100`
+      )
+    )
+  ]);
+
+  return json(c, {
+    exportedAt: nowIso(),
+    app: "discordbot-webpanel",
+    guilds,
+    commands,
+    runtime: normalizeBotRuntime(runtime),
+    recentEvents: events
+  });
+});
+
 app.get("/api/admin/discordguilds/:guildId", async (c) => {
   await requireAdminSession(c);
   await ensureBotRuntimeTable(c.env);
@@ -2295,6 +2522,8 @@ app.get("/api/admin/discordguilds/:guildId", async (c) => {
   const roles = (liveRoles.length ? liveRoles : dbRoles).map(normalizeAdminRole).filter((role) => role.id);
   const channels = (liveChannels.length ? liveChannels : dbChannels).map(normalizeAdminChannel).filter((channel) => channel.id);
   const members = liveMembers.map(normalizeAdminMember).filter((member) => member.id);
+  const moduleSettings = normalizeGuildModules(runtimeGuild?.modules);
+  const permissionChecks = buildPermissionChecks(guildId, liveRoles.length ? liveRoles : dbRoles, botMember);
   const memberCount = finiteNumber(liveGuild?.member_count)
     ?? finiteNumber(liveGuild?.approximate_member_count)
     ?? finiteNumber(runtimeGuild?.memberCount)
@@ -2324,6 +2553,8 @@ app.get("/api/admin/discordguilds/:guildId", async (c) => {
     roles,
     channels,
     members,
+    modules: moduleSettings,
+    permissionChecks,
     limits: {
       membersShown: members.length,
       membersPartial: memberCount !== null ? members.length < memberCount : false
@@ -2411,6 +2642,83 @@ app.patch("/api/admin/discordguilds/:guildId/bot-nickname", async (c) => {
 
   await audit(c.env, guild.id, session.user.discordUserId, "owner.guild.nickname.update", "bot_nickname", oldValue.bot_nickname, data.nickname);
   return json(c, { ok: true, nickname: data.nickname });
+});
+
+app.put("/api/admin/discordguilds/:guildId/modules", async (c) => {
+  const session = await requireAdminSession(c);
+  const guildId = snowflakeSchema.parse(c.req.param("guildId"));
+  const guild = await requireAdminGuild(c.env, guildId);
+  const data = guildModuleSettingsSchema.parse(await readJsonBody(c));
+  const modules = normalizeGuildModules(data.modules);
+  const eventId = await enqueueSyncEvent(c.env, {
+    id: guild.id,
+    discordGuildId: guild.discord_guild_id,
+    name: guild.name,
+    icon: guild.icon,
+    botJoinedAt: guild.bot_joined_at
+  }, "guild.modules.update", {
+    discordGuildId: guild.discord_guild_id,
+    modules,
+    actorDiscordUserId: session.user.discordUserId,
+    actorUsername: session.user.displayName || session.user.username
+  });
+
+  await audit(c.env, guild.id, session.user.discordUserId, "owner.guild.modules.update", "guild_modules", null, modules);
+  return json(c, { ok: true, eventId, modules });
+});
+
+app.patch("/api/admin/discordguilds/:guildId/roles/:roleId", async (c) => {
+  const session = await requireAdminSession(c);
+  const guildId = snowflakeSchema.parse(c.req.param("guildId"));
+  const roleId = snowflakeSchema.parse(c.req.param("roleId"));
+  const guild = await requireAdminGuild(c.env, guildId);
+  const data = adminRoleUpdateSchema.parse(await readJsonBody(c));
+  const roles = await fetchDiscordBotGuildRoles(c.env, guildId) as unknown as Record<string, unknown>[];
+  const role = roles.find((item) => String(item.id) === roleId);
+
+  if (!role) throw new HttpError(404, "role_not_found", "Diese Rolle wurde auf der Guild nicht gefunden.");
+  if (roleId === guildId) throw new HttpError(400, "role_everyone_forbidden", "Die @everyone-Rolle kann nicht bearbeitet werden.");
+  if (Boolean(role.managed)) throw new HttpError(400, "role_managed_forbidden", "Verwaltete Discord-/Bot-Rollen können nicht bearbeitet werden.");
+
+  const updated = await updateDiscordGuildRole(c.env, guildId, roleId, {
+    name: data.name,
+    color: discordRoleColorInt(data.color),
+    hoist: data.hoist,
+    mentionable: data.mentionable
+  });
+
+  await audit(c.env, guild.id, session.user.discordUserId, "owner.guild.role.update", roleId, normalizeAdminRole(role), normalizeAdminRole(updated as unknown as Record<string, unknown>));
+  return json(c, { ok: true, role: normalizeAdminRole(updated as unknown as Record<string, unknown>) });
+});
+
+app.get("/api/admin/discordguilds/:guildId/export", async (c) => {
+  await requireAdminSession(c);
+  const guildId = snowflakeSchema.parse(c.req.param("guildId"));
+  const guild = await requireAdminGuild(c.env, guildId);
+  const [settings, welcome, logging, channels, roles, auditRows] = await Promise.all([
+    ensureSettings(c.env, guild.id),
+    ensureWelcomeSettings(c.env, guild.id),
+    ensureLoggingSettings(c.env, guild.id),
+    all<Record<string, unknown>>(c.env.DB.prepare("SELECT discord_channel_id, name, channel_type, category_id, category_name, can_view, can_send, position FROM guild_channels WHERE guild_id = ? ORDER BY position ASC").bind(guild.id)),
+    all<Record<string, unknown>>(c.env.DB.prepare("SELECT discord_role_id, name, color, position, managed, bot_can_manage FROM guild_roles WHERE guild_id = ? ORDER BY position DESC").bind(guild.id)),
+    all<Record<string, unknown>>(c.env.DB.prepare("SELECT action, target, created_at AS createdAt FROM audit_logs WHERE guild_id = ? ORDER BY created_at DESC LIMIT 50").bind(guild.id))
+  ]);
+
+  return json(c, {
+    exportedAt: nowIso(),
+    guild: {
+      id: guild.discord_guild_id,
+      name: guild.name,
+      icon: guild.icon,
+      botJoinedAt: guild.bot_joined_at
+    },
+    settings,
+    welcome,
+    logging,
+    channels,
+    roles,
+    recentAudit: auditRows
+  });
 });
 
 app.post("/api/admin/bot/presence", async (c) => {

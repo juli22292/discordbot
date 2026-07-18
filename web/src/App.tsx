@@ -17,7 +17,9 @@ import {
   Copy,
   Cpu,
   Database,
+  Download,
   ExternalLink,
+  FileJson,
   Gauge,
   Gamepad2,
   HardDrive,
@@ -34,8 +36,10 @@ import {
   Music2,
   Palette,
   Plus,
+  Power,
   Radio,
   RefreshCw,
+  RotateCcw,
   Rocket,
   Save,
   Search,
@@ -49,6 +53,7 @@ import {
   Upload,
   UserPlus,
   UserRound,
+  Wand2,
   Wifi
 } from "lucide-react";
 import "./styles.css";
@@ -207,6 +212,40 @@ type AdminRuntime = {
       uptimeSeconds?: number | null;
       checkedAt?: string | null;
     } | null;
+    lavalink?: {
+      backend?: string;
+      uri?: string;
+      identifier?: string;
+      searchSource?: string;
+      status?: string;
+      connected?: boolean;
+      players?: number;
+      activePlayers?: number;
+      queueItems?: number;
+    } | null;
+    music?: {
+      backend?: string;
+      defaultVolume?: number;
+      activePlayers?: number;
+      savedPlayers?: number;
+      queueItems?: number;
+      players?: Array<{
+        guildId: string;
+        guildName?: string;
+        channelName?: string | null;
+        playing?: boolean;
+        paused?: boolean;
+        volume?: number | null;
+        trackTitle?: string | null;
+        queueLength?: number;
+      }>;
+    } | null;
+    logs?: Array<{
+      level?: string;
+      source?: string;
+      message?: string;
+      createdAt?: string;
+    }>;
     guilds?: Array<{
       id: string;
       name: string;
@@ -221,6 +260,29 @@ type AdminRuntime = {
       joinedAt?: string | null;
     }>;
   };
+};
+
+type OwnerLogData = {
+  logs: Array<{ level?: string; source?: string; message?: string; createdAt?: string }>;
+  syncEvents: Array<{
+    id: string;
+    action: string;
+    status: string;
+    lastError: string | null;
+    createdAt: string;
+    completedAt: string | null;
+    guildId: string | null;
+    guildName: string | null;
+  }>;
+  auditLog: Array<{
+    id: string;
+    action: string;
+    target: string;
+    actorDiscordUserId: string;
+    createdAt: string;
+    guildId: string | null;
+    guildName: string | null;
+  }>;
 };
 
 type AdminData = {
@@ -272,6 +334,7 @@ type AdminGuildDetail = {
     position: number;
     managed: boolean;
     botCanManage: boolean;
+    permissions: string | null;
     mentionable: boolean;
     hoist: boolean;
   }>;
@@ -296,6 +359,21 @@ type AdminGuildDetail = {
     roles: string[];
     joinedAt: string | null;
     premiumSince: string | null;
+  }>;
+  modules: {
+    logging: boolean;
+    welcome: boolean;
+    tempVoice: boolean;
+    spotifyMusic: boolean;
+    games: boolean;
+    moderation: boolean;
+  };
+  permissionChecks: Array<{
+    key: string;
+    label: string;
+    description: string;
+    ok: boolean | null;
+    group: string;
   }>;
   limits: {
     membersShown: number;
@@ -452,6 +530,37 @@ function safeClientReturnTo(value: string | null | undefined): string {
   }
   return value;
 }
+
+async function downloadJson(path: string, filename: string) {
+  const data = await api<unknown>(path);
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+}
+
+const ownerActionLabels: Record<string, string> = {
+  "snapshot.refresh": "Snapshot neu laden",
+  "runtime.refresh": "Runtime melden",
+  "commands.sync": "Slash Commands syncen",
+  "music.reconnect": "Lavalink verbinden",
+  "music.disconnect_all": "Musik trennen",
+  "restart.request": "Bot-Restart anfragen"
+};
+
+const guildModuleLabels = [
+  { key: "logging", label: "Logging", text: "Server- und Moderationsereignisse sammeln.", icon: ListFilter },
+  { key: "welcome", label: "Begrüßung", text: "Welcome-Nachrichten und Startrollen aktiv halten.", icon: Sparkles },
+  { key: "tempVoice", label: "Temp-Voice", text: "Join-to-create und temporäre Sprachräume.", icon: Mic2 },
+  { key: "spotifyMusic", label: "Spotify Music", text: "Musik, Lavalink und DJ-Regeln.", icon: Music2 },
+  { key: "games", label: "Games", text: "Fun- und Mini-Game-Kommandos.", icon: Gamepad2 },
+  { key: "moderation", label: "Moderation", text: "Warns, Timeouts und Schutzmodule.", icon: Shield }
+] as const;
 
 function usePath() {
   const [path, setPath] = useState(window.location.pathname + window.location.search);
@@ -1523,16 +1632,23 @@ function pterodactylStateLabel(value: string | null | undefined) {
 function AdminPageModern() {
   const me = useApi<{ user: User }>("/api/me", []);
   const admin = useApi<AdminData>("/api/admin/bot", []);
+  const ownerLogs = useApi<OwnerLogData>("/api/admin/bot/logs", []);
   const runtime = admin.data?.runtime ?? null;
   const ownerHasData = Boolean(admin.data);
   const ownerInitialLoading = admin.loading && !ownerHasData;
   const ownerRefreshing = admin.loading && ownerHasData;
   const guilds = runtime?.details.guilds ?? [];
   const recentEvents = admin.data?.recentEvents ?? [];
+  const lavalink = runtime?.details.lavalink ?? null;
+  const music = runtime?.details.music ?? null;
+  const recentBotLogs = ownerLogs.data?.logs ?? runtime?.details.logs ?? [];
 
   const [presence, setPresence] = useState({ status: "online", activityType: "none", text: "", url: "" });
   const [saving, setSaving] = useState(false);
   const [saveStatus, setSaveStatus] = useState<string | null>(null);
+  const [actionBusy, setActionBusy] = useState<string | null>(null);
+  const [actionStatus, setActionStatus] = useState<string | null>(null);
+  const [exporting, setExporting] = useState(false);
   const [guildSearch, setGuildSearch] = useState("");
   const [guildSort, setGuildSort] = useState<"name" | "members" | "channels" | "roles">("name");
   const [eventFilter, setEventFilter] = useState<"all" | "open" | "failed" | "completed">("all");
@@ -1552,6 +1668,7 @@ function AdminPageModern() {
     if (!autoRefresh) return;
     const timer = window.setInterval(() => {
       void admin.reload();
+      void ownerLogs.reload();
     }, 30000);
 
     return () => window.clearInterval(timer);
@@ -1640,6 +1757,8 @@ function AdminPageModern() {
 
   const healthScore = Math.round((healthChecks.filter((check) => check.tone === "ok").length / healthChecks.length) * 100);
   const healthTone: OwnerTone = healthScore >= 75 ? "ok" : healthScore >= 50 ? "warn" : "danger";
+  const lavalinkTone: "ok" | "warn" = lavalink?.connected ? "ok" : "warn";
+  const queueItems = music?.queueItems ?? lavalink?.queueItems ?? 0;
 
   const presencePresets = [
     { label: "Normal", status: "online", activityType: "none", text: "", url: "" },
@@ -1662,6 +1781,56 @@ function AdminPageModern() {
       setSaveStatus(error instanceof Error ? error.message : "Status konnte nicht geändert werden.");
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function runOwnerAction(action: string) {
+    setActionBusy(action);
+    setActionStatus(null);
+    try {
+      await api("/api/admin/bot/actions", {
+        method: "POST",
+        body: JSON.stringify({ action })
+      });
+      setActionStatus(`${ownerActionLabels[action] ?? action} wurde an den Bot gesendet.`);
+      window.setTimeout(() => {
+        void admin.reload();
+        void ownerLogs.reload();
+      }, 5000);
+    } catch (error) {
+      setActionStatus(error instanceof Error ? error.message : "Aktion konnte nicht gestartet werden.");
+    } finally {
+      setActionBusy(null);
+    }
+  }
+
+  async function runPowerSignal(signal: "restart") {
+    setActionBusy(`pterodactyl.${signal}`);
+    setActionStatus(null);
+    try {
+      await api("/api/admin/pterodactyl/power", {
+        method: "POST",
+        body: JSON.stringify({ signal })
+      });
+      setActionStatus("Pterodactyl-Restart wurde gesendet.");
+      window.setTimeout(() => void admin.reload(), 8000);
+    } catch (error) {
+      setActionStatus(error instanceof Error ? error.message : "Pterodactyl-Aktion konnte nicht gestartet werden.");
+    } finally {
+      setActionBusy(null);
+    }
+  }
+
+  async function exportOwnerConfig() {
+    setExporting(true);
+    setActionStatus(null);
+    try {
+      await downloadJson("/api/admin/bot/export", `discordbot-owner-export-${new Date().toISOString().slice(0, 10)}.json`);
+      setActionStatus("Owner-Export wurde erstellt.");
+    } catch (error) {
+      setActionStatus(error instanceof Error ? error.message : "Export konnte nicht erstellt werden.");
+    } finally {
+      setExporting(false);
     }
   }
 
@@ -1703,6 +1872,79 @@ function AdminPageModern() {
               <StatusTile icon={<Cpu size={19} />} label="CPU" value={cpuPercent !== null && cpuPercent !== undefined ? `${cpuPercent.toFixed(1)}%` : "-"} tone={cpuPercent !== null && cpuPercent !== undefined && cpuPercent > 80 ? "warn" : "ok"} />
               <StatusTile icon={<Server size={19} />} label="Guilds" value={compactNumber(runtime?.guildCount ?? installedGuilds)} tone="ok" />
               <StatusTile icon={<Command size={19} />} label="Commands" value={compactNumber(runtime?.commandCount ?? admin.data.stats.knownCommands)} />
+            </section>
+
+            <section className="owner-admin-grid owner-tools-grid">
+              <div className="panel owner-quick-panel">
+                <div className="panel-title">
+                  <div>
+                    <h2>Quick Actions</h2>
+                    <p className="muted">Schnelle Bot-Aktionen über die sichere Sync-Queue.</p>
+                  </div>
+                  <span className="pill neutral">Owner</span>
+                </div>
+                <div className="owner-action-grid">
+                  {[
+                    ["snapshot.refresh", <Database size={16} />],
+                    ["runtime.refresh", <Activity size={16} />],
+                    ["commands.sync", <Command size={16} />],
+                    ["music.reconnect", <Radio size={16} />],
+                    ["music.disconnect_all", <Power size={16} />],
+                    ["restart.request", <RotateCcw size={16} />]
+                  ].map(([action, icon]) => (
+                    <button key={String(action)} className="secondary-action inline owner-action-button" onClick={() => void runOwnerAction(String(action))} disabled={Boolean(actionBusy)}>
+                      {actionBusy === action ? <Loader2 className="spin" size={16} /> : icon}
+                      {ownerActionLabels[String(action)]}
+                    </button>
+                  ))}
+                  <button className="secondary-action inline owner-action-button" onClick={() => void runPowerSignal("restart")} disabled={Boolean(actionBusy)}>
+                    {actionBusy === "pterodactyl.restart" ? <Loader2 className="spin" size={16} /> : <Power size={16} />}
+                    Pterodactyl Restart
+                  </button>
+                  <button className="secondary-action inline owner-action-button" onClick={() => void exportOwnerConfig()} disabled={exporting}>
+                    {exporting ? <Loader2 className="spin" size={16} /> : <Download size={16} />}
+                    Config exportieren
+                  </button>
+                </div>
+                <ActionStatus status={actionStatus} />
+              </div>
+
+              <div className="panel owner-music-panel">
+                <div className="panel-title">
+                  <div>
+                    <h2>Musik & Lavalink</h2>
+                    <p className="muted">Node, Queue und aktive Player auf einen Blick.</p>
+                  </div>
+                  <span className={`pill ${lavalinkTone}`}>{lavalink?.connected ? "verbunden" : "prüfen"}</span>
+                </div>
+                <div className="owner-mini-metrics">
+                  <StatusTile icon={<Radio size={18} />} label="Lavalink" value={lavalink?.status || "unbekannt"} tone={lavalinkTone} />
+                  <StatusTile icon={<Music2 size={18} />} label="Player" value={compactNumber(music?.activePlayers ?? lavalink?.activePlayers ?? 0)} tone={(music?.activePlayers ?? 0) > 0 ? "ok" : undefined} />
+                  <StatusTile icon={<ListFilter size={18} />} label="Queue" value={compactNumber(queueItems)} />
+                </div>
+                <dl className="owner-guild-facts owner-music-facts">
+                  <div><dt>Backend</dt><dd>{music?.backend || lavalink?.backend || "-"}</dd></div>
+                  <div><dt>Node</dt><dd>{lavalink?.uri || "-"}</dd></div>
+                  <div><dt>Suche</dt><dd>{lavalink?.searchSource || "-"}</dd></div>
+                  <div><dt>Volume</dt><dd>{music?.defaultVolume ?? "-"}</dd></div>
+                </dl>
+                <div className="owner-detail-list owner-player-list">
+                  {(music?.players ?? []).slice(0, 4).map((player) => (
+                    <article className="owner-detail-row" key={player.guildId}>
+                      <span className="channel-symbol"><Music2 size={15} /></span>
+                      <div>
+                        <strong>{player.guildName || player.guildId}</strong>
+                        <small>{player.trackTitle || player.channelName || "kein Track gemeldet"}</small>
+                      </div>
+                      <div className="owner-detail-tags">
+                        <span>{player.paused ? "pausiert" : player.playing ? "spielt" : "bereit"}</span>
+                        <span>{player.queueLength ?? 0} Queue</span>
+                      </div>
+                    </article>
+                  ))}
+                  {!(music?.players ?? []).length && <p className="muted">Keine aktiven Musik-Player gemeldet.</p>}
+                </div>
+              </div>
             </section>
 
             <section className="owner-admin-grid">
@@ -1930,6 +2172,47 @@ function AdminPageModern() {
                 </div>
               </div>
             </section>
+
+            <section className="panel owner-live-log-panel">
+              <div className="panel-title">
+                <div>
+                  <h2>Live-Logs & History</h2>
+                  <p className="muted">Bot-Meldungen, Sync-Events und Owner-Änderungen zusammengeführt.</p>
+                </div>
+                <RefreshButton loading={ownerLogs.loading && Boolean(ownerLogs.data)} onClick={ownerLogs.reload} />
+              </div>
+              {ownerLogs.error && <Notice tone="danger" text={ownerLogs.error} />}
+              <div className="owner-log-grid">
+                <div className="owner-log-column">
+                  <h3>Bot-Logs</h3>
+                  {(recentBotLogs ?? []).slice(-8).reverse().map((log, index) => (
+                    <article className="owner-log-row" key={`${log.createdAt ?? "log"}-${index}`}>
+                      <span className={`pill ${String(log.level ?? "").toLowerCase().includes("error") ? "danger" : "neutral"}`}>{log.level || "INFO"}</span>
+                      <div>
+                        <strong>{log.source || "bot"}</strong>
+                        <small>{log.message || "-"}</small>
+                      </div>
+                      <time>{formatDateTime(log.createdAt)}</time>
+                    </article>
+                  ))}
+                  {!(recentBotLogs ?? []).length && <p className="muted">Noch keine Bot-Logs im Heartbeat.</p>}
+                </div>
+                <div className="owner-log-column">
+                  <h3>Audit</h3>
+                  {(ownerLogs.data?.auditLog ?? []).slice(0, 8).map((entry) => (
+                    <article className="owner-log-row" key={entry.id}>
+                      <span className="pill ok">Audit</span>
+                      <div>
+                        <strong>{entry.action}</strong>
+                        <small>{entry.guildName || entry.guildId || entry.target}</small>
+                      </div>
+                      <time>{formatDateTime(entry.createdAt)}</time>
+                    </article>
+                  ))}
+                  {!(ownerLogs.data?.auditLog ?? []).length && <p className="muted">Noch keine Owner-Änderungen gefunden.</p>}
+                </div>
+              </div>
+            </section>
           </>
         )}
       </main>
@@ -1969,11 +2252,30 @@ function AdminGuildViewPage({ path }: { path: string }) {
   const [inviteBusy, setInviteBusy] = useState(false);
   const [deletingInviteCode, setDeletingInviteCode] = useState<string | null>(null);
   const [inviteStatus, setInviteStatus] = useState<string | null>(null);
+  const [modules, setModules] = useState<AdminGuildDetail["modules"] | null>(null);
+  const [modulesSaving, setModulesSaving] = useState(false);
+  const [modulesStatus, setModulesStatus] = useState<string | null>(null);
+  const [roleEditor, setRoleEditor] = useState<AdminGuildDetail["roles"][number] | null>(null);
+  const [roleDraft, setRoleDraft] = useState({ name: "", color: "#5865F2", hoist: false, mentionable: false });
+  const [roleSaving, setRoleSaving] = useState(false);
+  const [roleStatus, setRoleStatus] = useState<string | null>(null);
+  const [exportingGuild, setExportingGuild] = useState(false);
 
   useEffect(() => {
     if (!data) return;
     setNickname(data.settings.effectiveBotNickname || data.settings.botNickname || "");
+    setModules(data.modules);
   }, [data?.settings.effectiveBotNickname, data?.settings.botNickname]);
+
+  useEffect(() => {
+    if (!roleEditor) return;
+    setRoleDraft({
+      name: roleEditor.name,
+      color: roleEditor.color,
+      hoist: roleEditor.hoist,
+      mentionable: roleEditor.mentionable
+    });
+  }, [roleEditor?.id]);
 
   const roleNameById = useMemo(() => {
     return new Map((data?.roles ?? []).map((role) => [role.id, role.name]));
@@ -2081,9 +2383,62 @@ function AdminGuildViewPage({ path }: { path: string }) {
     }
   }
 
+  async function saveModules() {
+    if (!validGuildId || !modules) return;
+    setModulesSaving(true);
+    setModulesStatus(null);
+    try {
+      const response = await api<{ modules: AdminGuildDetail["modules"] }>(`/api/admin/discordguilds/${guildId}/modules`, {
+        method: "PUT",
+        body: JSON.stringify({ modules })
+      });
+      setModules(response.modules);
+      setModulesStatus("Module wurden an den Bot gesendet.");
+      window.setTimeout(() => void detail.reload(), 6000);
+    } catch (error) {
+      setModulesStatus(error instanceof Error ? error.message : "Module konnten nicht gespeichert werden.");
+    } finally {
+      setModulesSaving(false);
+    }
+  }
+
+  async function saveRole() {
+    if (!validGuildId || !roleEditor) return;
+    setRoleSaving(true);
+    setRoleStatus(null);
+    try {
+      await api(`/api/admin/discordguilds/${guildId}/roles/${roleEditor.id}`, {
+        method: "PATCH",
+        body: JSON.stringify(roleDraft)
+      });
+      setRoleStatus("Rolle wurde aktualisiert.");
+      setRoleEditor(null);
+      await detail.reload();
+    } catch (error) {
+      setRoleStatus(error instanceof Error ? error.message : "Rolle konnte nicht gespeichert werden.");
+    } finally {
+      setRoleSaving(false);
+    }
+  }
+
+  async function exportGuildConfig() {
+    if (!validGuildId) return;
+    setExportingGuild(true);
+    setStatus(null);
+    try {
+      await downloadJson(`/api/admin/discordguilds/${guildId}/export`, `discordbot-${displayedGuildName.replace(/[^a-z0-9_-]+/gi, "-")}-${guildId}.json`);
+      setStatus("Guild-Export wurde erstellt.");
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : "Guild-Export konnte nicht erstellt werden.");
+    } finally {
+      setExportingGuild(false);
+    }
+  }
+
   const displayedGuildName = guild?.name || routeGuildName;
   const currentRows = activeTab === "roles" ? visibleRoles.length : activeTab === "members" ? visibleMembers.length : visibleChannels.length;
   const inviteList = invites.data?.invites ?? [];
+  const missingPermissions = data?.permissionChecks.filter((check) => check.ok === false).length ?? 0;
 
   return (
     <div className="app-shell">
@@ -2109,7 +2464,13 @@ function AdminGuildViewPage({ path }: { path: string }) {
               <p>{guildId}</p>
             </div>
           </div>
-          <RefreshButton loading={detail.loading && Boolean(data)} onClick={detail.reload} />
+          <div className="owner-hero-actions">
+            <button className="secondary-action inline" onClick={() => void exportGuildConfig()} disabled={exportingGuild || !data}>
+              {exportingGuild ? <Loader2 className="spin" size={16} /> : <FileJson size={16} />}
+              Export
+            </button>
+            <RefreshButton loading={detail.loading && Boolean(data)} onClick={detail.reload} />
+          </div>
         </section>
 
         {!validGuildId && <Notice tone="danger" text="Die Guild-ID in der URL ist ungültig." />}
@@ -2131,6 +2492,67 @@ function AdminGuildViewPage({ path }: { path: string }) {
                 {data.warnings.map((warning) => <Notice key={warning} tone="warning" text={warning} />)}
               </div>
             )}
+
+            <section className="owner-guild-ops-grid">
+              <div className="panel owner-permission-panel">
+                <div className="panel-title">
+                  <div>
+                    <h2>Permission-Check</h2>
+                    <p className="muted">Welche Bot-Rechte auf dieser Guild fehlen.</p>
+                  </div>
+                  <span className={`pill ${missingPermissions ? "warn" : "ok"}`}>{missingPermissions ? `${missingPermissions} fehlen` : "sauber"}</span>
+                </div>
+                <div className="owner-permission-grid">
+                  {data.permissionChecks.map((check) => (
+                    <article className={`owner-permission-card ${check.ok === true ? "ok" : check.ok === false ? "warn" : "neutral"}`} key={check.key}>
+                      <span>{check.ok === true ? <Check size={15} /> : check.ok === false ? <AlertTriangle size={15} /> : <Gauge size={15} />}</span>
+                      <div>
+                        <strong>{check.label}</strong>
+                        <small>{check.description}</small>
+                      </div>
+                      <em>{check.group}</em>
+                    </article>
+                  ))}
+                </div>
+              </div>
+
+              <div className="panel owner-modules-panel">
+                <div className="panel-title">
+                  <div>
+                    <h2>Module</h2>
+                    <p className="muted">Wichtige Features pro Guild schnell aktivieren.</p>
+                  </div>
+                  <span className="pill neutral">{Object.values(modules ?? data.modules).filter(Boolean).length}/6 aktiv</span>
+                </div>
+                <div className="owner-module-grid">
+                  {guildModuleLabels.map((module) => {
+                    const Icon = module.icon;
+                    const checked = Boolean((modules ?? data.modules)[module.key]);
+                    return (
+                      <label className={`owner-module-card ${checked ? "active" : ""}`} key={module.key}>
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          onChange={(event) => setModules({ ...(modules ?? data.modules), [module.key]: event.target.checked })}
+                        />
+                        <span><Icon size={17} /></span>
+                        <div>
+                          <strong>{module.label}</strong>
+                          <small>{module.text}</small>
+                        </div>
+                      </label>
+                    );
+                  })}
+                </div>
+                <ActionStatus status={modulesStatus} />
+                <div className="form-actions">
+                  <button className="primary-action inline" onClick={saveModules} disabled={modulesSaving || !modules}>
+                    {modulesSaving ? <Loader2 className="spin" size={16} /> : <Save size={16} />}
+                    Module speichern
+                  </button>
+                </div>
+              </div>
+            </section>
 
             <section className="owner-guild-detail-grid">
               <div className="panel owner-guild-profile-panel">
@@ -2291,6 +2713,45 @@ function AdminGuildViewPage({ path }: { path: string }) {
 
               {activeTab === "roles" && (
                 <div className="owner-detail-list">
+                  {roleEditor && (
+                    <article className="owner-role-editor">
+                      <div className="panel-title">
+                        <div>
+                          <h3>Rolle bearbeiten</h3>
+                          <p className="muted">{roleEditor.id}</p>
+                        </div>
+                        <span className={roleEditor.botCanManage ? "pill ok" : "pill warn"}>{roleEditor.botCanManage ? "verwaltbar" : "Hierarchie prüfen"}</span>
+                      </div>
+                      <div className="form-grid">
+                        <label>
+                          Name
+                          <input value={roleDraft.name} maxLength={100} onChange={(event) => setRoleDraft({ ...roleDraft, name: event.target.value })} />
+                        </label>
+                        <label>
+                          Farbe
+                          <input type="color" value={roleDraft.color} onChange={(event) => setRoleDraft({ ...roleDraft, color: event.target.value })} />
+                        </label>
+                        <label className="toggle">
+                          <input type="checkbox" checked={roleDraft.hoist} onChange={(event) => setRoleDraft({ ...roleDraft, hoist: event.target.checked })} />
+                          Separat anzeigen
+                        </label>
+                        <label className="toggle">
+                          <input type="checkbox" checked={roleDraft.mentionable} onChange={(event) => setRoleDraft({ ...roleDraft, mentionable: event.target.checked })} />
+                          Erwähnbar
+                        </label>
+                      </div>
+                      <ActionStatus status={roleStatus} />
+                      <div className="form-actions">
+                        <button className="primary-action inline" onClick={saveRole} disabled={roleSaving || roleEditor.managed}>
+                          {roleSaving ? <Loader2 className="spin" size={16} /> : <Save size={16} />}
+                          Rolle speichern
+                        </button>
+                        <button type="button" className="secondary-action inline" onClick={() => setRoleEditor(null)}>
+                          Schließen
+                        </button>
+                      </div>
+                    </article>
+                  )}
                   {visibleRoles.map((role) => (
                     <article key={role.id} className="owner-detail-row">
                       <span className="role-dot" style={{ backgroundColor: role.color }} />
@@ -2303,6 +2764,12 @@ function AdminGuildViewPage({ path }: { path: string }) {
                         {role.managed && <span>managed</span>}
                         {role.botCanManage && <span>Bot kann verwalten</span>}
                         {role.mentionable && <span>mentionable</span>}
+                        <button type="button" className="mini-text-button" onClick={() => {
+                          setRoleStatus(null);
+                          setRoleEditor(role);
+                        }}>
+                          Bearbeiten
+                        </button>
                       </div>
                     </article>
                   ))}

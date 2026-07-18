@@ -343,6 +343,30 @@ export async function deleteDiscordInvite(env: Env, code: string): Promise<void>
   }
 }
 
+export async function updateDiscordGuildRole(
+  env: Env,
+  guildId: string,
+  roleId: string,
+  options: { name: string; color: number; hoist: boolean; mentionable: boolean }
+): Promise<DiscordBotRole> {
+  const botToken = env.DISCORD_BOT_TOKEN?.trim();
+  if (!botToken) throw new DiscordApiError(500, "DISCORD_BOT_TOKEN ist nicht konfiguriert.");
+
+  return discordFetch<DiscordBotRole>(`/guilds/${guildId}/roles/${roleId}`, {
+    method: "PATCH",
+    headers: {
+      Authorization: `Bot ${botToken}`,
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({
+      name: options.name,
+      color: options.color,
+      hoist: options.hoist,
+      mentionable: options.mentionable
+    })
+  });
+}
+
 export async function updateDiscordBotGuildNickname(env: Env, guildId: string, nickname: string | null): Promise<void> {
   const botToken = env.DISCORD_BOT_TOKEN?.trim();
   if (!botToken) throw new DiscordApiError(500, "DISCORD_BOT_TOKEN ist nicht konfiguriert.");
