@@ -33,6 +33,7 @@ import {
   LogOut,
   MessageSquare,
   Mic2,
+  Moon,
   Music2,
   Palette,
   Plus,
@@ -49,6 +50,7 @@ import {
   ShieldCheck,
   SlidersHorizontal,
   Sparkles,
+  Sun,
   Trash2,
   Upload,
   UserPlus,
@@ -403,6 +405,8 @@ type User = {
   ownerAdmin?: boolean;
 };
 
+type ThemeMode = "dark" | "light";
+
 type ApiError = {
   error?: { code?: string; message?: string };
 };
@@ -562,6 +566,60 @@ const guildModuleLabels = [
   { key: "moderation", label: "Moderation", text: "Warns, Timeouts und Schutzmodule.", icon: Shield }
 ] as const;
 
+const THEME_STORAGE_KEY = "eclipsebot-theme";
+
+function readStoredTheme(): ThemeMode {
+  try {
+    const stored = window.localStorage.getItem(THEME_STORAGE_KEY);
+    return stored === "light" ? "light" : "dark";
+  } catch {
+    return "dark";
+  }
+}
+
+function applyTheme(theme: ThemeMode) {
+  document.documentElement.dataset.theme = theme;
+  document.documentElement.style.colorScheme = theme;
+}
+
+function useThemeMode() {
+  const [theme, setTheme] = useState<ThemeMode>(() => readStoredTheme());
+
+  useEffect(() => {
+    applyTheme(theme);
+    try {
+      window.localStorage.setItem(THEME_STORAGE_KEY, theme);
+    } catch {
+      // localStorage can be unavailable in strict browser privacy modes.
+    }
+  }, [theme]);
+
+  return {
+    theme,
+    toggleTheme: () => setTheme((current) => (current === "dark" ? "light" : "dark"))
+  };
+}
+
+function ThemeToggle({ compact = false }: { compact?: boolean }) {
+  const { theme, toggleTheme } = useThemeMode();
+  const light = theme === "light";
+
+  return (
+    <button
+      type="button"
+      className={`theme-toggle ${light ? "light" : "dark"} ${compact ? "compact" : ""}`}
+      onClick={toggleTheme}
+      aria-label={light ? "Dark Mode aktivieren" : "Light Mode aktivieren"}
+      title={light ? "Dark Mode aktivieren" : "Light Mode aktivieren"}
+    >
+      <span className="theme-toggle-track" aria-hidden="true">
+        <span className="theme-toggle-thumb">{light ? <Sun size={14} /> : <Moon size={14} />}</span>
+      </span>
+      {!compact && <span>{light ? "Light" : "Dark"}</span>}
+    </button>
+  );
+}
+
 function usePath() {
   const [path, setPath] = useState(window.location.pathname + window.location.search);
   useEffect(() => {
@@ -703,10 +761,13 @@ function LoginPage() {
             <div className="brand-mark">
               <Bot size={28} />
             </div>
-            <span className="signal-pill">
-              <Radio size={14} />
-              Webpanel bereit
-            </span>
+            <div className="brand-actions">
+              <ThemeToggle compact />
+              <span className="signal-pill">
+                <Radio size={14} />
+                Webpanel bereit
+              </span>
+            </div>
           </div>
           <div className="auth-copy">
             <p className="eyebrow">
@@ -823,6 +884,7 @@ function TopNav({ user }: { user?: User | null }) {
         <Activity size={14} />
         Live
       </span>
+      <ThemeToggle compact />
       {user && (
         <div className="user-chip">
           {user.avatar ? <img src={user.avatar} alt="" /> : <UserRound size={18} />}
