@@ -1,7 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { canManageGuild, permissionLabel } from "../server/permissions";
+import { PANEL_OWNER_DISCORD_USER_ID, canManageGuild, canUsePanel, permissionLabel } from "../server/permissions";
 
 describe("Discord permission bitfield checks", () => {
+  it("locks the webpanel to the configured bot owner", () => {
+    expect(canUsePanel(PANEL_OWNER_DISCORD_USER_ID)).toBe(true);
+    expect(canUsePanel("123456789012345678")).toBe(false);
+    expect(canUsePanel(null)).toBe(false);
+  });
+
   it("allows guild owners", () => {
     expect(canManageGuild({ owner: true, permissions: "0" })).toBe(true);
     expect(permissionLabel({ owner: true, permissions: "0" })).toBe("Owner");

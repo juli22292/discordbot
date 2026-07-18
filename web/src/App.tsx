@@ -666,7 +666,9 @@ function App() {
 }
 
 function LoginPage() {
-  const returnTo = safeClientReturnTo(new URLSearchParams(window.location.search).get("returnTo"));
+  const searchParams = new URLSearchParams(window.location.search);
+  const returnTo = safeClientReturnTo(searchParams.get("returnTo"));
+  const loginError = searchParams.get("error");
   const [sessionUser, setSessionUser] = useState<User | null>(null);
   const [checkingSession, setCheckingSession] = useState(true);
 
@@ -714,6 +716,9 @@ function LoginPage() {
             <h1>EclipseBot Webpanel</h1>
             <p>Server verwalten, Slash-Befehle steuern und das Bot-Profil pro Guild sauber synchronisieren.</p>
           </div>
+          {loginError === "not_allowed" && (
+            <Notice tone="danger" text="Dieses Webpanel ist nur für den freigeschalteten Bot-Owner verfügbar." />
+          )}
           {checkingSession ? (
             <button className="primary-action full hero-action" disabled>
               <Loader2 className="spin" size={18} />

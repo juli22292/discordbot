@@ -30,7 +30,7 @@ import {
   updateDiscordGuildRole,
   updateDiscordBotGuildNickname
 } from "./server/discord";
-import { canManageGuild, permissionLabel } from "./server/permissions";
+import { PANEL_OWNER_DISCORD_USER_ID, canManageGuild, canUsePanel, permissionLabel } from "./server/permissions";
 import type { ActiveSession, DiscordGuild, Env, GuildAccess, SessionUser, TokenData } from "./server/types";
 import {
   assertSameGuild,
@@ -445,6 +445,9 @@ async function getSession(c: HonoContext): Promise<ActiveSession | null> {
 async function requireSession(c: HonoContext): Promise<ActiveSession> {
   const session = await getSession(c);
   if (!session) throw new HttpError(401, "session_required", "Bitte melde dich erneut mit Discord an.");
+  if (!canUsePanel(session.user.discordUserId)) {
+    throw new HttpError(403, "panel_forbidden", "Dieses Webpanel ist nur für den freigeschalteten Bot-Owner verfügbar.");
+  }
   return session;
 }
 
@@ -835,13 +838,8 @@ async function assertGuildMedia(env: Env, guildId: string, mediaKey: string | nu
   }
 }
 
-function adminUserIds(env: Env): Set<string> {
-  return new Set(
-    String(env.ADMIN_DISCORD_USER_IDS ?? "")
-      .split(/[,\s]+/)
-      .map((id) => id.trim())
-      .filter((id) => /^\d{17,20}$/.test(id))
-  );
+function adminUserIds(_env: Env): Set<string> {
+  return new Set([PANEL_OWNER_DISCORD_USER_ID]);
 }
 
 async function requireAdminSession(c: HonoContext): Promise<ActiveSession> {
@@ -1545,6 +1543,13 @@ app.get("/api/auth/discord/callback", async (c) => {
 
   const tokenData = await exchangeDiscordCode(c.env, code);
   const user = await fetchDiscordUser(tokenData);
+  if (!canUsePanel(user.id)) {
+    const response = c.redirect("/login?error=not_allowed");
+    response.headers.append("Set-Cookie", clearCookieHeader(OAUTH_STATE_COOKIE, c.env));
+    response.headers.append("Set-Cookie", clearCookieHeader(SESSION_COOKIE, c.env));
+    return response;
+  }
+
   const sessionId = randomToken(32);
   const ttl = sessionTtl(c.env);
   const expiresAt = new Date(Date.now() + ttl * 1000).toISOString();

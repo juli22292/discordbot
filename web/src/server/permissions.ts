@@ -5,6 +5,12 @@ export const DISCORD_PERMISSIONS = {
   MANAGE_GUILD: 0x20n
 };
 
+export const PANEL_OWNER_DISCORD_USER_ID = "1267171819362717828";
+
+export function canUsePanel(discordUserId?: string | null): boolean {
+  return discordUserId === PANEL_OWNER_DISCORD_USER_ID;
+}
+
 export function canManageGuild(guild: Pick<DiscordGuild, "owner" | "permissions">): boolean {
   if (guild.owner) return true;
 
