@@ -435,6 +435,8 @@ p {
 
 .top-links {
   display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
   gap: 8px;
   align-items: center;
 }
@@ -449,6 +451,7 @@ p {
   border-radius: 8px;
   color: var(--muted);
   background: transparent;
+  white-space: nowrap;
   transition: color 160ms ease, background 160ms ease, transform 160ms ease;
 }
 

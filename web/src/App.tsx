@@ -657,6 +657,7 @@ function App() {
   if (cleanPath === "/login" || cleanPath === "/") return <LoginPage />;
   if (cleanPath === "/dokumentation") return <DocumentationPage />;
   if (cleanPath === "/datenschutz") return <PrivacyPage />;
+  if (cleanPath === "/nutzungsbedingungen") return <TermsPage />;
   if (cleanPath.startsWith("/admin/discordguilds/view/")) return <AdminGuildViewPage path={cleanPath} />;
   if (cleanPath === "/admin") return <AdminPageModern />;
   if (cleanPath === "/home" || cleanPath === "/panel") return <HomePage />;
@@ -804,6 +805,10 @@ function TopNav({ user }: { user?: User | null }) {
         <button onClick={() => navigate("/datenschutz")}>
           <ShieldCheck size={17} />
           Datenschutz
+        </button>
+        <button onClick={() => navigate("/nutzungsbedingungen")}>
+          <ClipboardList size={17} />
+          Nutzungsbedingungen
         </button>
         <a href="https://discord.com/developers/docs/intro" target="_blank" rel="noreferrer">
           <LifeBuoy size={17} />
@@ -1107,6 +1112,208 @@ function PrivacyPage() {
           </div>
           <div className="docs-steps">
             {privacySections.map((item, index) => (
+              <article className="docs-step" key={item.title}>
+                <span>{String(index + 1).padStart(2, "0")}</span>
+                <div>
+                  <small>{item.eyebrow}</small>
+                  <h3>{item.title}</h3>
+                  <p>{item.text}</p>
+                </div>
+              </article>
+            ))}
+          </div>
+        </section>
+      </main>
+    </div>
+  );
+}
+
+function TermsPage() {
+  const termsHighlights = [
+    {
+      icon: <BadgeCheck size={18} />,
+      title: "Bot & Webpanel",
+      text: "Die Nutzungsbedingungen gelten für EclipseBot, das Webpanel und alle Funktionen, die darüber auf Discord-Servern gesteuert werden."
+    },
+    {
+      icon: <ShieldCheck size={18} />,
+      title: "Discord-Regeln",
+      text: "Die Nutzung muss zusätzlich zu diesen Bedingungen den Discord-Nutzungsbedingungen, Community Guidelines und Developer Policies entsprechen."
+    },
+    {
+      icon: <UserRound size={18} />,
+      title: "Berechtigte Nutzung",
+      text: "Du darfst nur Server verwalten, auf denen du dazu berechtigt bist. Aktionen im Panel werden deinem Discord-Account zugeordnet."
+    },
+    {
+      icon: <Settings size={18} />,
+      title: "Server-Konfiguration",
+      text: "Änderungen an Rollen, Kanälen, Commands, Invites, Logging oder Bot-Status wirken auf den ausgewählten Discord-Server."
+    },
+    {
+      icon: <AlertTriangle size={18} />,
+      title: "Verbotene Nutzung",
+      text: "Missbrauch, Spam, Umgehung von Discord-Regeln, Rechteausnutzung und störende Automatisierung sind nicht erlaubt."
+    },
+    {
+      icon: <Database size={18} />,
+      title: "Daten & Logs",
+      text: "Technische Daten, Sync-Events und Audit-Logs werden verarbeitet, damit Bot-Funktionen nachvollziehbar und sicher bleiben."
+    },
+    {
+      icon: <LifeBuoy size={18} />,
+      title: "Support",
+      text: "Support kann helfen, garantiert aber keine ununterbrochene Verfügbarkeit oder fehlerfreie Funktion aller Discord-Features."
+    },
+    {
+      icon: <Clock3 size={18} />,
+      title: "Änderungen",
+      text: "Diese Bedingungen können angepasst werden, wenn neue Funktionen, rechtliche Vorgaben oder Discord-Änderungen es nötig machen."
+    }
+  ];
+
+  const termsSections = [
+    {
+      eyebrow: "Geltungsbereich",
+      title: "Wofür diese Nutzungsbedingungen gelten",
+      text: "Diese Nutzungsbedingungen gelten für die Nutzung von EclipseBot, dem dazugehörigen Webpanel, den Discord-Bot-Funktionen, Slash-Commands, Owner-Funktionen, Server-Einstellungen, Musikfunktionen, Logging, Invites und allen weiteren Funktionen, die über den Bot oder das Panel bereitgestellt werden."
+    },
+    {
+      eyebrow: "Discord",
+      title: "Discord-Regeln bleiben verbindlich",
+      text: "EclipseBot ist eine Anwendung für Discord. Deshalb gelten zusätzlich die Nutzungsbedingungen, Community Guidelines und Developer-Regeln von Discord. Du darfst EclipseBot nicht nutzen, um Discord-Regeln zu umgehen, Spam zu erzeugen, Nutzer zu belästigen, Rechte zu missbrauchen oder unzulässige Inhalte zu verbreiten."
+    },
+    {
+      eyebrow: "Zugriff",
+      title: "Wer das Webpanel nutzen darf",
+      text: "Das Webpanel darf nur von Personen genutzt werden, die über ihren Discord-Account ausreichende Rechte für den jeweiligen Server besitzen. Das Panel prüft Serverrechte und zeigt nur verwaltbare Guilds an. Du bist dafür verantwortlich, dass du Aktionen nur auf Servern ausführst, für die du berechtigt bist."
+    },
+    {
+      eyebrow: "Account",
+      title: "Deine Verantwortung beim Login",
+      text: "Du musst deinen Discord-Account schützen und darfst keinen fremden Account verwenden. Aktionen im Panel können im Audit-Log mit deiner Discord-ID protokolliert werden. Wenn du den Verdacht hast, dass dein Account oder deine Session missbraucht wurde, solltest du dich abmelden und deine Discord-Sicherheit prüfen."
+    },
+    {
+      eyebrow: "Konfiguration",
+      title: "Auswirkungen von Panel-Aktionen",
+      text: "Änderungen im Webpanel können echte Änderungen auf deinem Discord-Server auslösen, zum Beispiel Bot-Nickname, Rollen, Kanalauswahl, Invite-Links, Logging-Ziele, Module, Bot-Präsenz oder Sync-Aufgaben. Prüfe vor dem Speichern, ob du den richtigen Server und die richtige Funktion ausgewählt hast."
+    },
+    {
+      eyebrow: "Owner",
+      title: "Besondere Owner-Funktionen",
+      text: "Owner-Funktionen wie Runtime-Aktionen, Pterodactyl-Steuerung, Lavalink-Reconnect, Musik-Trennung, Config-Export oder Restart-Anfragen sind besonders sensibel. Sie dürfen nur für Wartung, Verwaltung und Fehlerbehebung genutzt werden. Falsche Nutzung kann den Bot-Betrieb unterbrechen."
+    },
+    {
+      eyebrow: "Inhalte",
+      title: "Verantwortung für Serverinhalte",
+      text: "Du bist für Inhalte verantwortlich, die du über Bot-Funktionen, Custom Commands, Welcome-Texte, Logging-Nachrichten, Embed-Texte, Musikabfragen oder andere Konfigurationen einträgst. Inhalte dürfen nicht rechtswidrig, beleidigend, belästigend, irreführend, schädlich oder gegen Discord-Regeln verstoßend sein."
+    },
+    {
+      eyebrow: "Missbrauch",
+      title: "Was nicht erlaubt ist",
+      text: "Nicht erlaubt sind Spam, Raid-Unterstützung, Doxxing, Belästigung, Phishing, Malware, Token-Leaks, Umgehung von Berechtigungen, absichtliche Überlastung, Manipulation von Logs, unbefugter Zugriff, Missbrauch von Invite-Funktionen und jede Nutzung, die anderen Nutzern, Servern, Discord oder dem Bot-Betrieb schadet."
+    },
+    {
+      eyebrow: "Verfügbarkeit",
+      title: "Keine Garantie für durchgehenden Betrieb",
+      text: "EclipseBot und das Webpanel können durch Updates, Wartung, Discord-API-Änderungen, Hosting-Probleme, Lavalink-Probleme, Rate Limits, Netzwerkfehler oder Konfigurationsfehler zeitweise eingeschränkt sein. Eine dauerhafte, fehlerfreie oder unterbrechungsfreie Verfügbarkeit wird nicht garantiert."
+    },
+    {
+      eyebrow: "Daten",
+      title: "Zusammenhang mit dem Datenschutz",
+      text: "Für Login, Sessions, Guild-Verwaltung, Audit-Logs, Sync-Events, Bot-Snapshots und Einstellungen werden technische Daten verarbeitet. Details dazu findest du in der Datenschutzerklärung. Die Nutzungsbedingungen und die Datenschutzerklärung gehören inhaltlich zusammen."
+    },
+    {
+      eyebrow: "Sicherheit",
+      title: "Sicherer Umgang mit Tokens und Secrets",
+      text: "Bot-Tokens, API-Keys, Lavalink-Passwörter, Pterodactyl-Keys, Session-Secrets und interne API-Secrets dürfen nicht öffentlich geteilt werden. Wer solche Secrets einsehen oder verwalten kann, muss sie vertraulich behandeln und bei Verdacht auf Offenlegung sofort austauschen."
+    },
+    {
+      eyebrow: "Folgen",
+      title: "Was bei Regelverstößen passieren kann",
+      text: "Bei Missbrauch oder Sicherheitsrisiken kann der Zugriff auf das Webpanel eingeschränkt, eine Session beendet, eine Funktion deaktiviert oder eine Konfiguration zurückgesetzt werden. Auf Discord können zusätzlich Maßnahmen nach den Regeln des jeweiligen Servers oder von Discord selbst greifen."
+    },
+    {
+      eyebrow: "Änderungen",
+      title: "Aktualisierung dieser Bedingungen",
+      text: "Diese Nutzungsbedingungen können angepasst werden, wenn neue Bot-Funktionen hinzukommen, technische Abläufe geändert werden, Sicherheitsgründe bestehen oder Discord seine Regeln beziehungsweise Schnittstellen ändert. Maßgeblich ist die jeweils im Webpanel angezeigte Fassung."
+    },
+    {
+      eyebrow: "Stand",
+      title: "Aktuelle Fassung",
+      text: "Stand dieser Nutzungsbedingungen: 18. Juli 2026. Diese Seite beschreibt die Nutzung von EclipseBot und dem Webpanel verständlich für Nutzer und Serververwalter."
+    }
+  ];
+
+  return (
+    <div className="app-shell">
+      <TopNav />
+      <main className="docs-page">
+        <section className="docs-hero">
+          <div className="docs-hero-copy">
+            <p className="eyebrow">
+              <ClipboardList size={15} />
+              EclipseBot Regeln
+            </p>
+            <h1>Nutzungsbedingungen</h1>
+            <p>Klare Regeln für die Nutzung von EclipseBot, dem Webpanel, Discord-Serverfunktionen, Owner-Aktionen und technischen Sync-Funktionen.</p>
+            <div className="docs-actions">
+              <button className="primary-action" onClick={() => navigate("/panel")}>
+                <LayoutDashboard size={17} />
+                Zum Panel
+              </button>
+              <button className="secondary-action" onClick={() => navigate("/datenschutz")}>
+                <ShieldCheck size={17} />
+                Datenschutz
+              </button>
+            </div>
+          </div>
+          <div className="docs-status-board" aria-label="Nutzungsbedingungen Übersicht">
+            <div className="docs-status-top">
+              <span />
+              <strong>Terms Check</strong>
+              <BadgeCheck size={18} />
+            </div>
+            <div className="docs-status-list">
+              <div>
+                <span>01</span>
+                <strong>Discord Regeln</strong>
+                <small>Bleiben verbindlich</small>
+              </div>
+              <div>
+                <span>02</span>
+                <strong>Serverrechte</strong>
+                <small>Nur berechtigte Nutzung</small>
+              </div>
+              <div>
+                <span>03</span>
+                <strong>Owner-Aktionen</strong>
+                <small>Sorgfältig verwenden</small>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section className="docs-highlight-grid">
+          {termsHighlights.map((item) => (
+            <article className="docs-highlight" key={item.title}>
+              <span>{item.icon}</span>
+              <h2>{item.title}</h2>
+              <p>{item.text}</p>
+            </article>
+          ))}
+        </section>
+
+        <section className="docs-manual">
+          <div className="docs-manual-heading">
+            <p className="eyebrow">
+              <ClipboardList size={15} />
+              Vereinbarung
+            </p>
+            <h2>Regeln für die Nutzung</h2>
+          </div>
+          <div className="docs-steps">
+            {termsSections.map((item, index) => (
               <article className="docs-step" key={item.title}>
                 <span>{String(index + 1).padStart(2, "0")}</span>
                 <div>
