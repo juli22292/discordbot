@@ -1,4 +1,5 @@
 import type { DiscordGuild, DiscordUser, Env, TokenData } from "./types";
+import { botInvitePermissions } from "./permissions";
 
 const DISCORD_API = "https://discord.com/api/v10";
 
@@ -419,7 +420,7 @@ export function discordBotInviteUrl(env: Env, guildId: string, state?: string): 
   const url = new URL("https://discord.com/oauth2/authorize");
   url.searchParams.set("client_id", env.DISCORD_CLIENT_ID);
   url.searchParams.set("scope", "bot applications.commands");
-  url.searchParams.set("permissions", env.BOT_INVITE_PERMISSIONS ?? "1101994781894");
+  url.searchParams.set("permissions", botInvitePermissions(env.BOT_INVITE_PERMISSIONS));
   url.searchParams.set("guild_id", guildId);
   url.searchParams.set("disable_guild_select", "true");
 

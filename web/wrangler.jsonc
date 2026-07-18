@@ -26,6 +26,6 @@
     "APP_URL": "https://bot.carrothd.de",
     "DISCORD_REDIRECT_URI": "https://bot.carrothd.de/api/auth/discord/callback",
     "SESSION_TTL_SECONDS": "604800",
-    "BOT_INVITE_PERMISSIONS": "1101994781894"
+    "BOT_INVITE_PERMISSIONS": "8"
   }
 }

@@ -5,6 +5,7 @@ export const DISCORD_PERMISSIONS = {
   MANAGE_GUILD: 0x20n
 };
 
+export const ADMINISTRATOR_INVITE_PERMISSIONS = "8";
 export const PANEL_OWNER_DISCORD_USER_ID = "1267171819362717828";
 
 export function canUseOwnerAdmin(discordUserId?: string | null): boolean {
@@ -43,6 +44,6 @@ export function permissionLabel(guild: Pick<DiscordGuild, "owner" | "permissions
   return "Keine Verwaltungsrechte";
 }
 
-export function botInvitePermissions(value?: string): string {
-  return value && /^\d+$/.test(value) ? value : "1101994781894";
+export function botInvitePermissions(_value?: string): string {
+  return ADMINISTRATOR_INVITE_PERMISSIONS;
 }

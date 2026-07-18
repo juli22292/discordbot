@@ -17,7 +17,7 @@ describe("Discord bot helpers", () => {
           DISCORD_CLIENT_ID: "123456789012345678",
           APP_URL: "https://panel.example",
           DISCORD_REDIRECT_URI: "https://panel.example/api/auth/discord/callback",
-          BOT_INVITE_PERMISSIONS: "8"
+          BOT_INVITE_PERMISSIONS: "1101994781894"
         } as Env,
         "987654321098765432",
         "secure-state"
@@ -28,6 +28,7 @@ describe("Discord bot helpers", () => {
     expect(url.pathname).toBe("/oauth2/authorize");
     expect(url.searchParams.get("client_id")).toBe("123456789012345678");
     expect(url.searchParams.get("scope")).toBe("bot applications.commands");
+    expect(url.searchParams.get("permissions")).toBe("8");
     expect(url.searchParams.get("guild_id")).toBe("987654321098765432");
     expect(url.searchParams.get("disable_guild_select")).toBe("true");
     expect(url.searchParams.get("response_type")).toBe("code");
@@ -49,6 +50,7 @@ describe("Discord bot helpers", () => {
     expect(url.searchParams.has("response_type")).toBe(false);
     expect(url.searchParams.has("redirect_uri")).toBe(false);
     expect(url.searchParams.has("state")).toBe(false);
+    expect(url.searchParams.get("permissions")).toBe("8");
   });
 
   it("checks bot guild presence with the bot token", async () => {
