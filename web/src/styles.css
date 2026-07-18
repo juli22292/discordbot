@@ -523,6 +523,159 @@ p {
   transform: translateY(-1px);
 }
 
+.top-links .top-link.active {
+  color: var(--text);
+  background:
+    linear-gradient(135deg, rgba(104, 168, 255, 0.12), transparent 46%),
+    var(--hover-bg);
+  box-shadow: inset 0 -1px 0 rgba(104, 168, 255, 0.35);
+}
+
+.mobile-nav-toggle {
+  display: none;
+  width: 38px;
+  height: 38px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--border-soft);
+  border-radius: 8px;
+  color: var(--muted-strong);
+  background: var(--control-bg);
+}
+
+.mobile-nav-toggle.active {
+  color: var(--blue);
+  border-color: rgba(104, 168, 255, 0.36);
+  background: rgba(104, 168, 255, 0.11);
+}
+
+.mobile-nav-menu {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 12px;
+  display: none;
+  width: min(310px, calc(100vw - 24px));
+  padding: 8px;
+  border: 1px solid var(--border-soft);
+  border-radius: 8px;
+  background:
+    linear-gradient(145deg, rgba(255, 255, 255, 0.045), transparent 48%),
+    rgba(12, 16, 24, 0.98);
+  box-shadow: var(--shadow);
+}
+
+.mobile-nav-menu.open {
+  display: grid;
+  gap: 6px;
+}
+
+.mobile-nav-link {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-height: 42px;
+  padding: 10px 11px;
+  border: 0;
+  border-radius: 8px;
+  color: var(--muted-strong);
+  text-decoration: none;
+  background: transparent;
+}
+
+.mobile-nav-link.active,
+.mobile-nav-link:hover {
+  color: var(--text);
+  background: rgba(104, 168, 255, 0.11);
+}
+
+.toast-stack {
+  position: fixed;
+  z-index: 80;
+  top: 74px;
+  right: 18px;
+  display: grid;
+  gap: 10px;
+  width: min(380px, calc(100vw - 32px));
+  pointer-events: none;
+}
+
+.toast {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr) 30px;
+  align-items: center;
+  gap: 10px;
+  min-height: 62px;
+  padding: 12px;
+  border: 1px solid var(--border-soft);
+  border-radius: 8px;
+  background:
+    linear-gradient(145deg, rgba(255, 255, 255, 0.055), transparent 48%),
+    rgba(12, 16, 24, 0.96);
+  box-shadow: var(--shadow);
+  pointer-events: auto;
+  animation: toastIn 180ms ease forwards;
+}
+
+.toast > span {
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  border-radius: 8px;
+  color: var(--blue);
+  background: rgba(104, 168, 255, 0.1);
+}
+
+.toast.success > span {
+  color: var(--green);
+  background: rgba(47, 191, 122, 0.1);
+}
+
+.toast.warning > span {
+  color: var(--amber);
+  background: rgba(244, 189, 99, 0.1);
+}
+
+.toast.danger > span {
+  color: var(--red);
+  background: rgba(255, 116, 116, 0.1);
+}
+
+.toast strong,
+.toast small {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.toast strong {
+  color: var(--text);
+  font-size: 14px;
+}
+
+.toast small {
+  margin-top: 3px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.toast button {
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 8px;
+  color: var(--muted);
+  background: transparent;
+}
+
+.toast button:hover {
+  color: var(--text);
+  background: var(--hover-bg);
+}
+
 .theme-toggle {
   display: inline-flex;
   align-items: center;
@@ -914,6 +1067,74 @@ p {
   margin: 20px 0 16px;
 }
 
+.home-tools {
+  display: grid;
+  grid-template-columns: minmax(260px, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+  margin-bottom: 16px;
+}
+
+.home-search {
+  position: relative;
+  display: block;
+  min-width: 0;
+}
+
+.home-search svg {
+  position: absolute;
+  z-index: 1;
+  left: 13px;
+  top: 50%;
+  color: var(--muted);
+  pointer-events: none;
+  transform: translateY(-50%);
+}
+
+.home-search input {
+  padding-left: 40px;
+}
+
+.home-filter-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.home-filter-tabs button {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 40px;
+  padding: 8px 10px;
+  border: 1px solid var(--border-soft);
+  border-radius: 8px;
+  color: var(--muted-strong);
+  background:
+    linear-gradient(145deg, rgba(255, 255, 255, 0.04), transparent 46%),
+    var(--control-bg);
+}
+
+.home-filter-tabs button.active {
+  color: var(--blue);
+  border-color: rgba(104, 168, 255, 0.38);
+  background:
+    linear-gradient(135deg, rgba(104, 168, 255, 0.14), transparent 48%),
+    var(--field-bg);
+}
+
+.home-filter-tabs span {
+  min-width: 24px;
+  padding: 2px 7px;
+  border-radius: 999px;
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 800;
+  text-align: center;
+  background: rgba(255, 255, 255, 0.075);
+}
+
 .guild-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
@@ -991,6 +1212,40 @@ p {
   z-index: 1;
 }
 
+.guild-favorite-button {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  z-index: 3;
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  border: 1px solid rgba(244, 189, 99, 0.25);
+  border-radius: 8px;
+  color: var(--muted);
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.08), transparent 46%),
+    rgba(9, 11, 16, 0.76);
+  transition: transform 160ms ease, color 160ms ease, border-color 160ms ease, background 160ms ease;
+}
+
+.guild-card:not(.installed) .guild-favorite-button {
+  right: 54px;
+}
+
+.guild-favorite-button:hover,
+.guild-favorite-button.active {
+  transform: translateY(-1px);
+  color: var(--amber);
+  border-color: rgba(244, 189, 99, 0.55);
+  background: rgba(244, 189, 99, 0.11);
+}
+
+.guild-card.favorite {
+  border-color: rgba(244, 189, 99, 0.24);
+}
+
 .guild-card-quick-action {
   position: absolute;
   top: 12px;
@@ -1052,6 +1307,37 @@ p {
 .invite-action:hover {
   border-color: rgba(255, 116, 116, 0.78);
   filter: brightness(1.04);
+}
+
+.guild-invite-diagnose {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 12px;
+  min-height: 42px;
+  padding: 9px 10px;
+  border: 1px solid rgba(244, 189, 99, 0.22);
+  border-radius: 8px;
+  color: var(--muted-strong);
+  background:
+    linear-gradient(90deg, rgba(244, 189, 99, 0.08), transparent 65%),
+    rgba(9, 11, 16, 0.5);
+}
+
+.guild-invite-diagnose span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--amber);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.guild-invite-diagnose small {
+  color: var(--muted);
+  font-size: 12px;
 }
 
 .guild-card-top {
@@ -1810,6 +2096,56 @@ textarea {
   animation: ownerRefreshLoad 980ms linear infinite;
 }
 
+.owner-security-banner {
+  display: grid;
+  grid-template-columns: 42px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  padding: 13px 14px;
+  border: 1px solid rgba(47, 191, 122, 0.25);
+  border-radius: 8px;
+  background:
+    linear-gradient(90deg, rgba(47, 191, 122, 0.1), transparent 62%),
+    var(--panel-bg-soft);
+}
+
+.owner-security-banner > span {
+  width: 42px;
+  height: 42px;
+  display: grid;
+  place-items: center;
+  border-radius: 8px;
+  color: var(--green);
+  background: rgba(47, 191, 122, 0.1);
+}
+
+.owner-security-banner strong,
+.owner-security-banner small {
+  display: block;
+  min-width: 0;
+}
+
+.owner-security-banner strong {
+  color: var(--text);
+}
+
+.owner-security-banner small {
+  margin-top: 3px;
+  color: var(--muted);
+  line-height: 1.45;
+}
+
+.owner-security-banner em {
+  padding: 5px 9px;
+  border: 1px solid rgba(47, 191, 122, 0.32);
+  border-radius: 999px;
+  color: var(--green);
+  font-size: 12px;
+  font-style: normal;
+  font-weight: 800;
+  background: rgba(47, 191, 122, 0.07);
+}
+
 .owner-overview-grid {
   display: grid;
   grid-template-columns: repeat(6, minmax(128px, 1fr));
@@ -2322,6 +2658,84 @@ textarea {
 
 .owner-log-row time {
   white-space: nowrap;
+}
+
+.owner-timeline-column {
+  gap: 0;
+}
+
+.owner-timeline-column h3 {
+  margin-bottom: 10px;
+}
+
+.owner-timeline-item {
+  position: relative;
+  display: grid;
+  grid-template-columns: 24px minmax(0, 1fr);
+  gap: 10px;
+  padding: 0 0 14px;
+}
+
+.owner-timeline-item::before {
+  content: "";
+  position: absolute;
+  left: 7px;
+  top: 18px;
+  bottom: -2px;
+  width: 1px;
+  background: linear-gradient(180deg, rgba(104, 168, 255, 0.32), transparent);
+}
+
+.owner-timeline-item:last-of-type::before {
+  display: none;
+}
+
+.owner-timeline-item > span {
+  position: relative;
+  z-index: 1;
+  width: 15px;
+  height: 15px;
+  margin-top: 4px;
+  border: 3px solid rgba(104, 168, 255, 0.2);
+  border-radius: 999px;
+  background: var(--blue);
+  box-shadow: 0 0 18px rgba(104, 168, 255, 0.3);
+}
+
+.owner-timeline-item > div {
+  min-width: 0;
+  padding: 11px 12px;
+  border: 1px solid var(--border-soft);
+  border-radius: 8px;
+  background:
+    linear-gradient(145deg, rgba(104, 168, 255, 0.08), transparent 48%),
+    rgba(9, 11, 16, 0.52);
+}
+
+.owner-timeline-item strong,
+.owner-timeline-item small,
+.owner-timeline-item em {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.owner-timeline-item strong {
+  color: var(--text);
+}
+
+.owner-timeline-item small {
+  margin-top: 3px;
+  color: var(--muted-strong);
+  font-size: 12px;
+}
+
+.owner-timeline-item em {
+  margin-top: 6px;
+  color: var(--muted);
+  font-size: 11px;
+  font-style: normal;
 }
 
 .owner-panel-toolbar {
@@ -3525,6 +3939,8 @@ textarea {
 :root[data-theme="light"] .owner-event-row,
 :root[data-theme="light"] .owner-action-card,
 :root[data-theme="light"] .owner-log-row,
+:root[data-theme="light"] .owner-timeline-item > div,
+:root[data-theme="light"] .owner-security-banner,
 :root[data-theme="light"] .owner-segmented,
 :root[data-theme="light"] .owner-guild-facts div,
 :root[data-theme="light"] .owner-invite-row,
@@ -3538,6 +3954,10 @@ textarea {
 :root[data-theme="light"] .logging-category-card,
 :root[data-theme="light"] .planned-card,
 :root[data-theme="light"] .notice,
+:root[data-theme="light"] .toast,
+:root[data-theme="light"] .mobile-nav-menu,
+:root[data-theme="light"] .home-filter-tabs button,
+:root[data-theme="light"] .guild-invite-diagnose,
 :root[data-theme="light"] .role-chip {
   border-color: var(--border-soft);
   background:
@@ -3564,10 +3984,20 @@ textarea {
 :root[data-theme="light"] .discord-preview,
 :root[data-theme="light"] .owner-lavalink-card,
 :root[data-theme="light"] .owner-lavalink-card.ok,
-:root[data-theme="light"] .owner-music-stat-grid div {
+:root[data-theme="light"] .owner-music-stat-grid div,
+:root[data-theme="light"] .guild-favorite-button {
   background:
     linear-gradient(145deg, rgba(255, 255, 255, 0.38), transparent 48%),
     var(--panel-bg-soft);
+}
+
+:root[data-theme="light"] .top-links .top-link.active,
+:root[data-theme="light"] .mobile-nav-link.active,
+:root[data-theme="light"] .mobile-nav-link:hover,
+:root[data-theme="light"] .home-filter-tabs button.active {
+  background:
+    linear-gradient(135deg, rgba(36, 107, 219, 0.1), transparent 48%),
+    rgba(36, 107, 219, 0.06);
 }
 
 :root[data-theme="light"] .owner-current-status.online {
@@ -3667,6 +4097,18 @@ textarea {
   to {
     opacity: 1;
     transform: translateX(0);
+  }
+}
+
+@keyframes toastIn {
+  from {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
   }
 }
 
@@ -3825,11 +4267,15 @@ textarea {
 
 @media (max-width: 980px) {
   .top-nav {
-    grid-template-columns: 1fr auto auto auto;
+    grid-template-columns: 1fr auto auto auto auto;
   }
 
   .top-links {
     display: none;
+  }
+
+  .mobile-nav-toggle {
+    display: inline-flex;
   }
 
   .command-row,
@@ -3868,6 +4314,7 @@ textarea {
   .overview-tiles,
   .docs-highlight-grid,
   .form-grid,
+  .home-tools,
   .owner-current-status,
   .owner-overview-grid,
   .owner-presets,
@@ -3887,6 +4334,20 @@ textarea {
 
   .owner-current-status em {
     white-space: normal;
+  }
+
+  .home-filter-tabs {
+    justify-content: flex-start;
+  }
+
+  .home-filter-tabs button {
+    flex: 1 1 140px;
+    justify-content: center;
+  }
+
+  .toast-stack {
+    top: 66px;
+    right: 12px;
   }
 
   .docs-hero,
@@ -3942,6 +4403,15 @@ textarea {
   .owner-hero-actions {
     width: 100%;
     justify-content: flex-start;
+  }
+
+  .owner-security-banner {
+    grid-template-columns: 38px minmax(0, 1fr);
+  }
+
+  .owner-security-banner em {
+    grid-column: 2;
+    justify-self: start;
   }
 
   .owner-guild-row {
@@ -4011,6 +4481,12 @@ textarea {
   .panel-title {
     align-items: flex-start;
     flex-direction: column;
+  }
+
+  .mobile-nav-menu {
+    left: 12px;
+    right: 12px;
+    width: auto;
   }
 
   .primary-action,

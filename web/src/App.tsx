@@ -31,6 +31,7 @@ import {
   ListFilter,
   Loader2,
   LogOut,
+  Menu,
   MessageSquare,
   Mic2,
   Moon,
@@ -50,12 +51,14 @@ import {
   ShieldCheck,
   SlidersHorizontal,
   Sparkles,
+  Star,
   Sun,
   Trash2,
   Upload,
   UserPlus,
   UserRound,
-  Wifi
+  Wifi,
+  X
 } from "lucide-react";
 import "./styles.css";
 
@@ -399,6 +402,7 @@ type AdminGuildInvite = {
 };
 
 type User = {
+  discordUserId?: string;
   username: string;
   displayName: string | null;
   avatar: string | null;
@@ -406,6 +410,16 @@ type User = {
 };
 
 type ThemeMode = "dark" | "light";
+type ToastTone = "success" | "danger" | "warning" | "info";
+type HomeGuildFilter = "all" | "installed" | "missing" | "favorites";
+type NavItem = {
+  key: string;
+  label: string;
+  icon: React.ReactNode;
+  active: boolean;
+  path?: string;
+  href?: string;
+};
 
 type ApiError = {
   error?: { code?: string; message?: string };
@@ -567,6 +581,44 @@ const guildModuleLabels = [
 ] as const;
 
 const THEME_STORAGE_KEY = "eclipsebot-theme";
+const FAVORITE_GUILDS_STORAGE_KEY = "eclipsebot-favorite-guilds";
+const TOAST_EVENT_NAME = "eclipsebot-toast";
+
+type ToastPayload = {
+  tone?: ToastTone;
+  title: string;
+  text?: string;
+};
+
+type ToastItem = Required<Pick<ToastPayload, "tone" | "title">> & {
+  id: string;
+  text?: string;
+};
+
+function notify(toast: ToastPayload) {
+  window.dispatchEvent(
+    new CustomEvent<ToastPayload>(TOAST_EVENT_NAME, {
+      detail: toast
+    })
+  );
+}
+
+function readFavoriteGuilds(): string[] {
+  try {
+    const parsed = JSON.parse(window.localStorage.getItem(FAVORITE_GUILDS_STORAGE_KEY) ?? "[]") as unknown;
+    return Array.isArray(parsed) ? parsed.filter((id): id is string => typeof id === "string") : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveFavoriteGuilds(ids: string[]) {
+  try {
+    window.localStorage.setItem(FAVORITE_GUILDS_STORAGE_KEY, JSON.stringify(ids));
+  } catch {
+    // Favorites are a browser convenience; failing to persist should not block the panel.
+  }
+}
 
 function readStoredTheme(): ThemeMode {
   try {
@@ -617,6 +669,50 @@ function ThemeToggle({ compact = false }: { compact?: boolean }) {
       </span>
       {!compact && <span>{light ? "Light" : "Dark"}</span>}
     </button>
+  );
+}
+
+function ToastHost() {
+  const [toasts, setToasts] = useState<ToastItem[]>([]);
+
+  useEffect(() => {
+    function onToast(event: Event) {
+      const detail = (event as CustomEvent<ToastPayload>).detail;
+      const id = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+      const item: ToastItem = {
+        id,
+        tone: detail.tone ?? "info",
+        title: detail.title,
+        text: detail.text
+      };
+
+      setToasts((current) => [...current.slice(-3), item]);
+      window.setTimeout(() => {
+        setToasts((current) => current.filter((toast) => toast.id !== id));
+      }, 4200);
+    }
+
+    window.addEventListener(TOAST_EVENT_NAME, onToast);
+    return () => window.removeEventListener(TOAST_EVENT_NAME, onToast);
+  }, []);
+
+  if (toasts.length === 0) return null;
+
+  return (
+    <div className="toast-stack" role="status" aria-live="polite">
+      {toasts.map((toast) => (
+        <article className={`toast ${toast.tone}`} key={toast.id}>
+          <span>{toast.tone === "success" ? <Check size={16} /> : toast.tone === "danger" ? <AlertTriangle size={16} /> : <Activity size={16} />}</span>
+          <div>
+            <strong>{toast.title}</strong>
+            {toast.text && <small>{toast.text}</small>}
+          </div>
+          <button type="button" onClick={() => setToasts((current) => current.filter((item) => item.id !== toast.id))} aria-label="Meldung schließen">
+            <X size={15} />
+          </button>
+        </article>
+      ))}
+    </div>
   );
 }
 
@@ -846,58 +942,94 @@ function AuthShowcase() {
 }
 
 function TopNav({ user }: { user?: User | null }) {
-  const session = useApi<{ user: User }>(user === undefined ? "/api/me" : null, []);
-  const navUser = user === undefined ? session.data?.user ?? null : user;
+  const path = usePath();
+  const cleanPath = path.split("?")[0];
+  const [mobileOpen, setMobileOpen] = useState(false);
+  const [fallbackUser, setFallbackUser] = useState<User | null>(null);
+  const navUser = user === undefined ? fallbackUser : user;
+
+  useEffect(() => {
+    setMobileOpen(false);
+  }, [cleanPath]);
+
+  useEffect(() => {
+    if (user !== undefined) return;
+    let cancelled = false;
+
+    async function loadSession() {
+      try {
+        const response = await fetch("/api/me", { credentials: "include" });
+        if (!response.ok) return;
+        const data = (await response.json()) as { user: User };
+        if (!cancelled) setFallbackUser(data.user);
+      } catch {
+        if (!cancelled) setFallbackUser(null);
+      }
+    }
+
+    void loadSession();
+    return () => {
+      cancelled = true;
+    };
+  }, [user]);
+
+  const navItems: NavItem[] = [
+    { key: "panel", label: "Panel", path: "/panel", icon: <Home size={17} />, active: cleanPath === "/panel" || cleanPath === "/home" || cleanPath.startsWith("/dashboard/") },
+    ...(navUser?.ownerAdmin ? [{ key: "admin", label: "Admin", path: "/admin", icon: <Gauge size={17} />, active: cleanPath === "/admin" || cleanPath.startsWith("/admin/") }] : []),
+    { key: "docs", label: "Dokumentation", path: "/dokumentation", icon: <ClipboardList size={17} />, active: cleanPath === "/dokumentation" },
+    { key: "privacy", label: "Datenschutz", path: "/datenschutz", icon: <ShieldCheck size={17} />, active: cleanPath === "/datenschutz" },
+    { key: "terms", label: "Nutzungsbedingungen", path: "/nutzungsbedingungen", icon: <ClipboardList size={17} />, active: cleanPath === "/nutzungsbedingungen" },
+    { key: "support", label: "Support", href: "https://discord.com/developers/docs/intro", icon: <LifeBuoy size={17} />, active: false }
+  ];
+
+  const renderNavItem = (item: NavItem, mobile = false) => {
+    const className = `${mobile ? "mobile-nav-link" : "top-link"} ${item.active ? "active" : ""}`.trim();
+    if (item.href) {
+      return (
+        <a key={item.key} className={className} href={item.href} target="_blank" rel="noreferrer">
+          {item.icon}
+          {item.label}
+        </a>
+      );
+    }
+
+    return (
+      <button key={item.key} className={className} type="button" onClick={() => item.path && navigate(item.path)}>
+        {item.icon}
+        {item.label}
+      </button>
+    );
+  };
 
   return (
-    <header className="top-nav">
-      <button className="brand-link" onClick={() => navigate("/panel")}>
-        <Bot size={22} />
-        <span>EclipseBot</span>
-      </button>
-      <nav className="top-links">
-        <button onClick={() => navigate("/panel")}>
-          <Home size={17} />
-          Panel
+    <>
+      <header className="top-nav">
+        <button className="brand-link" onClick={() => navigate("/panel")}>
+          <Bot size={22} />
+          <span>EclipseBot</span>
         </button>
-        {navUser?.ownerAdmin && (
-          <button onClick={() => navigate("/admin")}>
-            <Gauge size={17} />
-            Admin
-          </button>
+        <nav className="top-links">{navItems.map((item) => renderNavItem(item))}</nav>
+        <button className={`mobile-nav-toggle ${mobileOpen ? "active" : ""}`} type="button" onClick={() => setMobileOpen((value) => !value)} aria-label="Navigation öffnen">
+          {mobileOpen ? <X size={18} /> : <Menu size={18} />}
+        </button>
+        <span className="nav-status">
+          <Activity size={14} />
+          Live
+        </span>
+        <ThemeToggle compact />
+        {navUser && (
+          <div className="user-chip">
+            {navUser.avatar ? <img src={navUser.avatar} alt="" /> : <UserRound size={18} />}
+            <span>{navUser.displayName || navUser.username}</span>
+            <a className="icon-button" href="/logout" title="Abmelden">
+              <LogOut size={17} />
+            </a>
+          </div>
         )}
-        <button onClick={() => navigate("/dokumentation")}>
-          <ClipboardList size={17} />
-          Dokumentation
-        </button>
-        <button onClick={() => navigate("/datenschutz")}>
-          <ShieldCheck size={17} />
-          Datenschutz
-        </button>
-        <button onClick={() => navigate("/nutzungsbedingungen")}>
-          <ClipboardList size={17} />
-          Nutzungsbedingungen
-        </button>
-        <a href="https://discord.com/developers/docs/intro" target="_blank" rel="noreferrer">
-          <LifeBuoy size={17} />
-          Support
-        </a>
-      </nav>
-      <span className="nav-status">
-        <Activity size={14} />
-        Live
-      </span>
-      <ThemeToggle compact />
-      {navUser && (
-        <div className="user-chip">
-          {navUser.avatar ? <img src={navUser.avatar} alt="" /> : <UserRound size={18} />}
-          <span>{navUser.displayName || navUser.username}</span>
-          <a className="icon-button" href="/logout" title="Abmelden">
-            <LogOut size={17} />
-          </a>
-        </div>
-      )}
-    </header>
+        <nav className={`mobile-nav-menu ${mobileOpen ? "open" : ""}`}>{navItems.map((item) => renderNavItem(item, true))}</nav>
+      </header>
+      <ToastHost />
+    </>
   );
 }
 
@@ -1403,8 +1535,48 @@ function HomePage() {
   const me = useApi<{ user: User }>("/api/me", []);
   const guilds = useApi<{ guilds: GuildListItem[] }>("/api/guilds", []);
   const guildList = guilds.data?.guilds ?? [];
+  const [guildSearch, setGuildSearch] = useState("");
+  const [guildFilter, setGuildFilter] = useState<HomeGuildFilter>("all");
+  const [favoriteGuilds, setFavoriteGuilds] = useState<string[]>(() => readFavoriteGuilds());
+  const favoriteGuildSet = useMemo(() => new Set(favoriteGuilds), [favoriteGuilds]);
   const installedCount = guildList.filter((guild) => guild.botInstalled || guild.botInstallStatus === "installed").length;
   const missingCount = Math.max(guildList.length - installedCount, 0);
+  const filteredGuilds = useMemo(() => {
+    const needle = guildSearch.trim().toLowerCase();
+    return guildList
+      .filter((guild) => {
+        const installed = guild.botInstalled || guild.botInstallStatus === "installed";
+        const favorite = favoriteGuildSet.has(guild.id);
+        if (guildFilter === "installed" && !installed) return false;
+        if (guildFilter === "missing" && installed) return false;
+        if (guildFilter === "favorites" && !favorite) return false;
+        if (!needle) return true;
+        return guild.name.toLowerCase().includes(needle) || guild.id.includes(needle) || guild.permission.toLowerCase().includes(needle);
+      })
+      .sort((left, right) => {
+        const leftFavorite = favoriteGuildSet.has(left.id) ? 1 : 0;
+        const rightFavorite = favoriteGuildSet.has(right.id) ? 1 : 0;
+        if (leftFavorite !== rightFavorite) return rightFavorite - leftFavorite;
+        const leftInstalled = left.botInstalled || left.botInstallStatus === "installed" ? 1 : 0;
+        const rightInstalled = right.botInstalled || right.botInstallStatus === "installed" ? 1 : 0;
+        if (leftInstalled !== rightInstalled) return rightInstalled - leftInstalled;
+        return left.name.localeCompare(right.name, "de");
+      });
+  }, [favoriteGuildSet, guildFilter, guildList, guildSearch]);
+
+  function toggleFavoriteGuild(guild: GuildListItem) {
+    setFavoriteGuilds((current) => {
+      const exists = current.includes(guild.id);
+      const next = exists ? current.filter((id) => id !== guild.id) : [...current, guild.id];
+      saveFavoriteGuilds(next);
+      notify({
+        tone: exists ? "info" : "success",
+        title: exists ? "Favorit entfernt" : "Favorit gespeichert",
+        text: guild.name
+      });
+      return next;
+    });
+  }
 
   return (
     <div className="app-shell">
@@ -1429,26 +1601,62 @@ function HomePage() {
         <div className="page-heading compact-heading">
           <div>
             <h2>Serverliste</h2>
-            <p>Nur Guilds mit Verwaltungsrechten werden angezeigt.</p>
+            <p>{filteredGuilds.length} von {guildList.length} Guilds sichtbar. Favoriten bleiben automatisch oben.</p>
           </div>
           <RefreshButton loading={guilds.loading} onClick={guilds.reload} />
         </div>
+
+        <section className="home-tools" aria-label="Serverliste filtern">
+          <label className="home-search">
+            <Search size={16} />
+            <input value={guildSearch} onChange={(event) => setGuildSearch(event.target.value)} placeholder="Servername, ID oder Recht suchen" aria-label="Server suchen" />
+          </label>
+          <div className="home-filter-tabs">
+            {([
+              ["all", "Alle", guildList.length],
+              ["installed", "Installiert", installedCount],
+              ["missing", "Einladen", missingCount],
+              ["favorites", "Favoriten", favoriteGuilds.length]
+            ] as const).map(([value, label, count]) => (
+              <button key={value} type="button" className={guildFilter === value ? "active" : ""} onClick={() => setGuildFilter(value as HomeGuildFilter)}>
+                {value === "favorites" ? <Star size={14} /> : <ListFilter size={14} />}
+                {label}
+                <span>{count}</span>
+              </button>
+            ))}
+          </div>
+        </section>
 
         {guilds.loading && !guilds.data && <LoadingBlock text="Server werden geladen" detail="Deine verwaltbaren Guilds werden neu abgefragt." />}
         {!guilds.loading && guilds.error && <Notice tone="danger" text={guilds.error} />}
         {!guilds.loading && guilds.data?.guilds.length === 0 && (
           <EmptyState title="Keine verwaltbaren Server" text="Discord hat für diesen Account keine passende Guild geliefert." />
         )}
+        {!guilds.loading && guilds.data && guilds.data.guilds.length > 0 && filteredGuilds.length === 0 && (
+          <EmptyState title="Keine Treffer" text="Passe Suche oder Filter an, dann erscheinen die passenden Server wieder." />
+        )}
 
-        {!guilds.loading && guilds.data && guilds.data.guilds.length > 0 && (
+        {!guilds.loading && guilds.data && filteredGuilds.length > 0 && (
           <section className="guild-grid">
-            {guilds.data.guilds.map((guild, index) => (
+            {filteredGuilds.map((guild, index) => {
+              const installed = guild.botInstalled || guild.botInstallStatus === "installed";
+              const favorite = favoriteGuildSet.has(guild.id);
+              return (
               <article
-              className={`guild-card ${guild.botInstalled || guild.botInstallStatus === "installed" ? "installed" : guild.botInstallStatus === "unknown" ? "unknown" : "missing"} reveal-card`}
+              className={`guild-card ${installed ? "installed" : guild.botInstallStatus === "unknown" ? "unknown" : "missing"} ${favorite ? "favorite" : ""} reveal-card`}
               style={{ "--delay": `${index * 65}ms` } as React.CSSProperties}
               key={guild.id}
             >
-              {!(guild.botInstalled || guild.botInstallStatus === "installed") && (
+              <button
+                type="button"
+                className={`guild-favorite-button ${favorite ? "active" : ""}`}
+                onClick={() => toggleFavoriteGuild(guild)}
+                title={favorite ? "Favorit entfernen" : "Als Favorit markieren"}
+                aria-label={favorite ? `${guild.name} aus Favoriten entfernen` : `${guild.name} als Favorit markieren`}
+              >
+                <Star size={16} fill={favorite ? "currentColor" : "none"} />
+              </button>
+              {!installed && (
                 <a
                   className="guild-card-quick-action"
                   href={`/api/bot/invite?guildId=${guild.id}&returnTo=${encodeURIComponent(`/dashboard/${guild.id}/overview`)}`}
@@ -1465,7 +1673,7 @@ function HomePage() {
                   className={
                     guild.botInstallStatus === "unknown"
                       ? "status-light unknown"
-                      : guild.botInstalled || guild.botInstallStatus === "installed"
+                      : installed
                         ? "status-light ok"
                         : "status-light missing"
                   }
@@ -1478,7 +1686,7 @@ function HomePage() {
                   <span className="pill">{guild.permission}</span>
                   <span
                     className={
-                      guild.botInstalled || guild.botInstallStatus === "installed"
+                      installed
                         ? "pill ok"
                         : guild.botInstallStatus === "unknown"
                           ? "pill neutral"
@@ -1489,7 +1697,13 @@ function HomePage() {
                   </span>
                 </div>
               </div>
-              {guild.botInstalled || guild.botInstallStatus === "installed" ? (
+              {!installed && (
+                <div className="guild-invite-diagnose">
+                  <span><ShieldCheck size={14} /> Administrator-Invite</span>
+                  <small>permissions=8 · behebt fehlende Rollen- und Kanalrechte</small>
+                </div>
+              )}
+              {installed ? (
                 <button className="primary-action" onClick={() => navigate(`/dashboard/${guild.id}/overview`)}>
                   Verwalten
                   <ChevronRight size={16} />
@@ -1506,7 +1720,8 @@ function HomePage() {
                 </a>
               )}
               </article>
-            ))}
+            );
+            })}
           </section>
         )}
       </main>
@@ -2060,9 +2275,12 @@ function AdminPageModern() {
         body: JSON.stringify(presence)
       });
       setSaveStatus("Statusänderung wurde an den Bot gesendet.");
+      notify({ tone: "success", title: "Status gesendet", text: "Die Präsenzänderung wurde an den Bot übergeben." });
       window.setTimeout(() => void admin.reload(), 12000);
     } catch (error) {
-      setSaveStatus(error instanceof Error ? error.message : "Status konnte nicht geändert werden.");
+      const message = error instanceof Error ? error.message : "Status konnte nicht geändert werden.";
+      setSaveStatus(message);
+      notify({ tone: "danger", title: "Status fehlgeschlagen", text: message });
     } finally {
       setSaving(false);
     }
@@ -2077,12 +2295,15 @@ function AdminPageModern() {
         body: JSON.stringify({ action })
       });
       setActionStatus(`${ownerActionLabels[action] ?? action} wurde an den Bot gesendet.`);
+      notify({ tone: "success", title: "Aktion gesendet", text: ownerActionLabels[action] ?? action });
       window.setTimeout(() => {
         void admin.reload();
         void ownerLogs.reload();
       }, 5000);
     } catch (error) {
-      setActionStatus(error instanceof Error ? error.message : "Aktion konnte nicht gestartet werden.");
+      const message = error instanceof Error ? error.message : "Aktion konnte nicht gestartet werden.";
+      setActionStatus(message);
+      notify({ tone: "danger", title: "Aktion fehlgeschlagen", text: message });
     } finally {
       setActionBusy(null);
     }
@@ -2097,9 +2318,12 @@ function AdminPageModern() {
         body: JSON.stringify({ signal })
       });
       setActionStatus("Pterodactyl-Restart wurde gesendet.");
+      notify({ tone: "success", title: "Pterodactyl-Restart gesendet", text: "Der Power-Befehl wurde an das Panel übergeben." });
       window.setTimeout(() => void admin.reload(), 8000);
     } catch (error) {
-      setActionStatus(error instanceof Error ? error.message : "Pterodactyl-Aktion konnte nicht gestartet werden.");
+      const message = error instanceof Error ? error.message : "Pterodactyl-Aktion konnte nicht gestartet werden.";
+      setActionStatus(message);
+      notify({ tone: "danger", title: "Pterodactyl fehlgeschlagen", text: message });
     } finally {
       setActionBusy(null);
     }
@@ -2111,8 +2335,11 @@ function AdminPageModern() {
     try {
       await downloadJson("/api/admin/bot/export", `discordbot-owner-export-${new Date().toISOString().slice(0, 10)}.json`);
       setActionStatus("Owner-Export wurde erstellt.");
+      notify({ tone: "success", title: "Export erstellt", text: "Die Owner-Konfiguration wurde als JSON vorbereitet." });
     } catch (error) {
-      setActionStatus(error instanceof Error ? error.message : "Export konnte nicht erstellt werden.");
+      const message = error instanceof Error ? error.message : "Export konnte nicht erstellt werden.";
+      setActionStatus(message);
+      notify({ tone: "danger", title: "Export fehlgeschlagen", text: message });
     } finally {
       setExporting(false);
     }
@@ -2139,6 +2366,17 @@ function AdminPageModern() {
             <RefreshButton loading={ownerRefreshing} onClick={admin.reload} />
           </div>
         </section>
+
+        {me.data?.user?.ownerAdmin && (
+          <section className="owner-security-banner">
+            <span><ShieldCheck size={18} /></span>
+            <div>
+              <strong>Owner-Modus aktiv</strong>
+              <small>Admin-Routen und Owner-API sind per Discord-ID gesperrt. Angemeldet als {me.data.user.displayName || me.data.user.username}{me.data.user.discordUserId ? ` · ${me.data.user.discordUserId}` : ""}.</small>
+            </div>
+            <em>ID-Lock</em>
+          </section>
+        )}
 
         {ownerInitialLoading && <LoadingBlock />}
         {admin.error && <Notice tone="danger" text={admin.error} />}
@@ -2489,16 +2727,16 @@ function AdminPageModern() {
                   ))}
                   {!(recentBotLogs ?? []).length && <p className="muted">Noch keine Bot-Logs im Heartbeat.</p>}
                 </div>
-                <div className="owner-log-column">
-                  <h3>Audit</h3>
+                <div className="owner-log-column owner-timeline-column">
+                  <h3>Owner Timeline</h3>
                   {(ownerLogs.data?.auditLog ?? []).slice(0, 8).map((entry) => (
-                    <article className="owner-log-row" key={entry.id}>
-                      <span className="pill ok">Audit</span>
+                    <article className="owner-timeline-item" key={entry.id}>
+                      <span aria-hidden="true" />
                       <div>
                         <strong>{entry.action}</strong>
                         <small>{entry.guildName || entry.guildId || entry.target}</small>
+                        <em>{entry.actorDiscordUserId || "Owner"} · {formatDateTime(entry.createdAt)}</em>
                       </div>
-                      <time>{formatDateTime(entry.createdAt)}</time>
                     </article>
                   ))}
                   {!(ownerLogs.data?.auditLog ?? []).length && <p className="muted">Noch keine Owner-Änderungen gefunden.</p>}
