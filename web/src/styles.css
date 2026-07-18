@@ -793,7 +793,7 @@ p {
   border-radius: 8px;
   background:
     linear-gradient(135deg, rgba(119, 183, 255, 0.1), transparent 34%),
-    rgba(21, 25, 34, 0.72);
+    var(--panel-bg);
 }
 
 .docs-manual-heading h2 {
@@ -814,7 +814,7 @@ p {
   padding: 16px;
   border: 1px solid var(--border-soft);
   border-radius: 8px;
-  background: rgba(9, 11, 16, 0.42);
+  background: var(--field-bg);
 }
 
 .docs-step > span {
@@ -845,7 +845,7 @@ p {
   background:
     linear-gradient(135deg, rgba(104, 168, 255, 0.11), transparent 38%),
     linear-gradient(315deg, rgba(155, 140, 255, 0.075), transparent 34%),
-    rgba(10, 14, 22, 0.94);
+    var(--panel-bg-strong);
 }
 
 .metric-strip,
@@ -869,8 +869,13 @@ p {
   border-radius: 8px;
   background:
     linear-gradient(145deg, rgba(210, 223, 255, 0.045), transparent 42%),
-    rgba(5, 8, 14, 0.62);
+    var(--field-bg);
   transition: transform 180ms ease, border-color 180ms ease, background 180ms ease;
+}
+
+.metric-card strong,
+.status-tile strong {
+  color: var(--text);
 }
 
 .metric-card:hover,
@@ -948,7 +953,7 @@ p {
 }
 
 .guild-card.missing {
-  border-color: rgba(255, 255, 255, 0.11);
+  border-color: var(--border-soft);
   background:
     linear-gradient(145deg, rgba(255, 255, 255, 0.045), transparent 48%),
     var(--panel-bg-soft);
@@ -961,7 +966,7 @@ p {
 }
 
 .guild-card.missing:hover {
-  border-color: rgba(255, 255, 255, 0.22);
+  border-color: rgba(104, 168, 255, 0.24);
   background:
     linear-gradient(145deg, rgba(255, 255, 255, 0.06), transparent 48%),
     var(--panel-bg-strong);
@@ -973,7 +978,10 @@ p {
   opacity: 0.64;
 }
 
-.guild-card.missing h2,
+.guild-card.missing h2 {
+  color: var(--muted-strong);
+}
+
 .guild-card.missing p {
   color: var(--muted);
 }
