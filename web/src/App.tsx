@@ -846,6 +846,9 @@ function AuthShowcase() {
 }
 
 function TopNav({ user }: { user?: User | null }) {
+  const session = useApi<{ user: User }>(user === undefined ? "/api/me" : null, []);
+  const navUser = user === undefined ? session.data?.user ?? null : user;
+
   return (
     <header className="top-nav">
       <button className="brand-link" onClick={() => navigate("/panel")}>
@@ -857,7 +860,7 @@ function TopNav({ user }: { user?: User | null }) {
           <Home size={17} />
           Panel
         </button>
-        {user?.ownerAdmin && (
+        {navUser?.ownerAdmin && (
           <button onClick={() => navigate("/admin")}>
             <Gauge size={17} />
             Admin
@@ -885,10 +888,10 @@ function TopNav({ user }: { user?: User | null }) {
         Live
       </span>
       <ThemeToggle compact />
-      {user && (
+      {navUser && (
         <div className="user-chip">
-          {user.avatar ? <img src={user.avatar} alt="" /> : <UserRound size={18} />}
-          <span>{user.displayName || user.username}</span>
+          {navUser.avatar ? <img src={navUser.avatar} alt="" /> : <UserRound size={18} />}
+          <span>{navUser.displayName || navUser.username}</span>
           <a className="icon-button" href="/logout" title="Abmelden">
             <LogOut size={17} />
           </a>
