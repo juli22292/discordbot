@@ -53,7 +53,6 @@ import {
   Upload,
   UserPlus,
   UserRound,
-  Wand2,
   Wifi
 } from "lucide-react";
 import "./styles.css";
@@ -1759,6 +1758,15 @@ function AdminPageModern() {
   const healthTone: OwnerTone = healthScore >= 75 ? "ok" : healthScore >= 50 ? "warn" : "danger";
   const lavalinkTone: "ok" | "warn" = lavalink?.connected ? "ok" : "warn";
   const queueItems = music?.queueItems ?? lavalink?.queueItems ?? 0;
+  const lavalinkStatusText = lavalink?.connected ? "Verbunden" : lavalink?.status || "Unbekannt";
+  const quickActions = [
+    { action: "snapshot.refresh", title: "Snapshot", text: "Guilds & Commands neu einlesen", icon: <Database size={17} /> },
+    { action: "runtime.refresh", title: "Runtime", text: "Live-Status sofort melden", icon: <Activity size={17} /> },
+    { action: "commands.sync", title: "Commands", text: "Slash-Befehle synchronisieren", icon: <Command size={17} /> },
+    { action: "music.reconnect", title: "Lavalink", text: "Node-Verbindung erneuern", icon: <Radio size={17} /> },
+    { action: "music.disconnect_all", title: "Musik trennen", text: "Alle Voice-Player lösen", icon: <Power size={17} /> },
+    { action: "restart.request", title: "Bot-Restart", text: "Restart über Bot anfragen", icon: <RotateCcw size={17} /> }
+  ];
 
   const presencePresets = [
     { label: "Normal", status: "online", activityType: "none", text: "", url: "" },
@@ -1884,26 +1892,28 @@ function AdminPageModern() {
                   <span className="pill neutral">Owner</span>
                 </div>
                 <div className="owner-action-grid">
-                  {[
-                    ["snapshot.refresh", <Database size={16} />],
-                    ["runtime.refresh", <Activity size={16} />],
-                    ["commands.sync", <Command size={16} />],
-                    ["music.reconnect", <Radio size={16} />],
-                    ["music.disconnect_all", <Power size={16} />],
-                    ["restart.request", <RotateCcw size={16} />]
-                  ].map(([action, icon]) => (
-                    <button key={String(action)} className="secondary-action inline owner-action-button" onClick={() => void runOwnerAction(String(action))} disabled={Boolean(actionBusy)}>
-                      {actionBusy === action ? <Loader2 className="spin" size={16} /> : icon}
-                      {ownerActionLabels[String(action)]}
+                  {quickActions.map((item) => (
+                    <button key={item.action} className="owner-action-card" onClick={() => void runOwnerAction(item.action)} disabled={Boolean(actionBusy)}>
+                      <span className="owner-action-icon">{actionBusy === item.action ? <Loader2 className="spin" size={17} /> : item.icon}</span>
+                      <span>
+                        <strong>{item.title}</strong>
+                        <small>{item.text}</small>
+                      </span>
                     </button>
                   ))}
-                  <button className="secondary-action inline owner-action-button" onClick={() => void runPowerSignal("restart")} disabled={Boolean(actionBusy)}>
-                    {actionBusy === "pterodactyl.restart" ? <Loader2 className="spin" size={16} /> : <Power size={16} />}
-                    Pterodactyl Restart
+                  <button className="owner-action-card" onClick={() => void runPowerSignal("restart")} disabled={Boolean(actionBusy)}>
+                    <span className="owner-action-icon">{actionBusy === "pterodactyl.restart" ? <Loader2 className="spin" size={17} /> : <Power size={17} />}</span>
+                    <span>
+                      <strong>Pterodactyl</strong>
+                      <small>Server-Restart auslösen</small>
+                    </span>
                   </button>
-                  <button className="secondary-action inline owner-action-button" onClick={() => void exportOwnerConfig()} disabled={exporting}>
-                    {exporting ? <Loader2 className="spin" size={16} /> : <Download size={16} />}
-                    Config exportieren
+                  <button className="owner-action-card" onClick={() => void exportOwnerConfig()} disabled={exporting}>
+                    <span className="owner-action-icon">{exporting ? <Loader2 className="spin" size={17} /> : <Download size={17} />}</span>
+                    <span>
+                      <strong>Export</strong>
+                      <small>Owner-Config als JSON</small>
+                    </span>
                   </button>
                 </div>
                 <ActionStatus status={actionStatus} />
@@ -1917,17 +1927,23 @@ function AdminPageModern() {
                   </div>
                   <span className={`pill ${lavalinkTone}`}>{lavalink?.connected ? "verbunden" : "prüfen"}</span>
                 </div>
-                <div className="owner-mini-metrics">
-                  <StatusTile icon={<Radio size={18} />} label="Lavalink" value={lavalink?.status || "unbekannt"} tone={lavalinkTone} />
-                  <StatusTile icon={<Music2 size={18} />} label="Player" value={compactNumber(music?.activePlayers ?? lavalink?.activePlayers ?? 0)} tone={(music?.activePlayers ?? 0) > 0 ? "ok" : undefined} />
-                  <StatusTile icon={<ListFilter size={18} />} label="Queue" value={compactNumber(queueItems)} />
+                <div className={`owner-lavalink-card ${lavalinkTone}`}>
+                  <span className="owner-lavalink-icon"><Radio size={19} /></span>
+                  <div>
+                    <small>Lavalink Node</small>
+                    <strong>{lavalinkStatusText}</strong>
+                    <em>{lavalink?.uri || "Keine Node gemeldet"}</em>
+                  </div>
+                  <span className={`pill ${lavalinkTone}`}>{lavalink?.identifier || "main"}</span>
                 </div>
-                <dl className="owner-guild-facts owner-music-facts">
+                <div className="owner-music-stat-grid">
+                  <div><dt>Player</dt><dd>{compactNumber(music?.activePlayers ?? lavalink?.activePlayers ?? 0)}</dd></div>
+                  <div><dt>Queue</dt><dd>{compactNumber(queueItems)}</dd></div>
                   <div><dt>Backend</dt><dd>{music?.backend || lavalink?.backend || "-"}</dd></div>
-                  <div><dt>Node</dt><dd>{lavalink?.uri || "-"}</dd></div>
                   <div><dt>Suche</dt><dd>{lavalink?.searchSource || "-"}</dd></div>
                   <div><dt>Volume</dt><dd>{music?.defaultVolume ?? "-"}</dd></div>
-                </dl>
+                  <div><dt>Gespeichert</dt><dd>{compactNumber(music?.savedPlayers ?? 0)}</dd></div>
+                </div>
                 <div className="owner-detail-list owner-player-list">
                   {(music?.players ?? []).slice(0, 4).map((player) => (
                     <article className="owner-detail-row" key={player.guildId}>

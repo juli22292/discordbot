@@ -1968,22 +1968,157 @@ textarea {
 .owner-action-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
+  gap: 9px;
 }
 
-.owner-action-button {
-  justify-content: flex-start;
+.owner-action-card {
+  min-width: 0;
+  min-height: 62px;
+  display: grid;
+  grid-template-columns: 36px minmax(0, 1fr);
+  align-items: center;
+  gap: 11px;
+  padding: 10px;
+  border: 1px solid rgba(119, 183, 255, 0.13);
+  border-radius: 8px;
+  color: var(--text);
+  text-align: left;
+  background: rgba(9, 11, 16, 0.44);
+  cursor: pointer;
+  transition: border-color 160ms ease, background 160ms ease, transform 160ms ease;
 }
 
-.owner-mini-metrics {
+.owner-action-card:hover,
+.owner-action-card:focus-visible {
+  border-color: rgba(119, 183, 255, 0.34);
+  background: rgba(119, 183, 255, 0.08);
+  outline: none;
+}
+
+.owner-action-card:active {
+  transform: translateY(1px);
+}
+
+.owner-action-card:disabled {
+  cursor: not-allowed;
+  opacity: 0.72;
+}
+
+.owner-action-icon {
+  width: 36px;
+  height: 36px;
+  display: grid;
+  place-items: center;
+  border: 1px solid rgba(119, 183, 255, 0.14);
+  border-radius: 8px;
+  color: var(--blue);
+  background: rgba(119, 183, 255, 0.08);
+}
+
+.owner-action-card strong {
+  display: block;
+  color: var(--text);
+  font-size: 14px;
+  line-height: 1.15;
+}
+
+.owner-action-card small {
+  display: block;
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.28;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.owner-lavalink-card {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: 42px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
+  padding: 13px;
+  border: 1px solid rgba(119, 183, 255, 0.16);
+  border-radius: 8px;
+  background:
+    linear-gradient(90deg, rgba(119, 183, 255, 0.08), transparent 56%),
+    rgba(9, 11, 16, 0.5);
+}
+
+.owner-lavalink-card.ok {
+  border-color: rgba(47, 191, 122, 0.28);
+  background:
+    linear-gradient(90deg, rgba(47, 191, 122, 0.11), transparent 58%),
+    rgba(9, 11, 16, 0.5);
+}
+
+.owner-lavalink-icon {
+  width: 42px;
+  height: 42px;
+  display: grid;
+  place-items: center;
+  border-radius: 8px;
+  color: var(--green);
+  background: rgba(47, 191, 122, 0.09);
+}
+
+.owner-lavalink-card small,
+.owner-lavalink-card em {
+  display: block;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.owner-lavalink-card strong {
+  display: block;
+  margin: 2px 0 3px;
+  color: var(--text);
+  font-size: 24px;
+  line-height: 1;
+}
+
+.owner-lavalink-card em {
+  max-width: 100%;
+  font-style: normal;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.owner-music-stat-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 10px;
+  gap: 9px;
   margin-bottom: 12px;
 }
 
-.owner-music-facts {
-  margin-bottom: 12px;
+.owner-music-stat-grid div {
+  min-width: 0;
+  min-height: 58px;
+  display: grid;
+  align-content: center;
+  gap: 4px;
+  padding: 10px;
+  border: 1px solid var(--border-soft);
+  border-radius: 8px;
+  background: rgba(9, 11, 16, 0.42);
+}
+
+.owner-music-stat-grid dt {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.owner-music-stat-grid dd {
+  margin: 0;
+  color: var(--text);
+  font-weight: 800;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .owner-player-list {
@@ -3430,7 +3565,7 @@ textarea {
   .owner-presets,
   .owner-runtime-mini,
   .owner-action-grid,
-  .owner-mini-metrics,
+  .owner-music-stat-grid,
   .owner-panel-toolbar,
   .owner-segmented,
   .guild-card,
