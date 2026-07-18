@@ -1642,85 +1642,80 @@ function HomePage() {
               const installed = guild.botInstalled || guild.botInstallStatus === "installed";
               const favorite = favoriteGuildSet.has(guild.id);
               return (
-              <article
-              className={`guild-card ${installed ? "installed" : guild.botInstallStatus === "unknown" ? "unknown" : "missing"} ${favorite ? "favorite" : ""} reveal-card`}
-              style={{ "--delay": `${index * 65}ms` } as React.CSSProperties}
-              key={guild.id}
-            >
-              <button
-                type="button"
-                className={`guild-favorite-button ${favorite ? "active" : ""}`}
-                onClick={() => toggleFavoriteGuild(guild)}
-                title={favorite ? "Favorit entfernen" : "Als Favorit markieren"}
-                aria-label={favorite ? `${guild.name} aus Favoriten entfernen` : `${guild.name} als Favorit markieren`}
-              >
-                <Star size={16} fill={favorite ? "currentColor" : "none"} />
-              </button>
-              {!installed && (
-                <a
-                  className="guild-card-quick-action"
-                  href={`/api/bot/invite?guildId=${guild.id}&returnTo=${encodeURIComponent(`/dashboard/${guild.id}/overview`)}`}
-                  target="_blank"
-                  rel="noreferrer"
-                  aria-label={`Bot auf ${guild.name} einladen`}
+                <article
+                  className={`guild-card ${installed ? "installed" : guild.botInstallStatus === "unknown" ? "unknown" : "missing"} ${favorite ? "favorite" : ""} reveal-card`}
+                  style={{ "--delay": `${index * 65}ms` } as React.CSSProperties}
+                  key={guild.id}
                 >
-                  <Plus size={19} />
-                </a>
-              )}
-              <div className="guild-card-top">
-                <GuildIcon guild={guild} />
-                <span
-                  className={
-                    guild.botInstallStatus === "unknown"
-                      ? "status-light unknown"
-                      : installed
-                        ? "status-light ok"
-                        : "status-light missing"
-                  }
-                />
-              </div>
-              <div className="guild-card-body">
-                <h2>{guild.name}</h2>
-                <p>{guild.id}</p>
-                <div className="status-row">
-                  <span className="pill">{guild.permission}</span>
-                  <span
-                    className={
-                      installed
-                        ? "pill ok"
-                        : guild.botInstallStatus === "unknown"
-                          ? "pill neutral"
-                          : "pill missing"
-                    }
-                  >
-                    {guild.botInstalled || guild.botInstallStatus === "installed" ? "Bot installiert" : guild.botInstallStatus === "unknown" ? "Status prüfen" : "Bot fehlt"}
-                  </span>
-                </div>
-              </div>
-              {!installed && (
-                <div className="guild-invite-diagnose">
-                  <span><ShieldCheck size={14} /> Administrator-Invite</span>
-                  <small>permissions=8 · behebt fehlende Rollen- und Kanalrechte</small>
-                </div>
-              )}
-              {installed ? (
-                <button className="primary-action" onClick={() => navigate(`/dashboard/${guild.id}/overview`)}>
-                  Verwalten
-                  <ChevronRight size={16} />
-                </button>
-              ) : (
-                <a
-                  className="secondary-action invite-action"
-                  href={`/api/bot/invite?guildId=${guild.id}&returnTo=${encodeURIComponent(`/dashboard/${guild.id}/overview`)}`}
-                  target="_blank"
-                  rel="noreferrer"
-                >
-                  <Plus size={16} />
-                  Einladen
-                </a>
-              )}
-              </article>
-            );
+                  <div className="guild-card-top">
+                    <GuildIcon guild={guild} />
+                    <span
+                      className={
+                        guild.botInstallStatus === "unknown"
+                          ? "status-light unknown"
+                          : installed
+                            ? "status-light ok"
+                            : "status-light missing"
+                      }
+                    />
+                  </div>
+
+                  <div className="guild-card-body">
+                    <div className="guild-card-title-row">
+                      <h2 title={guild.name}>{guild.name}</h2>
+                      <div className="guild-card-actions" aria-label="Serveraktionen">
+                        <button
+                          type="button"
+                          className={`guild-icon-action guild-favorite-button ${favorite ? "active" : ""}`}
+                          onClick={() => toggleFavoriteGuild(guild)}
+                          title={favorite ? "Favorit entfernen" : "Als Favorit markieren"}
+                          aria-label={favorite ? `${guild.name} aus Favoriten entfernen` : `${guild.name} als Favorit markieren`}
+                        >
+                          <Star size={16} fill={favorite ? "currentColor" : "none"} />
+                        </button>
+                      </div>
+                    </div>
+                    <p>{guild.id}</p>
+                    <div className="status-row">
+                      <span className="pill">{guild.permission}</span>
+                      <span
+                        className={
+                          installed
+                            ? "pill ok"
+                            : guild.botInstallStatus === "unknown"
+                              ? "pill neutral"
+                              : "pill missing"
+                        }
+                      >
+                        {guild.botInstalled || guild.botInstallStatus === "installed" ? "Bot installiert" : guild.botInstallStatus === "unknown" ? "Status prüfen" : "Bot fehlt"}
+                      </span>
+                    </div>
+                  </div>
+
+                  {!installed && (
+                    <div className="guild-invite-diagnose">
+                      <span><ShieldCheck size={14} /> Administrator-Invite</span>
+                      <small>permissions=8 · volle Rechte beim Einladen</small>
+                    </div>
+                  )}
+                  {installed ? (
+                    <button className="primary-action" onClick={() => navigate(`/dashboard/${guild.id}/overview`)}>
+                      Verwalten
+                      <ChevronRight size={16} />
+                    </button>
+                  ) : (
+                    <a
+                      className="secondary-action invite-action"
+                      href={`/api/bot/invite?guildId=${guild.id}&returnTo=${encodeURIComponent(`/dashboard/${guild.id}/overview`)}`}
+                      target="_blank"
+                      rel="noreferrer"
+                    >
+                      <Plus size={16} />
+                      Einladen
+                    </a>
+                  )}
+                </article>
+              );
             })}
           </section>
         )}

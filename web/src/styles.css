@@ -1073,6 +1073,12 @@ p {
   gap: 12px;
   align-items: center;
   margin-bottom: 16px;
+  padding: 10px;
+  border: 1px solid var(--border-soft);
+  border-radius: 8px;
+  background:
+    linear-gradient(145deg, rgba(255, 255, 255, 0.03), transparent 48%),
+    rgba(10, 14, 22, 0.58);
 }
 
 .home-search {
@@ -1105,6 +1111,7 @@ p {
 .home-filter-tabs button {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 7px;
   min-height: 40px;
   padding: 8px 10px;
@@ -1114,6 +1121,7 @@ p {
   background:
     linear-gradient(145deg, rgba(255, 255, 255, 0.04), transparent 46%),
     var(--control-bg);
+  white-space: nowrap;
 }
 
 .home-filter-tabs button.active {
@@ -1144,9 +1152,11 @@ p {
 .guild-card {
   position: relative;
   display: grid;
-  grid-template-columns: auto 1fr;
-  gap: 14px;
-  min-height: 192px;
+  grid-template-columns: 58px minmax(0, 1fr);
+  grid-template-rows: auto auto auto;
+  align-content: start;
+  gap: 14px 16px;
+  min-height: 218px;
   padding: 16px;
   overflow: hidden;
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.035);
@@ -1212,11 +1222,16 @@ p {
   z-index: 1;
 }
 
-.guild-favorite-button {
-  position: absolute;
-  top: 12px;
-  right: 12px;
-  z-index: 3;
+.guild-card-actions {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 7px;
+}
+
+.guild-icon-action {
+  padding: 0;
   width: 34px;
   height: 34px;
   display: grid;
@@ -1224,14 +1239,11 @@ p {
   border: 1px solid rgba(244, 189, 99, 0.25);
   border-radius: 8px;
   color: var(--muted);
+  text-decoration: none;
   background:
     linear-gradient(135deg, rgba(255, 255, 255, 0.08), transparent 46%),
     rgba(9, 11, 16, 0.76);
   transition: transform 160ms ease, color 160ms ease, border-color 160ms ease, background 160ms ease;
-}
-
-.guild-card:not(.installed) .guild-favorite-button {
-  right: 54px;
 }
 
 .guild-favorite-button:hover,
@@ -1246,38 +1258,11 @@ p {
   border-color: rgba(244, 189, 99, 0.24);
 }
 
-.guild-card-quick-action {
-  position: absolute;
-  top: 12px;
-  right: 12px;
-  z-index: 2;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 34px;
-  height: 34px;
-  border: 1px solid rgba(255, 116, 116, 0.42);
-  border-radius: 8px;
-  color: #ffdede;
-  background:
-    linear-gradient(135deg, rgba(255, 255, 255, 0.12), transparent 42%),
-    rgba(92, 23, 28, 0.78);
-  transition: transform 160ms ease, border-color 160ms ease, background 160ms ease, color 160ms ease;
-}
-
-.guild-card-quick-action:hover {
-  transform: translateY(-1px);
-  border-color: rgba(255, 116, 116, 0.72);
-  color: #fff8f8;
-  background:
-    linear-gradient(135deg, rgba(255, 255, 255, 0.18), transparent 42%),
-    rgba(128, 31, 38, 0.94);
-}
-
 .guild-card .primary-action,
 .guild-card .secondary-action {
   grid-column: 1 / -1;
   justify-content: center;
+  align-self: end;
 }
 
 .guild-card .primary-action {
@@ -1349,7 +1334,38 @@ p {
 .guild-card-body {
   min-width: 0;
   display: grid;
+  align-content: start;
+  gap: 9px;
+}
+
+.guild-card-body > p {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.guild-card .status-row {
+  flex-wrap: wrap;
   gap: 8px;
+}
+
+.guild-card-title-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: start;
+}
+
+.guild-card-title-row h2 {
+  min-width: 0;
+  margin: 0;
+  display: -webkit-box;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-height: 1.15;
+  text-wrap: balance;
 }
 
 .guild-icon {
@@ -3956,6 +3972,7 @@ textarea {
 :root[data-theme="light"] .notice,
 :root[data-theme="light"] .toast,
 :root[data-theme="light"] .mobile-nav-menu,
+:root[data-theme="light"] .home-tools,
 :root[data-theme="light"] .home-filter-tabs button,
 :root[data-theme="light"] .guild-invite-diagnose,
 :root[data-theme="light"] .role-chip {
@@ -3985,7 +4002,7 @@ textarea {
 :root[data-theme="light"] .owner-lavalink-card,
 :root[data-theme="light"] .owner-lavalink-card.ok,
 :root[data-theme="light"] .owner-music-stat-grid div,
-:root[data-theme="light"] .guild-favorite-button {
+:root[data-theme="light"] .guild-icon-action {
   background:
     linear-gradient(145deg, rgba(255, 255, 255, 0.38), transparent 48%),
     var(--panel-bg-soft);
