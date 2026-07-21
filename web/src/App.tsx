@@ -3570,33 +3570,98 @@ function StatusTile({ icon, label, value, tone }: { icon: React.ReactNode; label
   );
 }
 
-function ProfilePage({ guildId, settings, onSaved }: { guildId: string; settings: SettingsRow; onSaved: () => void }) {
+function ProfilePage({ guildId, settings, onSaved }: { guildId: string; settings: SettingsRow; onSaved: () => void | Promise<void> }) {
   const [nickname, setNickname] = useState(settings.bot_nickname ?? "");
   const [file, setFile] = useState<File | null>(null);
-  const [status, setStatus] = useState<string | null>(null);
-  const [saving, setSaving] = useState(false);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [nicknameStatus, setNicknameStatus] = useState<string | null>(null);
+  const [avatarStatus, setAvatarStatus] = useState<string | null>(null);
+  const [savingNickname, setSavingNickname] = useState(false);
+  const [avatarBusy, setAvatarBusy] = useState(false);
+  const [fileInputKey, setFileInputKey] = useState(0);
+  const storedAvatarUrl = settings.bot_avatar_media_key
+    ? `/api/guilds/${guildId}/media?key=${encodeURIComponent(settings.bot_avatar_media_key)}`
+    : null;
+  const displayedAvatarUrl = previewUrl ?? storedAvatarUrl;
+  const syncLabel = settings.bot_avatar_sync_status === "synced"
+    ? "Synchronisiert"
+    : settings.bot_avatar_sync_status === "pending"
+      ? "Wird synchronisiert"
+      : settings.bot_avatar_sync_status === "failed"
+        ? "Synchronisierung fehlgeschlagen"
+        : "Standard-Avatar";
+
+  useEffect(() => {
+    setNickname(settings.bot_nickname ?? "");
+  }, [settings.bot_nickname]);
+
+  useEffect(() => {
+    if (settings.bot_avatar_sync_status !== "pending") return;
+    const timer = window.setInterval(() => void onSaved(), 2500);
+    return () => window.clearInterval(timer);
+    // onSaved is the current guild loader and does not change the requested resource.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [guildId, settings.bot_avatar_sync_status]);
+
+  useEffect(() => {
+    if (!file) {
+      setPreviewUrl(null);
+      return;
+    }
+
+    const objectUrl = URL.createObjectURL(file);
+    setPreviewUrl(objectUrl);
+    return () => URL.revokeObjectURL(objectUrl);
+  }, [file]);
+
+  function selectAvatar(nextFile: File | null) {
+    setAvatarStatus(null);
+
+    if (!nextFile) {
+      setFile(null);
+      return;
+    }
+
+    const allowedTypes = new Set(["image/png", "image/jpeg", "image/gif", "image/webp"]);
+
+    if (!allowedTypes.has(nextFile.type)) {
+      setFile(null);
+      setFileInputKey((value) => value + 1);
+      setAvatarStatus("Erlaubt sind PNG, JPEG, GIF und WebP.");
+      return;
+    }
+
+    if (nextFile.size > 512 * 1024) {
+      setFile(null);
+      setFileInputKey((value) => value + 1);
+      setAvatarStatus("Das Profilbild darf maximal 512 KiB groß sein.");
+      return;
+    }
+
+    setFile(nextFile);
+  }
 
   async function saveNickname() {
-    setSaving(true);
-    setStatus(null);
+    setSavingNickname(true);
+    setNicknameStatus(null);
     try {
       await api(`/api/guilds/${guildId}/profile`, {
         method: "PATCH",
         body: JSON.stringify({ nickname })
       });
-      setStatus("Nickname-Änderung wurde für den Bot vorgemerkt.");
-      onSaved();
+      setNicknameStatus("Nickname-Änderung wurde an den Bot übergeben.");
+      await onSaved();
     } catch (error) {
-      setStatus(error instanceof Error ? error.message : "Speichern fehlgeschlagen.");
+      setNicknameStatus(error instanceof Error ? error.message : "Speichern fehlgeschlagen.");
     } finally {
-      setSaving(false);
+      setSavingNickname(false);
     }
   }
 
   async function uploadAvatar() {
     if (!file) return;
-    setSaving(true);
-    setStatus(null);
+    setAvatarBusy(true);
+    setAvatarStatus(null);
     const formData = new FormData();
     formData.set("avatar", file);
     try {
@@ -3604,13 +3669,30 @@ function ProfilePage({ guildId, settings, onSaved }: { guildId: string; settings
         method: "POST",
         body: formData
       });
-      setStatus("Avatar-Upload wurde gespeichert und zur Bot-Synchronisierung vorgemerkt.");
+      setAvatarStatus("Profilbild gespeichert. Der Bot übernimmt es jetzt auf dieser Guild.");
       setFile(null);
-      onSaved();
+      setFileInputKey((value) => value + 1);
+      await onSaved();
     } catch (error) {
-      setStatus(error instanceof Error ? error.message : "Upload fehlgeschlagen.");
+      setAvatarStatus(error instanceof Error ? error.message : "Upload fehlgeschlagen.");
     } finally {
-      setSaving(false);
+      setAvatarBusy(false);
+    }
+  }
+
+  async function resetAvatar() {
+    setAvatarBusy(true);
+    setAvatarStatus(null);
+    try {
+      await api(`/api/guilds/${guildId}/profile/avatar`, { method: "DELETE" });
+      setFile(null);
+      setFileInputKey((value) => value + 1);
+      setAvatarStatus("Der Server-Avatar wird auf das normale Bot-Profilbild zurückgesetzt.");
+      await onSaved();
+    } catch (error) {
+      setAvatarStatus(error instanceof Error ? error.message : "Zurücksetzen fehlgeschlagen.");
+    } finally {
+      setAvatarBusy(false);
     }
   }
 
@@ -3625,10 +3707,10 @@ function ProfilePage({ guildId, settings, onSaved }: { guildId: string; settings
           Nickname auf dieser Guild
           <input value={nickname} maxLength={32} onChange={(event) => setNickname(event.target.value)} placeholder="Leer lassen zum Zurücksetzen" />
         </label>
-        <ActionStatus status={status} />
+        <ActionStatus status={nicknameStatus} />
         <div className="form-actions">
-          <button className="primary-action inline" onClick={saveNickname} disabled={saving}>
-            {saving ? <Loader2 className="spin" size={16} /> : <Save size={16} />}
+          <button className="primary-action inline" onClick={saveNickname} disabled={savingNickname}>
+            {savingNickname ? <Loader2 className="spin" size={16} /> : <Save size={16} />}
             Nickname speichern
           </button>
         </div>
@@ -3637,22 +3719,43 @@ function ProfilePage({ guildId, settings, onSaved }: { guildId: string; settings
       <div className="panel">
         <div className="panel-title">
           <h2>Server-Avatar</h2>
-          <span className={settings.bot_avatar_sync_status === "failed" ? "pill danger" : "pill"}>
-            {settings.bot_avatar_sync_status}
+          <span className={settings.bot_avatar_sync_status === "failed" ? "pill danger" : settings.bot_avatar_sync_status === "synced" ? "pill ok" : "pill"}>
+            {syncLabel}
           </span>
         </div>
-        <label>
-          Bilddatei
-          <input type="file" accept="image/png,image/jpeg,image/gif,image/webp" onChange={(event) => setFile(event.target.files?.[0] ?? null)} />
-        </label>
-        {file && <p className="muted">{file.name} - {Math.round(file.size / 1024)} KiB</p>}
-        {settings.bot_avatar_sync_error && <Notice tone="danger" text={settings.bot_avatar_sync_error} />}
-        <div className="form-actions">
-          <button className="secondary-action inline" onClick={uploadAvatar} disabled={!file || saving}>
-            <Upload size={16} />
-            Avatar hochladen
-          </button>
+        <div className="avatar-editor">
+          <div className="avatar-preview" aria-label="Vorschau des Server-Avatars">
+            {displayedAvatarUrl ? <img src={displayedAvatarUrl} alt="Server-Avatar Vorschau" /> : <Bot size={34} />}
+            {file && <span>Vorschau</span>}
+          </div>
+          <div className="avatar-editor-copy">
+            <strong>{file ? file.name : settings.bot_avatar_media_key ? "Aktuelles eigenes Profilbild" : "Normales Bot-Profilbild"}</strong>
+            <p>PNG, JPEG, GIF oder WebP bis 512 KiB. Das Bild gilt nur für diese Guild.</p>
+            {file && <small>{Math.round(file.size / 1024)} KiB ausgewählt</small>}
+            <div className="form-actions avatar-actions">
+              <label className="secondary-action inline avatar-file-button">
+                <Upload size={16} />
+                Bild auswählen
+                <input
+                  key={fileInputKey}
+                  type="file"
+                  accept="image/png,image/jpeg,image/gif,image/webp"
+                  onChange={(event) => selectAvatar(event.target.files?.[0] ?? null)}
+                />
+              </label>
+              <button className="primary-action inline" onClick={uploadAvatar} disabled={!file || avatarBusy}>
+                {avatarBusy && file ? <Loader2 className="spin" size={16} /> : <Save size={16} />}
+                Übernehmen
+              </button>
+              <button className="secondary-action inline" onClick={resetAvatar} disabled={avatarBusy || (!storedAvatarUrl && !file)}>
+                {avatarBusy && !file ? <Loader2 className="spin" size={16} /> : <RotateCcw size={16} />}
+                Zurücksetzen
+              </button>
+            </div>
+          </div>
         </div>
+        <ActionStatus status={avatarStatus} />
+        {settings.bot_avatar_sync_error && <Notice tone="danger" text={settings.bot_avatar_sync_error} />}
       </div>
     </section>
   );

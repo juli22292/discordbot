@@ -22,6 +22,12 @@
       "database_id": "4aa0fbf6-ae11-4153-adce-4687d922db4b"
     }
   ],
+  "r2_buckets": [
+    {
+      "binding": "GUILD_MEDIA",
+      "bucket_name": "discordbot-media"
+    }
+  ],
   "vars": {
     "APP_URL": "https://bot.carrothd.de",
     "DISCORD_REDIRECT_URI": "https://bot.carrothd.de/api/auth/discord/callback",

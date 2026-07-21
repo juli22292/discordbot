@@ -1718,6 +1718,7 @@ app.post("/api/guilds/:guildId/profile/avatar", async (c) => {
   }
 
   const access = await requireGuildManagementAccess(c, c.req.param("guildId"));
+  const previousSettings = await ensureSettings(c.env, access.guild.id);
   const form = await c.req.formData();
   const file = form.get("avatar");
 
@@ -1763,11 +1764,43 @@ app.post("/api/guilds/:guildId/profile/avatar", async (c) => {
   const eventId = await enqueueSyncEvent(c.env, access.guild, "guild.member_avatar.update", {
     discordGuildId: access.guild.discordGuildId,
     mediaKey,
-    mimeType: file.type
+    mimeType: file.type,
+    previousMediaKey: previousSettings.bot_avatar_media_key
   });
 
-  await audit(c.env, access.guild.id, access.session.user.discordUserId, "profile.avatar.update", "bot_avatar", null, { mediaKey, mimeType: file.type, sizeBytes: file.size });
+  await audit(c.env, access.guild.id, access.session.user.discordUserId, "profile.avatar.update", "bot_avatar", previousSettings.bot_avatar_media_key, { mediaKey, mimeType: file.type, sizeBytes: file.size });
   return json(c, { ok: true, eventId, mediaKey });
+});
+
+app.delete("/api/guilds/:guildId/profile/avatar", async (c) => {
+  const access = await requireGuildManagementAccess(c, c.req.param("guildId"));
+  const settings = await ensureSettings(c.env, access.guild.id);
+
+  await c.env.DB.prepare(
+    `UPDATE guild_settings
+        SET bot_avatar_media_key = NULL, bot_avatar_sync_status = 'pending', bot_avatar_sync_error = NULL, updated_at = ?
+      WHERE guild_id = ?`
+  )
+    .bind(nowIso(), access.guild.id)
+    .run();
+
+  const eventId = await enqueueSyncEvent(c.env, access.guild, "guild.member_avatar.update", {
+    discordGuildId: access.guild.discordGuildId,
+    mediaKey: null,
+    mimeType: null,
+    previousMediaKey: settings.bot_avatar_media_key
+  });
+
+  await audit(
+    c.env,
+    access.guild.id,
+    access.session.user.discordUserId,
+    "profile.avatar.reset",
+    "bot_avatar",
+    settings.bot_avatar_media_key,
+    null
+  );
+  return json(c, { ok: true, eventId });
 });
 
 app.get("/api/guilds/:guildId/channels", async (c) => {
@@ -1961,6 +1994,12 @@ app.put("/api/guilds/:guildId/welcome", async (c) => {
   };
 
   await assertGuildMedia(c.env, access.guild.id, saved.embed.imageMediaKey);
+  const imageMedia = saved.embed.imageMediaKey
+    ? await first<{ mime_type: string }>(
+        c.env.DB.prepare("SELECT mime_type FROM guild_media WHERE guild_id = ? AND media_key = ?")
+          .bind(access.guild.id, saved.embed.imageMediaKey)
+      )
+    : null;
 
   const timestamp = nowIso();
   await c.env.DB.prepare(
@@ -1988,7 +2027,9 @@ app.put("/api/guilds/:guildId/welcome", async (c) => {
 
   const eventId = await enqueueSyncEvent(c.env, access.guild, "welcome_settings.upsert", {
     discordGuildId: access.guild.discordGuildId,
-    settings: saved
+    settings: saved,
+    imageMimeType: imageMedia?.mime_type ?? null,
+    previousImageMediaKey: oldValue.embed.imageMediaKey
   });
 
   await audit(c.env, access.guild.id, access.session.user.discordUserId, "welcome.update", "welcome_settings", oldValue, saved);
@@ -2929,6 +2970,24 @@ app.post("/api/internal/bot/guilds/:guildId/left", async (c) => {
 app.get("/api/internal/bot/sync-events", async (c) => {
   await verifyInternalBotRequest(c.req.raw, c.env, "");
   const limit = Math.min(Number(c.req.query("limit") ?? "10") || 10, 25);
+  const leaseExpiredAt = new Date(Date.now() - 5 * 60 * 1000).toISOString();
+
+  await c.env.DB.prepare(
+    `UPDATE sync_events
+        SET status = 'pending', updated_at = ?
+      WHERE status = 'processing' AND updated_at < ? AND attempts < max_attempts`
+  )
+    .bind(nowIso(), leaseExpiredAt)
+    .run();
+
+  await c.env.DB.prepare(
+    `UPDATE sync_events
+        SET status = 'failed', last_error = COALESCE(last_error, 'Sync-Lease nach maximalen Versuchen abgelaufen'), updated_at = ?
+      WHERE status = 'processing' AND updated_at < ? AND attempts >= max_attempts`
+  )
+    .bind(nowIso(), leaseExpiredAt)
+    .run();
+
   const rows = await all<Record<string, unknown>>(
     c.env.DB.prepare(
       `SELECT e.id, g.discord_guild_id AS discordGuildId, e.action, e.payload, e.attempts, e.max_attempts AS maxAttempts, e.created_at AS createdAt
@@ -2962,10 +3021,16 @@ app.get("/api/internal/bot/sync-events", async (c) => {
 app.post("/api/internal/bot/sync-events/:eventId/complete", async (c) => {
   const body = (await signedInternalBody(c)) as { result?: unknown };
   const eventId = c.req.param("eventId");
-  const row = await first<{ guild_id: string; action: string }>(
-    c.env.DB.prepare("SELECT guild_id, action FROM sync_events WHERE id = ?").bind(eventId)
+  const row = await first<{ guild_id: string; action: string; payload: string; discord_guild_id: string }>(
+    c.env.DB.prepare(
+      `SELECT e.guild_id, e.action, e.payload, g.discord_guild_id
+         FROM sync_events e
+         JOIN guilds g ON g.id = e.guild_id
+        WHERE e.id = ?`
+    ).bind(eventId)
   );
   if (!row) throw new HttpError(404, "event_not_found", "Sync-Event nicht gefunden.");
+  const eventPayload = parseJson<Record<string, unknown>>(row.payload, {});
 
   await c.env.DB.prepare(
     "UPDATE sync_events SET status = 'completed', last_error = NULL, completed_at = ?, updated_at = ? WHERE id = ?"
@@ -2981,14 +3046,56 @@ app.post("/api/internal/bot/sync-events/:eventId/complete", async (c) => {
       .run();
   }
 
+  if (row.action === "custom_command.upsert") {
+    const command = eventPayload.command && typeof eventPayload.command === "object"
+      ? eventPayload.command as Record<string, unknown>
+      : {};
+    const commandId = String(command.id ?? "");
+
+    if (commandId) {
+      await c.env.DB.prepare(
+        "UPDATE custom_commands SET sync_status = 'synced', sync_error = NULL, updated_at = ? WHERE id = ? AND guild_id = ?"
+      )
+        .bind(nowIso(), commandId, row.guild_id)
+        .run();
+    }
+  }
+
+  const currentMediaKey = row.action === "guild.member_avatar.update"
+    ? String(eventPayload.mediaKey ?? "")
+    : row.action === "welcome_settings.upsert"
+      ? String(((eventPayload.settings as Record<string, unknown> | undefined)?.embed as Record<string, unknown> | undefined)?.imageMediaKey ?? "")
+      : "";
+  const previousMediaKey = row.action === "guild.member_avatar.update"
+    ? String(eventPayload.previousMediaKey ?? "")
+    : row.action === "welcome_settings.upsert"
+      ? String(eventPayload.previousImageMediaKey ?? "")
+      : "";
+
+  if (
+    previousMediaKey
+    && previousMediaKey !== currentMediaKey
+    && previousMediaKey.startsWith(`guilds/${row.discord_guild_id}/`)
+    && !previousMediaKey.includes("..")
+  ) {
+    try {
+      await c.env.GUILD_MEDIA?.delete(previousMediaKey);
+      await c.env.DB.prepare("DELETE FROM guild_media WHERE guild_id = ? AND media_key = ?")
+        .bind(row.guild_id, previousMediaKey)
+        .run();
+    } catch (error) {
+      console.warn("Altes Guild-Medium konnte nicht automatisch entfernt werden", error);
+    }
+  }
+
   return json(c, { ok: true, result: body.result ?? null });
 });
 
 app.post("/api/internal/bot/sync-events/:eventId/fail", async (c) => {
   const body = (await signedInternalBody(c)) as { error?: string; retry?: boolean };
   const eventId = c.req.param("eventId");
-  const row = await first<{ attempts: number; max_attempts: number; guild_id: string; action: string }>(
-    c.env.DB.prepare("SELECT attempts, max_attempts, guild_id, action FROM sync_events WHERE id = ?").bind(eventId)
+  const row = await first<{ attempts: number; max_attempts: number; guild_id: string; action: string; payload: string }>(
+    c.env.DB.prepare("SELECT attempts, max_attempts, guild_id, action, payload FROM sync_events WHERE id = ?").bind(eventId)
   );
   if (!row) throw new HttpError(404, "event_not_found", "Sync-Event nicht gefunden.");
 
@@ -3003,6 +3110,22 @@ app.post("/api/internal/bot/sync-events/:eventId/fail", async (c) => {
     )
       .bind(String(body.error ?? "Unbekannter Fehler").slice(0, 1000), nowIso(), row.guild_id)
       .run();
+  }
+
+  if (!retry && row.action === "custom_command.upsert") {
+    const eventPayload = parseJson<Record<string, unknown>>(row.payload, {});
+    const command = eventPayload.command && typeof eventPayload.command === "object"
+      ? eventPayload.command as Record<string, unknown>
+      : {};
+    const commandId = String(command.id ?? "");
+
+    if (commandId) {
+      await c.env.DB.prepare(
+        "UPDATE custom_commands SET sync_status = 'failed', sync_error = ?, updated_at = ? WHERE id = ? AND guild_id = ?"
+      )
+        .bind(String(body.error ?? "Unbekannter Fehler").slice(0, 1000), nowIso(), commandId, row.guild_id)
+        .run();
+    }
   }
 
   return json(c, { ok: true, retry });
