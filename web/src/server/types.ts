@@ -3,7 +3,6 @@ export interface Env {
   ASSETS?: Fetcher;
   OAUTH_STATE: KVNamespace;
   BOT_EVENT_NONCES?: KVNamespace;
-  GUILD_MEDIA?: R2Bucket;
   SYNC_QUEUE?: Queue<SyncEventMessage>;
   APP_URL: string;
   DISCORD_CLIENT_ID: string;

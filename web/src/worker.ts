@@ -8,6 +8,7 @@ import {
 } from "./server/cookies";
 import { decryptJson, encryptJson, randomToken, verifyInternalBotRequest } from "./server/crypto";
 import { all, asJson, first, newId, nowIso, parseJson } from "./server/db";
+import { combineMediaChunks, splitMediaBytes } from "./server/media";
 import {
   DiscordApiError,
   createDiscordChannelInvite,
@@ -823,6 +824,112 @@ async function ensureLoggingSettings(env: Env, guildId: string): Promise<Logging
 
 function mediaPreviewUrl(discordGuildId: string, mediaKey: string): string {
   return `/api/guilds/${discordGuildId}/media?key=${encodeURIComponent(mediaKey)}`;
+}
+
+let guildMediaStorageReady: Promise<void> | null = null;
+
+async function ensureGuildMediaStorage(env: Env): Promise<void> {
+  if (!guildMediaStorageReady) {
+    const db = requireDb(env);
+    guildMediaStorageReady = (async () => {
+      await db.prepare(
+        `CREATE TABLE IF NOT EXISTS guild_media_chunks (
+           media_id TEXT NOT NULL REFERENCES guild_media(id) ON DELETE CASCADE,
+           chunk_index INTEGER NOT NULL,
+           chunk_data BLOB NOT NULL,
+           PRIMARY KEY (media_id, chunk_index)
+         )`
+      ).run();
+      await db.prepare(
+        "CREATE INDEX IF NOT EXISTS idx_guild_media_chunks_media ON guild_media_chunks(media_id, chunk_index)"
+      ).run();
+    })().catch((error) => {
+      guildMediaStorageReady = null;
+      throw error;
+    });
+  }
+
+  await guildMediaStorageReady;
+}
+
+async function storeGuildMedia(
+  env: Env,
+  media: {
+    id: string;
+    guildId: string;
+    mediaKey: string;
+    mimeType: string;
+    createdByDiscordUserId: string;
+  },
+  bytes: ArrayBuffer
+): Promise<void> {
+  if (bytes.byteLength === 0) throw new HttpError(400, "media_empty", "Die Bilddatei ist leer.");
+  await ensureGuildMediaStorage(env);
+  const db = requireDb(env);
+  const chunks = splitMediaBytes(bytes);
+  const statements: D1PreparedStatement[] = [
+    db.prepare(
+      `INSERT INTO guild_media (id, guild_id, media_key, mime_type, size_bytes, created_by_discord_user_id, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`
+    ).bind(
+      media.id,
+      media.guildId,
+      media.mediaKey,
+      media.mimeType,
+      bytes.byteLength,
+      media.createdByDiscordUserId,
+      nowIso()
+    ),
+    ...chunks.map((chunk, index) => db.prepare(
+      "INSERT INTO guild_media_chunks (media_id, chunk_index, chunk_data) VALUES (?, ?, ?)"
+    ).bind(media.id, index, chunk))
+  ];
+
+  await db.batch(statements);
+}
+
+async function loadGuildMedia(
+  env: Env,
+  mediaKey: string,
+  guildId?: string
+): Promise<{ body: ArrayBuffer; mimeType: string; sizeBytes: number } | null> {
+  await ensureGuildMediaStorage(env);
+  const db = requireDb(env);
+  const media = guildId
+    ? await first<{ id: string; mime_type: string; size_bytes: number }>(
+        db.prepare("SELECT id, mime_type, size_bytes FROM guild_media WHERE media_key = ? AND guild_id = ?")
+          .bind(mediaKey, guildId)
+      )
+    : await first<{ id: string; mime_type: string; size_bytes: number }>(
+        db.prepare("SELECT id, mime_type, size_bytes FROM guild_media WHERE media_key = ?").bind(mediaKey)
+      );
+
+  if (!media) return null;
+  const chunks = await all<{ chunk_data: number[] }>(
+    db.prepare(
+      "SELECT chunk_data FROM guild_media_chunks WHERE media_id = ? ORDER BY chunk_index ASC"
+    ).bind(media.id)
+  );
+
+  return {
+    body: combineMediaChunks(chunks.map((chunk) => chunk.chunk_data), Number(media.size_bytes)),
+    mimeType: media.mime_type,
+    sizeBytes: Number(media.size_bytes)
+  };
+}
+
+async function deleteGuildMedia(env: Env, guildId: string, mediaKey: string): Promise<void> {
+  await ensureGuildMediaStorage(env);
+  const db = requireDb(env);
+  const media = await first<{ id: string }>(
+    db.prepare("SELECT id FROM guild_media WHERE guild_id = ? AND media_key = ?").bind(guildId, mediaKey)
+  );
+
+  if (!media) return;
+  await db.batch([
+    db.prepare("DELETE FROM guild_media_chunks WHERE media_id = ?").bind(media.id),
+    db.prepare("DELETE FROM guild_media WHERE id = ? AND guild_id = ?").bind(media.id, guildId)
+  ]);
 }
 
 async function assertGuildMedia(env: Env, guildId: string, mediaKey: string | null | undefined): Promise<void> {
@@ -1713,10 +1820,6 @@ app.patch("/api/guilds/:guildId/profile", async (c) => {
 });
 
 app.post("/api/guilds/:guildId/profile/avatar", async (c) => {
-  if (!c.env.GUILD_MEDIA) {
-    throw new HttpError(503, "r2_not_configured", "R2 ist für Avatar-Uploads nicht konfiguriert.");
-  }
-
   const access = await requireGuildManagementAccess(c, c.req.param("guildId"));
   const previousSettings = await ensureSettings(c.env, access.guild.id);
   const form = await c.req.formData();
@@ -1741,17 +1844,13 @@ app.post("/api/guilds/:guildId/profile/avatar", async (c) => {
   const mediaKey = `guilds/${access.guild.discordGuildId}/bot-avatar/${mediaId}.${extension}`;
   const bytes = await file.arrayBuffer();
 
-  await c.env.GUILD_MEDIA.put(mediaKey, bytes, {
-    httpMetadata: { contentType: file.type },
-    customMetadata: { guildId: access.guild.discordGuildId }
-  });
-
-  await c.env.DB.prepare(
-    `INSERT INTO guild_media (id, guild_id, media_key, mime_type, size_bytes, created_by_discord_user_id, created_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?)`
-  )
-    .bind(mediaId, access.guild.id, mediaKey, file.type, file.size, access.session.user.discordUserId, nowIso())
-    .run();
+  await storeGuildMedia(c.env, {
+    id: mediaId,
+    guildId: access.guild.id,
+    mediaKey,
+    mimeType: file.type,
+    createdByDiscordUserId: access.session.user.discordUserId
+  }, bytes);
 
   await c.env.DB.prepare(
     `UPDATE guild_settings
@@ -1831,10 +1930,6 @@ app.get("/api/guilds/:guildId/roles", async (c) => {
 });
 
 app.get("/api/guilds/:guildId/media", async (c) => {
-  if (!c.env.GUILD_MEDIA) {
-    throw new HttpError(503, "r2_not_configured", "R2 ist nicht konfiguriert.");
-  }
-
   const access = await requireGuildManagementAccess(c, c.req.param("guildId"));
   const key = c.req.query("key");
 
@@ -1842,13 +1937,13 @@ app.get("/api/guilds/:guildId/media", async (c) => {
     throw new HttpError(400, "media_key_invalid", "Media-Key ist ungültig.");
   }
 
-  await assertGuildMedia(c.env, access.guild.id, key);
-  const object = await c.env.GUILD_MEDIA.get(key);
+  const object = await loadGuildMedia(c.env, key, access.guild.id);
   if (!object) throw new HttpError(404, "media_not_found", "Medium nicht gefunden.");
 
   return new Response(object.body, {
     headers: {
-      "Content-Type": object.httpMetadata?.contentType ?? "application/octet-stream",
+      "Content-Type": object.mimeType,
+      "Content-Length": String(object.sizeBytes),
       "Cache-Control": "private, max-age=60"
     }
   });
@@ -2037,10 +2132,6 @@ app.put("/api/guilds/:guildId/welcome", async (c) => {
 });
 
 app.post("/api/guilds/:guildId/welcome/image", async (c) => {
-  if (!c.env.GUILD_MEDIA) {
-    throw new HttpError(503, "r2_not_configured", "R2 ist für Begrüßungsbilder nicht konfiguriert.");
-  }
-
   const access = await requireGuildManagementAccess(c, c.req.param("guildId"));
   const form = await c.req.formData();
   const file = form.get("image");
@@ -2064,17 +2155,13 @@ app.post("/api/guilds/:guildId/welcome/image", async (c) => {
   const mediaKey = `guilds/${access.guild.discordGuildId}/welcome/${mediaId}.${extension}`;
   const bytes = await file.arrayBuffer();
 
-  await c.env.GUILD_MEDIA.put(mediaKey, bytes, {
-    httpMetadata: { contentType: file.type },
-    customMetadata: { guildId: access.guild.discordGuildId, kind: "welcome" }
-  });
-
-  await c.env.DB.prepare(
-    `INSERT INTO guild_media (id, guild_id, media_key, mime_type, size_bytes, created_by_discord_user_id, created_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?)`
-  )
-    .bind(mediaId, access.guild.id, mediaKey, file.type, file.size, access.session.user.discordUserId, nowIso())
-    .run();
+  await storeGuildMedia(c.env, {
+    id: mediaId,
+    guildId: access.guild.id,
+    mediaKey,
+    mimeType: file.type,
+    createdByDiscordUserId: access.session.user.discordUserId
+  }, bytes);
 
   await audit(c.env, access.guild.id, access.session.user.discordUserId, "welcome.image.upload", "guild_media", null, {
     mediaKey,
@@ -3079,10 +3166,7 @@ app.post("/api/internal/bot/sync-events/:eventId/complete", async (c) => {
     && !previousMediaKey.includes("..")
   ) {
     try {
-      await c.env.GUILD_MEDIA?.delete(previousMediaKey);
-      await c.env.DB.prepare("DELETE FROM guild_media WHERE guild_id = ? AND media_key = ?")
-        .bind(row.guild_id, previousMediaKey)
-        .run();
+      await deleteGuildMedia(c.env, row.guild_id, previousMediaKey);
     } catch (error) {
       console.warn("Altes Guild-Medium konnte nicht automatisch entfernt werden", error);
     }
@@ -3133,18 +3217,18 @@ app.post("/api/internal/bot/sync-events/:eventId/fail", async (c) => {
 
 app.get("/api/internal/bot/media", async (c) => {
   await verifyInternalBotRequest(c.req.raw, c.env, "");
-  if (!c.env.GUILD_MEDIA) throw new HttpError(503, "r2_not_configured", "R2 ist nicht konfiguriert.");
   const key = c.req.query("key");
   if (!key || key.includes("..") || !key.startsWith("guilds/")) {
     throw new HttpError(400, "media_key_invalid", "Media-Key ist ungültig.");
   }
 
-  const object = await c.env.GUILD_MEDIA.get(key);
+  const object = await loadGuildMedia(c.env, key);
   if (!object) throw new HttpError(404, "media_not_found", "Medium nicht gefunden.");
 
   return new Response(object.body, {
     headers: {
-      "Content-Type": object.httpMetadata?.contentType ?? "application/octet-stream",
+      "Content-Type": object.mimeType,
+      "Content-Length": String(object.sizeBytes),
       "Cache-Control": "private, max-age=60"
     }
   });

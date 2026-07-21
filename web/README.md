@@ -2,13 +2,10 @@
 
 ## Cloudflare
 
-Das Webpanel verwendet D1 fuer Einstellungen und Sync-Jobs sowie R2 fuer
-Guild-Avatare und Welcome-Bilder. Der in `wrangler.jsonc` konfigurierte Bucket
-muss im Cloudflare-Account einmalig angelegt werden:
-
-```bash
-pnpm exec wrangler r2 bucket create discordbot-media
-```
+Das Webpanel verwendet D1 fuer Einstellungen, Sync-Jobs, Guild-Avatare und
+Welcome-Bilder. Mediendateien werden in 256-KiB-Bloecke geteilt und bleiben
+damit unter dem D1-Limit fuer einzelne BLOB-Werte. Ein R2-Abonnement oder ein
+zusaetzlicher Cloudflare-Speicherdienst ist nicht erforderlich.
 
 Danach kann die Worker-Anwendung normal gebaut und deployed werden:
 
