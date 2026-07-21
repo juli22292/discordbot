@@ -3891,7 +3891,7 @@ const TEMPVOICE_ACTIONS = [
   { label: "Entblockieren", icon: ShieldCheck },
   { label: "Übernehmen", icon: Crown },
   { label: "Übertragen", icon: ArrowRight },
-  { label: "Löschen", icon: Trash2, danger: true }
+  { label: "Löschen", icon: Trash2 }
 ] as const;
 
 function TempVoicePage({ guildId }: { guildId: string }) {
@@ -3932,7 +3932,7 @@ function TempVoicePage({ guildId }: { guildId: string }) {
     }));
   }
 
-  async function persist(sendPanel: boolean) {
+  async function persist(sendPanel: boolean, nextDraft: TempVoiceSettings = draft): Promise<boolean> {
     if (sendPanel) setSending(true);
     else setSaving(true);
     setStatus(null);
@@ -3941,13 +3941,13 @@ function TempVoicePage({ guildId }: { guildId: string }) {
       const response = await api<{ tempVoice: TempVoiceSettings }>(`/api/guilds/${guildId}/temp-voice`, {
         method: "PUT",
         body: JSON.stringify({
-          enabled: draft.enabled,
-          creatorChannelIds: draft.creatorChannelIds,
-          categoryId: draft.categoryId,
-          interfaceChannelId: draft.interfaceChannelId,
-          nameTemplate: draft.nameTemplate,
-          defaultUserLimit: draft.defaultUserLimit,
-          defaultBitrateKbps: draft.defaultBitrateKbps
+          enabled: nextDraft.enabled,
+          creatorChannelIds: nextDraft.creatorChannelIds,
+          categoryId: nextDraft.categoryId,
+          interfaceChannelId: nextDraft.interfaceChannelId,
+          nameTemplate: nextDraft.nameTemplate,
+          defaultUserLimit: nextDraft.defaultUserLimit,
+          defaultBitrateKbps: nextDraft.defaultBitrateKbps
         })
       });
       setDraft(response.tempVoice);
@@ -3955,7 +3955,7 @@ function TempVoicePage({ guildId }: { guildId: string }) {
       if (sendPanel) {
         await api(`/api/guilds/${guildId}/temp-voice/panel`, {
           method: "POST",
-          body: JSON.stringify({ channelId: draft.interfaceChannelId })
+          body: JSON.stringify({ channelId: nextDraft.interfaceChannelId })
         });
         setStatus("Konfiguration gespeichert. Das TempVoice-Interface wird jetzt vom Bot gesendet oder aktualisiert.");
       } else {
@@ -3963,12 +3963,28 @@ function TempVoicePage({ guildId }: { guildId: string }) {
       }
 
       await settings.reload();
+      return true;
     } catch (error) {
       setStatus(error instanceof Error ? error.message : "TempVoice konnte nicht gespeichert werden.");
+      return false;
     } finally {
       setSaving(false);
       setSending(false);
     }
+  }
+
+  async function updateEnabled(enabled: boolean) {
+    const previousDraft = draft;
+    const nextDraft = { ...draft, enabled };
+    setDraft(nextDraft);
+
+    if (enabled && nextDraft.creatorChannelIds.length === 0) {
+      setStatus("Wähle jetzt mindestens einen Creator-Kanal und speichere anschließend die Einstellungen.");
+      return;
+    }
+
+    const saved = await persist(false, nextDraft);
+    if (!saved) setDraft(previousDraft);
   }
 
   const loading = (settings.loading && !settings.data) || (channels.loading && !channels.data);
@@ -3990,7 +4006,12 @@ function TempVoicePage({ guildId }: { guildId: string }) {
             {draft.syncStatus === "failed" ? "Sync fehlgeschlagen" : draft.syncStatus === "pending" ? "Wird synchronisiert" : draft.syncStatus === "synced" ? "Synchronisiert" : "Bereit"}
           </span>
           <label className="welcome-switch">
-            <input type="checkbox" checked={draft.enabled} onChange={(event) => setDraft({ ...draft, enabled: event.target.checked })} />
+            <input
+              type="checkbox"
+              checked={draft.enabled}
+              disabled={saving || sending}
+              onChange={(event) => void updateEnabled(event.target.checked)}
+            />
             <span>{draft.enabled ? "Aktiv" : "Inaktiv"}</span>
           </label>
         </div>
@@ -3999,8 +4020,9 @@ function TempVoicePage({ guildId }: { guildId: string }) {
       {loading && <LoadingBlock />}
       {loadError && <Notice tone="danger" text={loadError} />}
       {draft.syncError && <Notice tone="danger" text={draft.syncError} />}
+      <ActionStatus status={status} />
 
-      {!loading && !loadError && (
+      {!loading && !loadError && draft.enabled && (
         <>
           <section className="tempvoice-summary-grid">
             <StatusTile icon={<Mic2 size={19} />} label="Status" value={draft.enabled ? "aktiv" : "inaktiv"} tone={draft.enabled ? "ok" : "warn"} />
@@ -4147,7 +4169,6 @@ function TempVoicePage({ guildId }: { guildId: string }) {
                     </a>
                   )}
                 </div>
-                <ActionStatus status={status} />
               </section>
             </div>
 
@@ -4175,7 +4196,6 @@ function TempVoicePage({ guildId }: { guildId: string }) {
                       return (
                         <button
                           type="button"
-                          className={"danger" in action && action.danger ? "danger" : ""}
                           title={action.label}
                           aria-label={action.label}
                           key={action.label}
@@ -4188,9 +4208,9 @@ function TempVoicePage({ guildId }: { guildId: string }) {
                 </div>
               </div>
               <div className="tempvoice-command-list">
-                <span>/tempvoice umbenennen</span>
-                <span>/tempvoice privatsphaere</span>
-                <span>/tempvoice uebertragen</span>
+                <span>/tempvoice rename</span>
+                <span>/tempvoice privacy</span>
+                <span>/tempvoice transfer</span>
                 <span>/tempvoice region</span>
               </div>
             </aside>
