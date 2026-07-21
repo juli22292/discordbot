@@ -3,11 +3,12 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>EclipseBot Webpanel</title>
+    <title>Modmail Manager Webpanel</title>
     <script>
       (() => {
         try {
-          const theme = localStorage.getItem("eclipsebot-theme") === "light" ? "light" : "dark";
+          const storedTheme = localStorage.getItem("modmail-manager-theme") ?? localStorage.getItem("eclipsebot-theme");
+          const theme = storedTheme === "light" ? "light" : "dark";
           document.documentElement.dataset.theme = theme;
           document.documentElement.style.colorScheme = theme;
         } catch {

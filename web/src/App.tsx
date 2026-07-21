@@ -580,9 +580,11 @@ const guildModuleLabels = [
   { key: "moderation", label: "Moderation", text: "Warns, Timeouts und Schutzmodule.", icon: Shield }
 ] as const;
 
-const THEME_STORAGE_KEY = "eclipsebot-theme";
-const FAVORITE_GUILDS_STORAGE_KEY = "eclipsebot-favorite-guilds";
-const TOAST_EVENT_NAME = "eclipsebot-toast";
+const THEME_STORAGE_KEY = "modmail-manager-theme";
+const FAVORITE_GUILDS_STORAGE_KEY = "modmail-manager-favorite-guilds";
+const TOAST_EVENT_NAME = "modmail-manager-toast";
+const LEGACY_THEME_STORAGE_KEY = "eclipsebot-theme";
+const LEGACY_FAVORITE_GUILDS_STORAGE_KEY = "eclipsebot-favorite-guilds";
 
 type ToastPayload = {
   tone?: ToastTone;
@@ -605,7 +607,10 @@ function notify(toast: ToastPayload) {
 
 function readFavoriteGuilds(): string[] {
   try {
-    const parsed = JSON.parse(window.localStorage.getItem(FAVORITE_GUILDS_STORAGE_KEY) ?? "[]") as unknown;
+    const stored = window.localStorage.getItem(FAVORITE_GUILDS_STORAGE_KEY)
+      ?? window.localStorage.getItem(LEGACY_FAVORITE_GUILDS_STORAGE_KEY)
+      ?? "[]";
+    const parsed = JSON.parse(stored) as unknown;
     return Array.isArray(parsed) ? parsed.filter((id): id is string => typeof id === "string") : [];
   } catch {
     return [];
@@ -622,7 +627,8 @@ function saveFavoriteGuilds(ids: string[]) {
 
 function readStoredTheme(): ThemeMode {
   try {
-    const stored = window.localStorage.getItem(THEME_STORAGE_KEY);
+    const stored = window.localStorage.getItem(THEME_STORAGE_KEY)
+      ?? window.localStorage.getItem(LEGACY_THEME_STORAGE_KEY);
     return stored === "light" ? "light" : "dark";
   } catch {
     return "dark";
@@ -868,9 +874,9 @@ function LoginPage() {
           <div className="auth-copy">
             <p className="eyebrow">
               <Sparkles size={15} />
-              EclipseBot Control
+              Modmail Manager Control
             </p>
-            <h1>EclipseBot Webpanel</h1>
+            <h1>Modmail Manager Webpanel</h1>
             <p>Server verwalten, Slash-Befehle steuern und das Bot-Profil pro Guild sauber synchronisieren.</p>
           </div>
           {checkingSession ? (
@@ -1006,7 +1012,7 @@ function TopNav({ user }: { user?: User | null }) {
       <header className="top-nav">
         <button className="brand-link" onClick={() => navigate("/panel")}>
           <Bot size={22} />
-          <span>EclipseBot</span>
+          <span>Modmail Manager</span>
         </button>
         <nav className="top-links">{navItems.map((item) => renderNavItem(item))}</nav>
         <button className={`mobile-nav-toggle ${mobileOpen ? "active" : ""}`} type="button" onClick={() => setMobileOpen((value) => !value)} aria-label="Navigation öffnen">
@@ -1071,7 +1077,7 @@ function DocumentationPage() {
           <div className="docs-hero-copy">
             <p className="eyebrow">
               <Sparkles size={15} />
-              EclipseBot Hilfe
+              Modmail Manager Hilfe
             </p>
             <h1>Dokumentation</h1>
             <p>Eine kurze, saubere Übersicht für das Webpanel: anmelden, Server wählen, Bot einladen und die wichtigsten Bereiche verstehen.</p>
@@ -1163,7 +1169,7 @@ function PrivacyPage() {
     {
       icon: <Server size={18} />,
       title: "Server-Daten",
-      text: "Das Panel speichert Server-ID, Servername, Icon und Bot-Status. So kann angezeigt werden, ob EclipseBot bereits installiert ist."
+      text: "Das Panel speichert Server-ID, Servername, Icon und Bot-Status. So kann angezeigt werden, ob Modmail Manager bereits installiert ist."
     },
     {
       icon: <Database size={18} />,
@@ -1195,7 +1201,7 @@ function PrivacyPage() {
     {
       eyebrow: "Anmeldung",
       title: "Welche Discord-Daten genutzt werden",
-      text: "Beim Login fragt EclipseBot bei Discord deine Basisdaten ab: Discord-ID, Nutzername, Anzeigename und Avatar. Außerdem wird die Liste deiner Server geladen, damit das Panel nur Guilds zeigt, auf denen du Owner, Administrator oder eine passende Verwaltungsberechtigung bist."
+      text: "Beim Login fragt Modmail Manager bei Discord deine Basisdaten ab: Discord-ID, Nutzername, Anzeigename und Avatar. Außerdem wird die Liste deiner Server geladen, damit das Panel nur Guilds zeigt, auf denen du Owner, Administrator oder eine passende Verwaltungsberechtigung bist."
     },
     {
       eyebrow: "Sessions",
@@ -1210,7 +1216,7 @@ function PrivacyPage() {
     {
       eyebrow: "Einstellungen",
       title: "Welche Panel-Einstellungen gespeichert werden",
-      text: "Gespeichert werden Sprache, Zeitzone, Bot-Nickname, Avatar-Sync-Status, Command-Einstellungen, Cooldowns, Rollen- und Kanalbeschränkungen sowie Custom-Command-Texte. Diese Daten sind nötig, damit EclipseBot pro Server unterschiedlich konfiguriert werden kann."
+      text: "Gespeichert werden Sprache, Zeitzone, Bot-Nickname, Avatar-Sync-Status, Command-Einstellungen, Cooldowns, Rollen- und Kanalbeschränkungen sowie Custom-Command-Texte. Diese Daten sind nötig, damit Modmail Manager pro Server unterschiedlich konfiguriert werden kann."
     },
     {
       eyebrow: "Rollen & Kanäle",
@@ -1252,7 +1258,7 @@ function PrivacyPage() {
           <div className="docs-hero-copy">
             <p className="eyebrow">
               <ShieldCheck size={15} />
-              EclipseBot Datenschutz
+              Modmail Manager Datenschutz
             </p>
             <h1>Datenschutz</h1>
             <p>Eine klare Übersicht, welche Daten das Webpanel braucht, warum sie verwendet werden und wie der Zugriff auf deine Discord-Server begrenzt wird.</p>
@@ -1334,7 +1340,7 @@ function TermsPage() {
     {
       icon: <BadgeCheck size={18} />,
       title: "Bot & Webpanel",
-      text: "Die Nutzungsbedingungen gelten für EclipseBot, das Webpanel und alle Funktionen, die darüber auf Discord-Servern gesteuert werden."
+      text: "Die Nutzungsbedingungen gelten für Modmail Manager, das Webpanel und alle Funktionen, die darüber auf Discord-Servern gesteuert werden."
     },
     {
       icon: <ShieldCheck size={18} />,
@@ -1377,12 +1383,12 @@ function TermsPage() {
     {
       eyebrow: "Geltungsbereich",
       title: "Wofür diese Nutzungsbedingungen gelten",
-      text: "Diese Nutzungsbedingungen gelten für die Nutzung von EclipseBot, dem dazugehörigen Webpanel, den Discord-Bot-Funktionen, Slash-Commands, Owner-Funktionen, Server-Einstellungen, Musikfunktionen, Logging, Invites und allen weiteren Funktionen, die über den Bot oder das Panel bereitgestellt werden."
+      text: "Diese Nutzungsbedingungen gelten für die Nutzung von Modmail Manager, dem dazugehörigen Webpanel, den Discord-Bot-Funktionen, Slash-Commands, Owner-Funktionen, Server-Einstellungen, Musikfunktionen, Logging, Invites und allen weiteren Funktionen, die über den Bot oder das Panel bereitgestellt werden."
     },
     {
       eyebrow: "Discord",
       title: "Discord-Regeln bleiben verbindlich",
-      text: "EclipseBot ist eine Anwendung für Discord. Deshalb gelten zusätzlich die Nutzungsbedingungen, Community Guidelines und Developer-Regeln von Discord. Du darfst EclipseBot nicht nutzen, um Discord-Regeln zu umgehen, Spam zu erzeugen, Nutzer zu belästigen, Rechte zu missbrauchen oder unzulässige Inhalte zu verbreiten."
+      text: "Modmail Manager ist eine Anwendung für Discord. Deshalb gelten zusätzlich die Nutzungsbedingungen, Community Guidelines und Developer-Regeln von Discord. Du darfst Modmail Manager nicht nutzen, um Discord-Regeln zu umgehen, Spam zu erzeugen, Nutzer zu belästigen, Rechte zu missbrauchen oder unzulässige Inhalte zu verbreiten."
     },
     {
       eyebrow: "Zugriff",
@@ -1417,7 +1423,7 @@ function TermsPage() {
     {
       eyebrow: "Verfügbarkeit",
       title: "Keine Garantie für durchgehenden Betrieb",
-      text: "EclipseBot und das Webpanel können durch Updates, Wartung, Discord-API-Änderungen, Hosting-Probleme, Lavalink-Probleme, Rate Limits, Netzwerkfehler oder Konfigurationsfehler zeitweise eingeschränkt sein. Eine dauerhafte, fehlerfreie oder unterbrechungsfreie Verfügbarkeit wird nicht garantiert."
+      text: "Modmail Manager und das Webpanel können durch Updates, Wartung, Discord-API-Änderungen, Hosting-Probleme, Lavalink-Probleme, Rate Limits, Netzwerkfehler oder Konfigurationsfehler zeitweise eingeschränkt sein. Eine dauerhafte, fehlerfreie oder unterbrechungsfreie Verfügbarkeit wird nicht garantiert."
     },
     {
       eyebrow: "Daten",
@@ -1442,7 +1448,7 @@ function TermsPage() {
     {
       eyebrow: "Stand",
       title: "Aktuelle Fassung",
-      text: "Stand dieser Nutzungsbedingungen: 18. Juli 2026. Diese Seite beschreibt die Nutzung von EclipseBot und dem Webpanel verständlich für Nutzer und Serververwalter."
+      text: "Stand dieser Nutzungsbedingungen: 18. Juli 2026. Diese Seite beschreibt die Nutzung von Modmail Manager und dem Webpanel verständlich für Nutzer und Serververwalter."
     }
   ];
 
@@ -1454,10 +1460,10 @@ function TermsPage() {
           <div className="docs-hero-copy">
             <p className="eyebrow">
               <ClipboardList size={15} />
-              EclipseBot Regeln
+              Modmail Manager Regeln
             </p>
             <h1>Nutzungsbedingungen</h1>
-            <p>Klare Regeln für die Nutzung von EclipseBot, dem Webpanel, Discord-Serverfunktionen, Owner-Aktionen und technischen Sync-Funktionen.</p>
+            <p>Klare Regeln für die Nutzung von Modmail Manager, dem Webpanel, Discord-Serverfunktionen, Owner-Aktionen und technischen Sync-Funktionen.</p>
             <div className="docs-actions">
               <button className="primary-action" onClick={() => navigate("/panel")}>
                 <LayoutDashboard size={17} />
@@ -1932,7 +1938,7 @@ function AdminPage() {
           <div>
             <p className="eyebrow">
               <Gauge size={15} />
-              EclipseBot Admin
+              Modmail Manager Admin
             </p>
             <h1>Bot Control Center</h1>
             <p>Status setzen, Laufzeitdaten sehen und prüfen, ob Sync, RAM, Latenz und Guild-Snapshot sauber laufen.</p>
@@ -3786,7 +3792,7 @@ function replaceTemplateTokens(value: string) {
     "{member}": "Niteacfort74",
     "{member_name}": "Niteacfort74",
     "{member_mention}": "@Niteacfort74",
-    "{server}": "Eclipse Community",
+    "{server}": "Modmail Manager Community",
     "{member_count}": "128",
     "{account_created}": "vor 2 Jahren",
     "{joined_at}": "gerade eben"
@@ -4320,9 +4326,9 @@ function WelcomePage({ guildId }: { guildId: string }) {
               <span className="pill neutral">Preview</span>
             </div>
             <div className="discord-message">
-              <div className="discord-avatar">E</div>
+              <div className="discord-avatar">M</div>
               <div className="discord-message-body">
-                <strong>EclipseBot <small>gerade eben</small></strong>
+                <strong>Modmail Manager <small>gerade eben</small></strong>
                 <p>{replaceTemplateTokens(draft.message) || "Keine Nachricht gesetzt."}</p>
                 {draft.embed.useEmbed && (
                   <div className="welcome-embed-preview" style={{ borderLeftColor: draft.embed.color }}>

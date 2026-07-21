@@ -1,4 +1,4 @@
-# EclipseBot Webpanel
+# Modmail Manager Webpanel
 
 ## Cloudflare
 
