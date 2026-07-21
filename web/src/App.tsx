@@ -3444,7 +3444,7 @@ function Dashboard({ path }: { path: string }) {
           ))}
         </aside>
         <main className="dashboard-main">
-          {detail.loading && <LoadingBlock />}
+          {detail.loading && !detail.data && <LoadingBlock />}
           {detail.error && <Notice tone="danger" text={detail.error} />}
           {detail.data && (
             <>
@@ -3460,6 +3460,7 @@ function Dashboard({ path }: { path: string }) {
                     <Activity size={13} />
                     Verbunden
                   </span>
+                  <RefreshButton loading={detail.loading} onClick={detail.reload} />
                 </div>
               </div>
               {section === "overview" && <OverviewPage guildId={guildId} initial={detail.data} />}
