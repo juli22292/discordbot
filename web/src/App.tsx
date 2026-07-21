@@ -2143,6 +2143,7 @@ function AdminPageModern() {
   const [guildSearch, setGuildSearch] = useState("");
   const [guildSort, setGuildSort] = useState<"name" | "members" | "channels" | "roles">("name");
   const [eventFilter, setEventFilter] = useState<"all" | "open" | "failed" | "completed">("all");
+  const [retryingEventId, setRetryingEventId] = useState<string | null>(null);
   const [autoRefresh, setAutoRefresh] = useState(true);
 
   useEffect(() => {
@@ -2307,6 +2308,21 @@ function AdminPageModern() {
       notify({ tone: "danger", title: "Aktion fehlgeschlagen", text: message });
     } finally {
       setActionBusy(null);
+    }
+  }
+
+  async function retrySyncEvent(eventId: string) {
+    setRetryingEventId(eventId);
+
+    try {
+      await api(`/api/admin/sync-events/${encodeURIComponent(eventId)}/retry`, { method: "POST" });
+      notify({ tone: "success", title: "Erneut eingeplant", text: "Der Bot verarbeitet die Aktion beim nächsten Sync-Lauf erneut." });
+      await Promise.all([admin.reload(), ownerLogs.reload()]);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Das Sync-Event konnte nicht erneut gestartet werden.";
+      notify({ tone: "danger", title: "Retry fehlgeschlagen", text: message });
+    } finally {
+      setRetryingEventId(null);
     }
   }
 
@@ -2695,6 +2711,17 @@ function AdminPageModern() {
                       <div className="owner-event-meta">
                         <span>{event.attempts}/{event.maxAttempts} Versuche</span>
                         {event.completedAt && <span>fertig {formatDateTime(event.completedAt)}</span>}
+                        {event.status === "failed" && (
+                          <button
+                            type="button"
+                            className="secondary-action inline owner-event-retry"
+                            disabled={retryingEventId !== null}
+                            onClick={() => void retrySyncEvent(event.id)}
+                          >
+                            {retryingEventId === event.id ? <Loader2 className="spin" size={14} /> : <RotateCcw size={14} />}
+                            {retryingEventId === event.id ? "Wird eingeplant" : "Erneut versuchen"}
+                          </button>
+                        )}
                       </div>
                       {event.lastError && <p className="owner-event-error">{event.lastError}</p>}
                     </article>

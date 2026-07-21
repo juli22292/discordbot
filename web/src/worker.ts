@@ -2533,6 +2533,56 @@ app.get("/api/admin/bot/logs", async (c) => {
   });
 });
 
+app.post("/api/admin/sync-events/:eventId/retry", async (c) => {
+  const session = await requireAdminSession(c);
+  const eventId = c.req.param("eventId");
+
+  if (!/^evt_[a-f0-9]{32}$/.test(eventId)) {
+    throw new HttpError(400, "event_id_invalid", "Die Sync-Event-ID ist ungültig.");
+  }
+
+  const event = await first<{
+    id: string;
+    guild_id: string;
+    action: string;
+    status: string;
+    attempts: number;
+    last_error: string | null;
+  }>(
+    c.env.DB.prepare(
+      "SELECT id, guild_id, action, status, attempts, last_error FROM sync_events WHERE id = ?"
+    ).bind(eventId)
+  );
+
+  if (!event) {
+    throw new HttpError(404, "event_not_found", "Sync-Event nicht gefunden.");
+  }
+
+  if (event.status !== "failed") {
+    throw new HttpError(409, "event_not_failed", "Nur fehlgeschlagene Sync-Events können erneut gestartet werden.");
+  }
+
+  await c.env.DB.prepare(
+    `UPDATE sync_events
+        SET status = 'pending', attempts = 0, last_error = NULL, completed_at = NULL, updated_at = ?
+      WHERE id = ?`
+  )
+    .bind(nowIso(), eventId)
+    .run();
+
+  await audit(
+    c.env,
+    event.guild_id,
+    session.user.discordUserId,
+    "owner.sync_event.retry",
+    event.action,
+    { status: event.status, attempts: event.attempts, error: event.last_error },
+    { status: "pending", attempts: 0 }
+  );
+
+  return json(c, { ok: true, eventId, status: "pending" });
+});
+
 app.post("/api/admin/bot/actions", async (c) => {
   const session = await requireAdminSession(c);
   const data = botAdminActionSchema.parse(await readJsonBody(c));
@@ -2935,8 +2985,7 @@ app.post("/api/internal/bot/runtime", async (c) => {
 });
 
 app.post("/api/internal/bot/snapshot", async (c) => {
-  const body = signedInternalBody(c);
-  const payload = (await body) as {
+  const payload = (await signedInternalBody(c)) as {
     guilds?: Array<{
       id: string;
       name: string;
@@ -2946,100 +2995,187 @@ app.post("/api/internal/bot/snapshot", async (c) => {
     }>;
     commands?: Array<{ name: string; description?: string; type?: string }>;
   };
+  const db = requireDb(c.env);
   const timestamp = nowIso();
+  const commands = (payload.commands ?? []).filter(
+    (command) => Boolean(command.name && /^[a-z0-9 _-]{1,80}$/.test(command.name))
+  );
+  const guilds = Array.from(
+    new Map(
+      (payload.guilds ?? [])
+        .filter((guild) => /^\d{17,20}$/.test(String(guild.id ?? "")))
+        .map((guild) => [guild.id, guild] as const)
+    ).values()
+  );
 
-  for (const command of payload.commands ?? []) {
-    if (!command.name || !/^[a-z0-9 _-]{1,80}$/.test(command.name)) continue;
-    await c.env.DB.prepare(
+  const knownGuilds = guilds.length
+    ? await all<{ id: string; discord_guild_id: string }>(
+      db.prepare(
+        `SELECT id, discord_guild_id
+           FROM guilds
+          WHERE discord_guild_id IN (${guilds.map(() => "?").join(", ")})`
+      ).bind(...guilds.map((guild) => guild.id))
+    )
+    : [];
+  const internalGuildIds = new Map(
+    knownGuilds.map((guild) => [guild.discord_guild_id, guild.id])
+  );
+
+  for (const guild of guilds) {
+    if (!internalGuildIds.has(guild.id)) {
+      internalGuildIds.set(guild.id, newId("gld"));
+    }
+  }
+
+  const commandRows = commands.map((command) => ({
+    id: newId("bc"),
+    name: command.name,
+    description: command.description ?? "",
+    type: command.type ?? "slash",
+    updatedAt: timestamp
+  }));
+  const guildRows = guilds.map((guild) => ({
+    id: internalGuildIds.get(guild.id)!,
+    discordGuildId: guild.id,
+    name: String(guild.name ?? "Unbekannte Guild"),
+    icon: guild.icon ?? null,
+    timestamp
+  }));
+  const internalGuildIdList = guildRows.map((guild) => guild.id);
+  const channelRows: Array<Record<string, unknown>> = [];
+  const roleRows: Array<Record<string, unknown>> = [];
+
+  for (const guild of guilds) {
+    const internalGuildId = internalGuildIds.get(guild.id)!;
+
+    for (const channel of guild.channels ?? []) {
+      const channelId = String(channel.id ?? "");
+      if (!/^\d{17,20}$/.test(channelId)) continue;
+      channelRows.push({
+        id: newId("chn"),
+        guildId: internalGuildId,
+        discordChannelId: channelId,
+        name: String(channel.name ?? "Unbenannt"),
+        type: String(channel.type ?? "unknown"),
+        categoryId: channel.categoryId ? String(channel.categoryId) : null,
+        categoryName: channel.categoryName ? String(channel.categoryName) : null,
+        canView: channel.canView ? 1 : 0,
+        canSend: channel.canSend ? 1 : 0,
+        position: Number(channel.position ?? 0),
+        updatedAt: timestamp
+      });
+    }
+
+    for (const role of guild.roles ?? []) {
+      const roleId = String(role.id ?? "");
+      if (!/^\d{17,20}$/.test(roleId)) continue;
+      roleRows.push({
+        id: newId("rol"),
+        guildId: internalGuildId,
+        discordRoleId: roleId,
+        name: String(role.name ?? "Unbenannt"),
+        color: Number(role.color ?? 0),
+        position: Number(role.position ?? 0),
+        managed: role.managed ? 1 : 0,
+        botCanManage: role.botCanManage ? 1 : 0,
+        updatedAt: timestamp
+      });
+    }
+  }
+
+  await db.batch([
+    db.prepare(
       `INSERT INTO bot_commands (id, command_name, description, command_type, updated_at)
-       VALUES (?, ?, ?, ?, ?)
+       SELECT
+         json_extract(value, '$.id'),
+         json_extract(value, '$.name'),
+         json_extract(value, '$.description'),
+         json_extract(value, '$.type'),
+         json_extract(value, '$.updatedAt')
+       FROM json_each(?)
+       WHERE true
        ON CONFLICT(command_name) DO UPDATE SET
          description = excluded.description,
          command_type = excluded.command_type,
          updated_at = excluded.updated_at`
-    )
-      .bind(newId("bc"), command.name, command.description ?? "", command.type ?? "slash", timestamp)
-      .run();
-  }
+    ).bind(asJson(commandRows)),
+    db.prepare(
+      `INSERT INTO guilds (
+         id, discord_guild_id, name, icon, bot_joined_at, bot_removed_at,
+         last_seen_at, created_at, updated_at
+       )
+       SELECT
+         json_extract(value, '$.id'),
+         json_extract(value, '$.discordGuildId'),
+         json_extract(value, '$.name'),
+         json_extract(value, '$.icon'),
+         json_extract(value, '$.timestamp'),
+         NULL,
+         json_extract(value, '$.timestamp'),
+         json_extract(value, '$.timestamp'),
+         json_extract(value, '$.timestamp')
+       FROM json_each(?)
+       WHERE true
+       ON CONFLICT(discord_guild_id) DO UPDATE SET
+         name = excluded.name,
+         icon = excluded.icon,
+         bot_joined_at = COALESCE(guilds.bot_joined_at, excluded.bot_joined_at),
+         bot_removed_at = NULL,
+         last_seen_at = excluded.last_seen_at,
+         updated_at = excluded.updated_at`
+    ).bind(asJson(guildRows)),
+    db.prepare(
+      "DELETE FROM guild_channels WHERE guild_id IN (SELECT CAST(value AS TEXT) FROM json_each(?))"
+    ).bind(asJson(internalGuildIdList)),
+    db.prepare(
+      `INSERT INTO guild_channels (
+         id, guild_id, discord_channel_id, name, channel_type, category_id, category_name,
+         can_view, can_send, position, updated_at
+       )
+       SELECT
+         json_extract(value, '$.id'),
+         json_extract(value, '$.guildId'),
+         json_extract(value, '$.discordChannelId'),
+         json_extract(value, '$.name'),
+         json_extract(value, '$.type'),
+         json_extract(value, '$.categoryId'),
+         json_extract(value, '$.categoryName'),
+         json_extract(value, '$.canView'),
+         json_extract(value, '$.canSend'),
+         json_extract(value, '$.position'),
+         json_extract(value, '$.updatedAt')
+       FROM json_each(?)`
+    ).bind(asJson(channelRows)),
+    db.prepare(
+      "DELETE FROM guild_roles WHERE guild_id IN (SELECT CAST(value AS TEXT) FROM json_each(?))"
+    ).bind(asJson(internalGuildIdList)),
+    db.prepare(
+      `INSERT INTO guild_roles (
+         id, guild_id, discord_role_id, name, color, position, managed, bot_can_manage, updated_at
+       )
+       SELECT
+         json_extract(value, '$.id'),
+         json_extract(value, '$.guildId'),
+         json_extract(value, '$.discordRoleId'),
+         json_extract(value, '$.name'),
+         json_extract(value, '$.color'),
+         json_extract(value, '$.position'),
+         json_extract(value, '$.managed'),
+         json_extract(value, '$.botCanManage'),
+         json_extract(value, '$.updatedAt')
+       FROM json_each(?)`
+    ).bind(asJson(roleRows))
+  ]);
 
-  for (const guild of payload.guilds ?? []) {
-    if (!/^\d{17,20}$/.test(guild.id)) continue;
-    const existing = await first<{ id: string }>(
-      c.env.DB.prepare("SELECT id FROM guilds WHERE discord_guild_id = ?").bind(guild.id)
-    );
-    const internalGuildId = existing?.id ?? newId("gld");
-
-    if (existing) {
-      await c.env.DB.prepare(
-        `UPDATE guilds
-            SET name = ?, icon = ?, bot_joined_at = COALESCE(bot_joined_at, ?),
-                bot_removed_at = NULL, last_seen_at = ?, updated_at = ?
-          WHERE id = ?`
-      )
-        .bind(guild.name, guild.icon ?? null, timestamp, timestamp, timestamp, internalGuildId)
-        .run();
-    } else {
-      await c.env.DB.prepare(
-        `INSERT INTO guilds (id, discord_guild_id, name, icon, bot_joined_at, last_seen_at, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
-      )
-        .bind(internalGuildId, guild.id, guild.name, guild.icon ?? null, timestamp, timestamp, timestamp, timestamp)
-        .run();
+  return json(c, {
+    ok: true,
+    stored: {
+      guilds: guilds.length,
+      commands: commands.length,
+      channels: channelRows.length,
+      roles: roleRows.length
     }
-
-    await c.env.DB.prepare("DELETE FROM guild_channels WHERE guild_id = ?").bind(internalGuildId).run();
-    for (const channel of guild.channels ?? []) {
-      const channelId = String(channel.id ?? "");
-      if (!/^\d{17,20}$/.test(channelId)) continue;
-      await c.env.DB.prepare(
-        `INSERT INTO guild_channels (
-           id, guild_id, discord_channel_id, name, channel_type, category_id, category_name,
-           can_view, can_send, position, updated_at
-         )
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-      )
-        .bind(
-          newId("chn"),
-          internalGuildId,
-          channelId,
-          String(channel.name ?? "Unbenannt"),
-          String(channel.type ?? "unknown"),
-          channel.categoryId ? String(channel.categoryId) : null,
-          channel.categoryName ? String(channel.categoryName) : null,
-          channel.canView ? 1 : 0,
-          channel.canSend ? 1 : 0,
-          Number(channel.position ?? 0),
-          timestamp
-        )
-        .run();
-    }
-
-    await c.env.DB.prepare("DELETE FROM guild_roles WHERE guild_id = ?").bind(internalGuildId).run();
-    for (const role of guild.roles ?? []) {
-      const roleId = String(role.id ?? "");
-      if (!/^\d{17,20}$/.test(roleId)) continue;
-      await c.env.DB.prepare(
-        `INSERT INTO guild_roles (
-           id, guild_id, discord_role_id, name, color, position, managed, bot_can_manage, updated_at
-         )
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
-      )
-        .bind(
-          newId("rol"),
-          internalGuildId,
-          roleId,
-          String(role.name ?? "Unbenannt"),
-          Number(role.color ?? 0),
-          Number(role.position ?? 0),
-          role.managed ? 1 : 0,
-          role.botCanManage ? 1 : 0,
-          timestamp
-        )
-        .run();
-    }
-  }
-
-  return json(c, { ok: true });
+  });
 });
 
 app.post("/api/internal/bot/guilds/:guildId/left", async (c) => {

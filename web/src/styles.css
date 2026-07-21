@@ -3079,8 +3079,18 @@ textarea {
 
 .owner-event-meta {
   display: flex;
+  align-items: center;
   flex-wrap: wrap;
   gap: 8px;
+}
+
+.owner-event-retry {
+  min-height: 28px;
+  padding: 5px 9px;
+  margin-left: auto;
+  color: var(--blue);
+  font-size: 12px;
+  font-weight: 800;
 }
 
 .owner-event-error {
