@@ -5,7 +5,9 @@ import {
   customCommandSchema,
   nicknameSchema,
   safeRedirectPath,
-  snowflakeSchema
+  snowflakeSchema,
+  tempVoicePanelSchema,
+  tempVoiceSettingsSchema
 } from "../server/validators";
 
 describe("guild-isolated validation", () => {
@@ -53,5 +55,28 @@ describe("guild-isolated validation", () => {
     expect(safeRedirectPath("https://evil.test")).toBe("/panel");
     expect(safeRedirectPath("//evil.test")).toBe("/panel");
     expect(safeRedirectPath("/api/auth/discord")).toBe("/panel");
+  });
+
+  it("validates complete TempVoice settings", () => {
+    const settings = tempVoiceSettingsSchema.parse({
+      enabled: true,
+      creatorChannelIds: ["123456789012345678", "223456789012345678"],
+      categoryId: "323456789012345678",
+      interfaceChannelId: "423456789012345678",
+      nameTemplate: "{user}s Raum",
+      defaultUserLimit: 12,
+      defaultBitrateKbps: 96
+    });
+
+    expect(settings.creatorChannelIds).toHaveLength(2);
+    expect(settings.defaultBitrateKbps).toBe(96);
+    expect(() => tempVoiceSettingsSchema.parse({ defaultUserLimit: 100 })).toThrow();
+    expect(() => tempVoiceSettingsSchema.parse({ defaultBitrateKbps: 7 })).toThrow();
+  });
+
+  it("requires a valid panel channel id when one is provided", () => {
+    expect(tempVoicePanelSchema.parse({ channelId: "123456789012345678" }).channelId).toBe("123456789012345678");
+    expect(tempVoicePanelSchema.parse({ channelId: "" }).channelId).toBeNull();
+    expect(() => tempVoicePanelSchema.parse({ channelId: "123" })).toThrow();
   });
 });

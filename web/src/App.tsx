@@ -6,6 +6,7 @@ import {
   ArrowLeft,
   ArrowRight,
   AtSign,
+  Ban,
   BadgeCheck,
   BarChart3,
   Bot,
@@ -15,6 +16,7 @@ import {
   ClipboardList,
   Command,
   Copy,
+  Crown,
   Cpu,
   Database,
   Download,
@@ -22,6 +24,7 @@ import {
   FileJson,
   Gauge,
   Gamepad2,
+  Globe2,
   HardDrive,
   Home,
   Hash,
@@ -37,6 +40,9 @@ import {
   Moon,
   Music2,
   Palette,
+  Pencil,
+  PhoneCall,
+  PhoneOff,
   Plus,
   Power,
   Radio,
@@ -55,8 +61,10 @@ import {
   Sun,
   Trash2,
   Upload,
+  UserMinus,
   UserPlus,
   UserRound,
+  UsersRound,
   Wifi,
   X
 } from "lucide-react";
@@ -182,6 +190,20 @@ type LoggingSettings = {
   enabled: boolean;
   channelMappings: Record<LogCategory, string | null>;
   events: Record<LogCategory, boolean>;
+};
+
+type TempVoiceSettings = {
+  enabled: boolean;
+  creatorChannelIds: string[];
+  categoryId: string | null;
+  interfaceChannelId: string | null;
+  nameTemplate: string;
+  defaultUserLimit: number;
+  defaultBitrateKbps: number;
+  panelChannelId: string | null;
+  panelMessageId: string | null;
+  syncStatus: string;
+  syncError: string | null;
 };
 
 type AdminRuntime = {
@@ -3430,7 +3452,7 @@ function Dashboard({ path }: { path: string }) {
           <SideLink icon={<ListFilter size={17} />} label="Logging" section="logging" current={section} guildId={guildId} />
           <SideLink icon={<Shield size={17} />} label="Audit-Log" section="audit-log" current={section} guildId={guildId} />
           <SideLink icon={<Sparkles size={17} />} label="Begrüßung" section="welcome" current={section} guildId={guildId} />
-          <div className="sidebar-group-title">Geplant</div>
+          <div className="sidebar-group-title">Module</div>
           {plannedSections.filter((item) => item.section !== "welcome" && item.section !== "logging").map((item) => (
             <SideLink
               icon={plannedIcon(item.section)}
@@ -3438,7 +3460,7 @@ function Dashboard({ path }: { path: string }) {
               section={item.section}
               current={section}
               guildId={guildId}
-              badge="geplant"
+              badge={item.section === "temp-voice" ? undefined : "geplant"}
               key={item.section}
             />
           ))}
@@ -3470,7 +3492,8 @@ function Dashboard({ path }: { path: string }) {
               {section === "logging" && <LoggingPage guildId={guildId} />}
               {section === "audit-log" && <AuditLogPage guildId={guildId} />}
               {section === "welcome" && <WelcomePage guildId={guildId} />}
-              {plannedSection && section !== "welcome" && section !== "logging" && <PlannedPage section={plannedSection} />}
+              {section === "temp-voice" && <TempVoicePage guildId={guildId} />}
+              {plannedSection && section !== "welcome" && section !== "logging" && section !== "temp-voice" && <PlannedPage section={plannedSection} />}
             </>
           )}
         </main>
@@ -3837,6 +3860,345 @@ function defaultLoggingSettings(): LoggingSettings {
   const channelMappings = Object.fromEntries(LOG_CATEGORIES.map((category) => [category.key, null])) as Record<LogCategory, string | null>;
   const events = Object.fromEntries(LOG_CATEGORIES.map((category) => [category.key, true])) as Record<LogCategory, boolean>;
   return { enabled: false, channelMappings, events };
+}
+
+const DEFAULT_TEMP_VOICE_DRAFT: TempVoiceSettings = {
+  enabled: false,
+  creatorChannelIds: [],
+  categoryId: null,
+  interfaceChannelId: null,
+  nameTemplate: "{user}s Raum",
+  defaultUserLimit: 0,
+  defaultBitrateKbps: 64,
+  panelChannelId: null,
+  panelMessageId: null,
+  syncStatus: "idle",
+  syncError: null
+};
+
+const TEMPVOICE_ACTIONS = [
+  { label: "Umbenennen", icon: Pencil },
+  { label: "Benutzerlimit", icon: UsersRound },
+  { label: "Privatsphäre", icon: Shield },
+  { label: "Wartezimmer", icon: Clock3 },
+  { label: "Chat", icon: MessageSquare },
+  { label: "Hinzufügen", icon: UserPlus },
+  { label: "Entfernen", icon: UserMinus },
+  { label: "Einladen", icon: PhoneCall },
+  { label: "Verbindung trennen", icon: PhoneOff },
+  { label: "Region", icon: Globe2 },
+  { label: "Blockieren", icon: Ban },
+  { label: "Entblockieren", icon: ShieldCheck },
+  { label: "Übernehmen", icon: Crown },
+  { label: "Übertragen", icon: ArrowRight },
+  { label: "Löschen", icon: Trash2, danger: true }
+] as const;
+
+function TempVoicePage({ guildId }: { guildId: string }) {
+  const settings = useApi<{ tempVoice: TempVoiceSettings }>(`/api/guilds/${guildId}/temp-voice`, [guildId]);
+  const channels = useApi<{ channels: ChannelOption[] }>(`/api/guilds/${guildId}/channels`, [guildId]);
+  const [draft, setDraft] = useState<TempVoiceSettings>(DEFAULT_TEMP_VOICE_DRAFT);
+  const [saving, setSaving] = useState(false);
+  const [sending, setSending] = useState(false);
+  const [status, setStatus] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (settings.data?.tempVoice) setDraft(settings.data.tempVoice);
+  }, [settings.data]);
+
+  const voiceChannels = useMemo(
+    () => (channels.data?.channels ?? []).filter((channel) => channel.type.toLowerCase() === "voice"),
+    [channels.data]
+  );
+  const textChannels = useMemo(
+    () => (channels.data?.channels ?? []).filter(isTextGuildChannel),
+    [channels.data]
+  );
+  const categories = useMemo(
+    () => (channels.data?.channels ?? []).filter((channel) => channel.type.toLowerCase() === "category"),
+    [channels.data]
+  );
+  const panelChannel = textChannels.find((channel) => channel.id === draft.interfaceChannelId);
+  const namePreview = draft.nameTemplate
+    .replaceAll("{user}", "Niteacfort74")
+    .replaceAll("{name}", "niteacfort74");
+
+  function toggleCreator(channelId: string) {
+    setDraft((current) => ({
+      ...current,
+      creatorChannelIds: current.creatorChannelIds.includes(channelId)
+        ? current.creatorChannelIds.filter((id) => id !== channelId)
+        : [...current.creatorChannelIds, channelId]
+    }));
+  }
+
+  async function persist(sendPanel: boolean) {
+    if (sendPanel) setSending(true);
+    else setSaving(true);
+    setStatus(null);
+
+    try {
+      const response = await api<{ tempVoice: TempVoiceSettings }>(`/api/guilds/${guildId}/temp-voice`, {
+        method: "PUT",
+        body: JSON.stringify({
+          enabled: draft.enabled,
+          creatorChannelIds: draft.creatorChannelIds,
+          categoryId: draft.categoryId,
+          interfaceChannelId: draft.interfaceChannelId,
+          nameTemplate: draft.nameTemplate,
+          defaultUserLimit: draft.defaultUserLimit,
+          defaultBitrateKbps: draft.defaultBitrateKbps
+        })
+      });
+      setDraft(response.tempVoice);
+
+      if (sendPanel) {
+        await api(`/api/guilds/${guildId}/temp-voice/panel`, {
+          method: "POST",
+          body: JSON.stringify({ channelId: draft.interfaceChannelId })
+        });
+        setStatus("Konfiguration gespeichert. Das TempVoice-Interface wird jetzt vom Bot gesendet oder aktualisiert.");
+      } else {
+        setStatus("TempVoice wurde gespeichert und zur Bot-Synchronisierung vorgemerkt.");
+      }
+
+      await settings.reload();
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : "TempVoice konnte nicht gespeichert werden.");
+    } finally {
+      setSaving(false);
+      setSending(false);
+    }
+  }
+
+  const loading = (settings.loading && !settings.data) || (channels.loading && !channels.data);
+  const loadError = settings.error || channels.error;
+
+  return (
+    <section className="tempvoice-page">
+      <div className="tempvoice-hero">
+        <div>
+          <p className="eyebrow">
+            <Mic2 size={15} />
+            Voice Studio
+          </p>
+          <h2>TempVoice</h2>
+          <p>Join-to-create, Besitzerrechte und das komplette Discord-Interface an einem Ort konfigurieren.</p>
+        </div>
+        <div className="tempvoice-hero-actions">
+          <span className={`pill ${draft.syncStatus === "failed" ? "danger" : draft.syncStatus === "synced" ? "ok" : "neutral"}`}>
+            {draft.syncStatus === "failed" ? "Sync fehlgeschlagen" : draft.syncStatus === "pending" ? "Wird synchronisiert" : draft.syncStatus === "synced" ? "Synchronisiert" : "Bereit"}
+          </span>
+          <label className="welcome-switch">
+            <input type="checkbox" checked={draft.enabled} onChange={(event) => setDraft({ ...draft, enabled: event.target.checked })} />
+            <span>{draft.enabled ? "Aktiv" : "Inaktiv"}</span>
+          </label>
+        </div>
+      </div>
+
+      {loading && <LoadingBlock />}
+      {loadError && <Notice tone="danger" text={loadError} />}
+      {draft.syncError && <Notice tone="danger" text={draft.syncError} />}
+
+      {!loading && !loadError && (
+        <>
+          <section className="tempvoice-summary-grid">
+            <StatusTile icon={<Mic2 size={19} />} label="Status" value={draft.enabled ? "aktiv" : "inaktiv"} tone={draft.enabled ? "ok" : "warn"} />
+            <StatusTile icon={<Radio size={19} />} label="Creator" value={String(draft.creatorChannelIds.length)} tone={draft.creatorChannelIds.length ? "ok" : "warn"} />
+            <StatusTile icon={<UsersRound size={19} />} label="Standardlimit" value={draft.defaultUserLimit ? String(draft.defaultUserLimit) : "offen"} />
+            <StatusTile icon={<MessageSquare size={19} />} label="Interface" value={panelChannel ? `#${panelChannel.name}` : "fehlt"} tone={panelChannel ? "ok" : "warn"} />
+          </section>
+
+          <div className="tempvoice-layout">
+            <div className="tempvoice-editor">
+              <section className="panel tempvoice-control-panel">
+                <div className="panel-title">
+                  <div>
+                    <h2>Creator-Kanäle</h2>
+                    <p className="muted">Mitglieder erhalten beim Beitritt automatisch ihren eigenen Sprachkanal.</p>
+                  </div>
+                  <RefreshButton
+                    loading={(settings.loading && Boolean(settings.data)) || (channels.loading && Boolean(channels.data))}
+                    onClick={async () => {
+                      await Promise.all([settings.reload(), channels.reload()]);
+                    }}
+                    label="Neu laden"
+                  />
+                </div>
+
+                {voiceChannels.length ? (
+                  <div className="tempvoice-channel-groups">
+                    {groupedChannels(voiceChannels).map((group) => (
+                      <div className="tempvoice-channel-group" key={group.label}>
+                        <div className="tempvoice-channel-group-title">
+                          <Hash size={14} />
+                          {group.label}
+                        </div>
+                        <div className="tempvoice-channel-list">
+                          {group.items.map((channel) => {
+                            const selected = draft.creatorChannelIds.includes(channel.id);
+                            return (
+                              <button
+                                type="button"
+                                className={`tempvoice-channel-option ${selected ? "selected" : ""}`}
+                                aria-pressed={selected}
+                                onClick={() => toggleCreator(channel.id)}
+                                key={channel.id}
+                              >
+                                <span><Radio size={16} />{channel.name}</span>
+                                <span className="tempvoice-check">{selected ? <Check size={15} /> : <Plus size={15} />}</span>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <EmptyState title="Keine Sprachkanäle" text="Der Bot-Snapshot enthält noch keine sichtbaren Sprachkanäle." />
+                )}
+              </section>
+
+              <section className="panel tempvoice-control-panel">
+                <div className="panel-title">
+                  <div>
+                    <h2>Raum-Standard</h2>
+                    <p className="muted">Diese Werte gelten für jeden neu erstellten temporären Kanal.</p>
+                  </div>
+                  <SlidersHorizontal size={18} />
+                </div>
+                <div className="form-grid">
+                  <label>
+                    Zielkategorie
+                    <select value={draft.categoryId ?? ""} onChange={(event) => setDraft({ ...draft, categoryId: event.target.value || null })}>
+                      <option value="">Kategorie des Creator-Kanals</option>
+                      {categories.map((category) => (
+                        <option value={category.id} key={category.id}>{category.name}</option>
+                      ))}
+                    </select>
+                  </label>
+                  <label>
+                    Namensformat
+                    <input
+                      value={draft.nameTemplate}
+                      maxLength={90}
+                      onChange={(event) => setDraft({ ...draft, nameTemplate: event.target.value })}
+                      placeholder="{user}s Raum"
+                    />
+                    <small>Vorschau: {namePreview || "Niteacfort74s Raum"}</small>
+                  </label>
+                  <label>
+                    Benutzerlimit
+                    <input
+                      type="number"
+                      min={0}
+                      max={99}
+                      value={draft.defaultUserLimit}
+                      onChange={(event) => setDraft({ ...draft, defaultUserLimit: Number(event.target.value) })}
+                    />
+                    <small>0 bedeutet unbegrenzt.</small>
+                  </label>
+                  <label>
+                    Audio-Bitrate
+                    <select
+                      value={draft.defaultBitrateKbps}
+                      onChange={(event) => setDraft({ ...draft, defaultBitrateKbps: Number(event.target.value) })}
+                    >
+                      {[32, 48, 64, 80, 96, 128, 160, 192, 256, 320, 384].map((bitrate) => (
+                        <option value={bitrate} key={bitrate}>{bitrate} kbit/s</option>
+                      ))}
+                    </select>
+                  </label>
+                </div>
+              </section>
+
+              <section className="panel tempvoice-control-panel">
+                <div className="panel-title compact">
+                  <div>
+                    <h2>Interface senden</h2>
+                    <p className="muted">Der Bot aktualisiert ein bereits vorhandenes Panel, statt ein Duplikat zu senden.</p>
+                  </div>
+                  {draft.panelMessageId && <span className="pill ok">gesendet</span>}
+                </div>
+                <label>
+                  Textkanal
+                  <select value={draft.interfaceChannelId ?? ""} onChange={(event) => setDraft({ ...draft, interfaceChannelId: event.target.value || null })}>
+                    <ChannelSelectOptions channels={textChannels} noneLabel="Textkanal auswählen" />
+                  </select>
+                </label>
+                <div className="form-actions">
+                  <button className="primary-action inline" onClick={() => persist(false)} disabled={saving || sending}>
+                    {saving ? <Loader2 className="spin" size={16} /> : <Save size={16} />}
+                    Einstellungen speichern
+                  </button>
+                  <button className="secondary-action inline" onClick={() => persist(true)} disabled={saving || sending || !draft.interfaceChannelId}>
+                    {sending ? <Loader2 className="spin" size={16} /> : <Rocket size={16} />}
+                    Panel senden
+                  </button>
+                  {draft.panelChannelId && draft.panelMessageId && (
+                    <a
+                      className="secondary-action inline"
+                      href={`https://discord.com/channels/${guildId}/${draft.panelChannelId}/${draft.panelMessageId}`}
+                      target="_blank"
+                      rel="noreferrer"
+                    >
+                      <ExternalLink size={16} />
+                      In Discord öffnen
+                    </a>
+                  )}
+                </div>
+                <ActionStatus status={status} />
+              </section>
+            </div>
+
+            <aside className="tempvoice-preview">
+              <div className="tempvoice-preview-heading">
+                <div>
+                  <span>Live-Vorschau</span>
+                  <h2>Discord Interface</h2>
+                </div>
+                <span className="pill neutral">15 Aktionen</span>
+              </div>
+              <div className="tempvoice-discord-message">
+                <div className="tempvoice-bot-avatar"><Mic2 size={22} /></div>
+                <div className="tempvoice-message-body">
+                  <strong>TempVoice <small>APP</small></strong>
+                  <div className="tempvoice-discord-embed">
+                    <h3>TempVoice Interface</h3>
+                    <p>Mit diesem Interface verwaltest du deinen temporären Sprachkanal. Weitere Optionen stehen mit den `/tempvoice`-Befehlen zur Verfügung.</p>
+                    <img src="/tempvoice-interface.png" alt="Übersicht der TempVoice-Aktionen" />
+                    <small>Dieses Interface kann mit den Buttons unter der Nachricht bedient werden.</small>
+                  </div>
+                  <div className="tempvoice-action-grid" aria-label="TempVoice Panel-Aktionen">
+                    {TEMPVOICE_ACTIONS.map((action) => {
+                      const Icon = action.icon;
+                      return (
+                        <button
+                          type="button"
+                          className={"danger" in action && action.danger ? "danger" : ""}
+                          title={action.label}
+                          aria-label={action.label}
+                          key={action.label}
+                        >
+                          <Icon size={17} />
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+              <div className="tempvoice-command-list">
+                <span>/tempvoice umbenennen</span>
+                <span>/tempvoice privatsphaere</span>
+                <span>/tempvoice uebertragen</span>
+                <span>/tempvoice region</span>
+              </div>
+            </aside>
+          </div>
+        </>
+      )}
+    </section>
+  );
 }
 
 function LoggingPage({ guildId }: { guildId: string }) {

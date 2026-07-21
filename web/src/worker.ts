@@ -51,6 +51,8 @@ import {
   safeRedirectPath,
   settingsSchema,
   snowflakeSchema,
+  tempVoicePanelSchema,
+  tempVoiceSettingsSchema,
   validationError,
   welcomeSettingsSchema
 } from "./server/validators";
@@ -166,6 +168,35 @@ interface LoggingSettingsResponse {
   enabled: boolean;
   channelMappings: Record<LogCategory, string | null>;
   events: Record<LogCategory, boolean>;
+}
+
+interface TempVoiceSettingsRow {
+  guild_id: string;
+  enabled: number;
+  creator_channel_ids: string;
+  category_id: string | null;
+  interface_channel_id: string | null;
+  name_template: string;
+  default_user_limit: number;
+  default_bitrate_kbps: number;
+  panel_channel_id: string | null;
+  panel_message_id: string | null;
+  sync_status: string;
+  sync_error: string | null;
+}
+
+interface TempVoiceSettingsResponse {
+  enabled: boolean;
+  creatorChannelIds: string[];
+  categoryId: string | null;
+  interfaceChannelId: string | null;
+  nameTemplate: string;
+  defaultUserLimit: number;
+  defaultBitrateKbps: number;
+  panelChannelId: string | null;
+  panelMessageId: string | null;
+  syncStatus: string;
+  syncError: string | null;
 }
 
 interface BotRuntimeRow {
@@ -820,6 +851,107 @@ async function ensureLoggingSettings(env: Env, guildId: string): Promise<Logging
     channelMappings: emptyLogChannelMappings(),
     events: defaultLogEvents(true)
   };
+}
+
+const DEFAULT_TEMP_VOICE_SETTINGS: TempVoiceSettingsResponse = {
+  enabled: false,
+  creatorChannelIds: [],
+  categoryId: null,
+  interfaceChannelId: null,
+  nameTemplate: "{user}s Raum",
+  defaultUserLimit: 0,
+  defaultBitrateKbps: 64,
+  panelChannelId: null,
+  panelMessageId: null,
+  syncStatus: "idle",
+  syncError: null
+};
+
+let tempVoiceStorageReady: Promise<void> | null = null;
+
+async function ensureTempVoiceStorage(env: Env): Promise<void> {
+  if (!tempVoiceStorageReady) {
+    const db = requireDb(env);
+    tempVoiceStorageReady = (async () => {
+      await db.prepare(
+        `CREATE TABLE IF NOT EXISTS temp_voice_settings (
+           guild_id TEXT PRIMARY KEY REFERENCES guilds(id) ON DELETE CASCADE,
+           enabled INTEGER NOT NULL DEFAULT 0,
+           creator_channel_ids TEXT NOT NULL DEFAULT '[]',
+           category_id TEXT,
+           interface_channel_id TEXT,
+           name_template TEXT NOT NULL DEFAULT '{user}s Raum',
+           default_user_limit INTEGER NOT NULL DEFAULT 0,
+           default_bitrate_kbps INTEGER NOT NULL DEFAULT 64,
+           panel_channel_id TEXT,
+           panel_message_id TEXT,
+           sync_status TEXT NOT NULL DEFAULT 'idle',
+           sync_error TEXT,
+           created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+           updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+         )`
+      ).run();
+      await db.prepare(
+        "CREATE INDEX IF NOT EXISTS idx_temp_voice_settings_sync ON temp_voice_settings(sync_status, updated_at)"
+      ).run();
+    })().catch((error) => {
+      tempVoiceStorageReady = null;
+      throw error;
+    });
+  }
+
+  await tempVoiceStorageReady;
+}
+
+function normalizeTempVoiceSettings(row: TempVoiceSettingsRow | null | undefined): TempVoiceSettingsResponse {
+  if (!row) return { ...DEFAULT_TEMP_VOICE_SETTINGS };
+
+  const creatorChannelIds = parseJson<unknown[]>(row.creator_channel_ids, [])
+    .map((value) => String(value))
+    .filter((value) => /^\d{17,20}$/.test(value));
+
+  return {
+    enabled: Boolean(row.enabled),
+    creatorChannelIds: [...new Set(creatorChannelIds)],
+    categoryId: row.category_id,
+    interfaceChannelId: row.interface_channel_id,
+    nameTemplate: row.name_template || DEFAULT_TEMP_VOICE_SETTINGS.nameTemplate,
+    defaultUserLimit: Number(row.default_user_limit ?? 0),
+    defaultBitrateKbps: Number(row.default_bitrate_kbps ?? 64),
+    panelChannelId: row.panel_channel_id,
+    panelMessageId: row.panel_message_id,
+    syncStatus: row.sync_status || "idle",
+    syncError: row.sync_error
+  };
+}
+
+async function ensureTempVoiceSettings(env: Env, guildId: string): Promise<TempVoiceSettingsResponse> {
+  await ensureTempVoiceStorage(env);
+  const db = requireDb(env);
+  const existing = await first<TempVoiceSettingsRow>(
+    db.prepare(
+      `SELECT guild_id, enabled, creator_channel_ids, category_id, interface_channel_id,
+              name_template, default_user_limit, default_bitrate_kbps, panel_channel_id,
+              panel_message_id, sync_status, sync_error
+         FROM temp_voice_settings
+        WHERE guild_id = ?`
+    ).bind(guildId)
+  );
+
+  if (existing) return normalizeTempVoiceSettings(existing);
+
+  const timestamp = nowIso();
+  await db.prepare(
+    `INSERT INTO temp_voice_settings (
+       guild_id, enabled, creator_channel_ids, category_id, interface_channel_id,
+       name_template, default_user_limit, default_bitrate_kbps, sync_status,
+       created_at, updated_at
+     ) VALUES (?, 0, '[]', NULL, NULL, ?, 0, 64, 'idle', ?, ?)`
+  )
+    .bind(guildId, DEFAULT_TEMP_VOICE_SETTINGS.nameTemplate, timestamp, timestamp)
+    .run();
+
+  return { ...DEFAULT_TEMP_VOICE_SETTINGS };
 }
 
 function mediaPreviewUrl(discordGuildId: string, mediaKey: string): string {
@@ -1914,6 +2046,162 @@ app.get("/api/guilds/:guildId/channels", async (c) => {
     ).bind(access.guild.id)
   );
   return json(c, { channels });
+});
+
+app.get("/api/guilds/:guildId/temp-voice", async (c) => {
+  const access = await requireGuildManagementAccess(c, c.req.param("guildId"));
+  const tempVoice = await ensureTempVoiceSettings(c.env, access.guild.id);
+  return json(c, { tempVoice });
+});
+
+app.put("/api/guilds/:guildId/temp-voice", async (c) => {
+  const access = await requireGuildManagementAccess(c, c.req.param("guildId"));
+  const data = tempVoiceSettingsSchema.parse(await readJsonBody(c));
+  const oldValue = await ensureTempVoiceSettings(c.env, access.guild.id);
+  const creatorChannelIds = [...new Set(data.creatorChannelIds)];
+
+  if (data.enabled && creatorChannelIds.length === 0) {
+    throw new HttpError(400, "temp_voice_creator_required", "Wähle mindestens einen Creator-Sprachkanal aus.");
+  }
+
+  const selectedIds = [...new Set([
+    ...creatorChannelIds,
+    ...(data.categoryId ? [data.categoryId] : []),
+    ...(data.interfaceChannelId ? [data.interfaceChannelId] : [])
+  ])];
+  const channelRows = selectedIds.length
+    ? await all<{ id: string; type: string; canSend: number }>(
+      c.env.DB.prepare(
+        `SELECT discord_channel_id AS id, channel_type AS type, can_send AS canSend
+           FROM guild_channels
+          WHERE guild_id = ? AND discord_channel_id IN (${selectedIds.map(() => "?").join(", ")})`
+      ).bind(access.guild.id, ...selectedIds)
+    )
+    : [];
+  const channelsById = new Map(channelRows.map((channel) => [channel.id, channel]));
+
+  for (const channelId of creatorChannelIds) {
+    const channel = channelsById.get(channelId);
+    const type = String(channel?.type ?? "").toLowerCase();
+
+    if (!channel || type !== "voice") {
+      throw new HttpError(400, "temp_voice_creator_invalid", "Ein ausgewählter Creator-Kanal ist kein Sprachkanal.");
+    }
+  }
+
+  if (data.categoryId) {
+    const category = channelsById.get(data.categoryId);
+
+    if (!category || String(category.type).toLowerCase() !== "category") {
+      throw new HttpError(400, "temp_voice_category_invalid", "Die ausgewählte Kategorie wurde im Bot-Snapshot nicht gefunden.");
+    }
+  }
+
+  if (data.interfaceChannelId) {
+    const interfaceChannel = channelsById.get(data.interfaceChannelId);
+    const type = String(interfaceChannel?.type ?? "").toLowerCase();
+
+    if (!interfaceChannel || !new Set(["text", "news", "announcement"]).has(type)) {
+      throw new HttpError(400, "temp_voice_interface_invalid", "Der Interface-Kanal muss ein Textkanal sein.");
+    }
+
+    if (!interfaceChannel.canSend) {
+      throw new HttpError(400, "temp_voice_interface_forbidden", "Der Bot kann im ausgewählten Interface-Kanal nicht schreiben.");
+    }
+  }
+
+  const timestamp = nowIso();
+  await ensureTempVoiceStorage(c.env);
+  await c.env.DB.prepare(
+    `INSERT INTO temp_voice_settings (
+       guild_id, enabled, creator_channel_ids, category_id, interface_channel_id,
+       name_template, default_user_limit, default_bitrate_kbps, sync_status,
+       sync_error, created_at, updated_at
+     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending', NULL, ?, ?)
+     ON CONFLICT(guild_id) DO UPDATE SET
+       enabled = excluded.enabled,
+       creator_channel_ids = excluded.creator_channel_ids,
+       category_id = excluded.category_id,
+       interface_channel_id = excluded.interface_channel_id,
+       name_template = excluded.name_template,
+       default_user_limit = excluded.default_user_limit,
+       default_bitrate_kbps = excluded.default_bitrate_kbps,
+       sync_status = 'pending',
+       sync_error = NULL,
+       updated_at = excluded.updated_at`
+  )
+    .bind(
+      access.guild.id,
+      data.enabled ? 1 : 0,
+      asJson(creatorChannelIds),
+      data.categoryId,
+      data.interfaceChannelId,
+      data.nameTemplate,
+      data.defaultUserLimit,
+      data.defaultBitrateKbps,
+      timestamp,
+      timestamp
+    )
+    .run();
+
+  const saved: TempVoiceSettingsResponse = {
+    ...oldValue,
+    ...data,
+    creatorChannelIds,
+    syncStatus: "pending",
+    syncError: null
+  };
+  const eventId = await enqueueSyncEvent(c.env, access.guild, "temp_voice.settings.upsert", {
+    discordGuildId: access.guild.discordGuildId,
+    settings: data
+  });
+
+  await audit(c.env, access.guild.id, access.session.user.discordUserId, "temp_voice.update", "temp_voice_settings", oldValue, saved);
+  return json(c, { ok: true, eventId, tempVoice: saved });
+});
+
+app.post("/api/guilds/:guildId/temp-voice/panel", async (c) => {
+  const access = await requireGuildManagementAccess(c, c.req.param("guildId"));
+  const data = tempVoicePanelSchema.parse(await readJsonBody(c));
+  const settings = await ensureTempVoiceSettings(c.env, access.guild.id);
+  const channelId = data.channelId || settings.interfaceChannelId;
+
+  if (!channelId) {
+    throw new HttpError(400, "temp_voice_interface_required", "Wähle zuerst einen Textkanal für das Interface aus.");
+  }
+
+  const channel = await first<{ type: string; canSend: number }>(
+    c.env.DB.prepare(
+      `SELECT channel_type AS type, can_send AS canSend
+         FROM guild_channels
+        WHERE guild_id = ? AND discord_channel_id = ?`
+    ).bind(access.guild.id, channelId)
+  );
+  const type = String(channel?.type ?? "").toLowerCase();
+
+  if (!channel || !new Set(["text", "news", "announcement"]).has(type)) {
+    throw new HttpError(400, "temp_voice_interface_invalid", "Der Interface-Kanal ist kein Textkanal.");
+  }
+
+  if (!channel.canSend) {
+    throw new HttpError(400, "temp_voice_interface_forbidden", "Der Bot kann im ausgewählten Interface-Kanal nicht schreiben.");
+  }
+
+  await c.env.DB.prepare(
+    `UPDATE temp_voice_settings
+        SET interface_channel_id = ?, sync_status = 'pending', sync_error = NULL, updated_at = ?
+      WHERE guild_id = ?`
+  )
+    .bind(channelId, nowIso(), access.guild.id)
+    .run();
+
+  const eventId = await enqueueSyncEvent(c.env, access.guild, "temp_voice.panel.send", {
+    discordGuildId: access.guild.discordGuildId,
+    channelId
+  });
+
+  await audit(c.env, access.guild.id, access.session.user.discordUserId, "temp_voice.panel.send", channelId, null, { eventId });
+  return json(c, { ok: true, eventId });
 });
 
 app.get("/api/guilds/:guildId/roles", async (c) => {
@@ -3301,6 +3589,36 @@ app.post("/api/internal/bot/sync-events/:eventId/complete", async (c) => {
     }
   }
 
+  if (row.action === "temp_voice.settings.upsert" || row.action === "temp_voice.panel.send") {
+    await ensureTempVoiceStorage(c.env);
+    const result = body.result && typeof body.result === "object"
+      ? body.result as Record<string, unknown>
+      : {};
+    const panelChannelId = /^\d{17,20}$/.test(String(result.channelId ?? ""))
+      ? String(result.channelId)
+      : null;
+    const panelMessageId = /^\d{17,20}$/.test(String(result.messageId ?? ""))
+      ? String(result.messageId)
+      : null;
+
+    if (row.action === "temp_voice.panel.send" && panelChannelId && panelMessageId) {
+      await c.env.DB.prepare(
+        `UPDATE temp_voice_settings
+            SET panel_channel_id = ?, panel_message_id = ?, interface_channel_id = ?,
+                sync_status = 'synced', sync_error = NULL, updated_at = ?
+          WHERE guild_id = ?`
+      )
+        .bind(panelChannelId, panelMessageId, panelChannelId, nowIso(), row.guild_id)
+        .run();
+    } else {
+      await c.env.DB.prepare(
+        "UPDATE temp_voice_settings SET sync_status = 'synced', sync_error = NULL, updated_at = ? WHERE guild_id = ?"
+      )
+        .bind(nowIso(), row.guild_id)
+        .run();
+    }
+  }
+
   const currentMediaKey = row.action === "guild.member_avatar.update"
     ? String(eventPayload.mediaKey ?? "")
     : row.action === "welcome_settings.upsert"
@@ -3363,6 +3681,15 @@ app.post("/api/internal/bot/sync-events/:eventId/fail", async (c) => {
         .bind(String(body.error ?? "Unbekannter Fehler").slice(0, 1000), nowIso(), commandId, row.guild_id)
         .run();
     }
+  }
+
+  if (!retry && (row.action === "temp_voice.settings.upsert" || row.action === "temp_voice.panel.send")) {
+    await ensureTempVoiceStorage(c.env);
+    await c.env.DB.prepare(
+      "UPDATE temp_voice_settings SET sync_status = 'failed', sync_error = ?, updated_at = ? WHERE guild_id = ?"
+    )
+      .bind(String(body.error ?? "Unbekannter Fehler").slice(0, 1000), nowIso(), row.guild_id)
+      .run();
   }
 
   return json(c, { ok: true, retry });

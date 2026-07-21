@@ -172,6 +172,25 @@ export const loggingTestSchema = z.object({
   category: logCategorySchema.default("general")
 });
 
+export const tempVoiceSettingsSchema = z.object({
+  enabled: z.boolean().default(false),
+  creatorChannelIds: z.array(snowflakeSchema).max(25).default([]),
+  categoryId: nullableSnowflakeSchema,
+  interfaceChannelId: nullableSnowflakeSchema,
+  nameTemplate: z
+    .string()
+    .trim()
+    .min(1, "Das Namensformat darf nicht leer sein.")
+    .max(90, "Das Namensformat darf maximal 90 Zeichen lang sein.")
+    .default("{user}s Raum"),
+  defaultUserLimit: z.number().int().min(0).max(99).default(0),
+  defaultBitrateKbps: z.number().int().min(8).max(384).default(64)
+});
+
+export const tempVoicePanelSchema = z.object({
+  channelId: nullableSnowflakeSchema
+});
+
 export function assertSameGuild(routeGuildId: string, rowGuildId: string): void {
   if (routeGuildId !== rowGuildId) {
     throw new Error("Guild-Isolation verletzt: Ressource gehoert zu einer anderen Guild.");
