@@ -8,7 +8,7 @@ import {
 } from "./server/cookies";
 import { decryptJson, encryptJson, randomToken, verifyInternalBotRequest } from "./server/crypto";
 import { all, asJson, first, newId, nowIso, parseJson } from "./server/db";
-import { combineMediaChunks, splitMediaBytes } from "./server/media";
+import { combineMediaChunks, detectImageMimeType, imageExtension, splitMediaBytes } from "./server/media";
 import {
   DiscordApiError,
   createDiscordChannelInvite,
@@ -1829,26 +1829,26 @@ app.post("/api/guilds/:guildId/profile/avatar", async (c) => {
     throw new HttpError(400, "avatar_missing", "Bitte lade eine Bilddatei hoch.");
   }
 
-  const allowedTypes = new Set(["image/png", "image/jpeg", "image/gif", "image/webp"]);
-  if (!allowedTypes.has(file.type)) {
-    throw new HttpError(400, "avatar_type_invalid", "Erlaubt sind PNG, JPEG, GIF und WebP.");
-  }
-
   const maxBytes = 512 * 1024;
   if (file.size > maxBytes) {
-    throw new HttpError(400, "avatar_too_large", "Das Bild darf maximal 512 KiB gross sein.");
+    throw new HttpError(400, "avatar_too_large", "Das Bild darf maximal 512 KiB groß sein.");
+  }
+
+  const bytes = await file.arrayBuffer();
+  const mimeType = detectImageMimeType(bytes);
+
+  if (!mimeType) {
+    throw new HttpError(400, "avatar_type_invalid", "Die Datei enthält kein gültiges PNG-, JPEG-, GIF- oder WebP-Bild.");
   }
 
   const mediaId = newId("med");
-  const extension = file.type.split("/")[1]?.replace("jpeg", "jpg") ?? "img";
-  const mediaKey = `guilds/${access.guild.discordGuildId}/bot-avatar/${mediaId}.${extension}`;
-  const bytes = await file.arrayBuffer();
+  const mediaKey = `guilds/${access.guild.discordGuildId}/bot-avatar/${mediaId}.${imageExtension(mimeType)}`;
 
   await storeGuildMedia(c.env, {
     id: mediaId,
     guildId: access.guild.id,
     mediaKey,
-    mimeType: file.type,
+    mimeType,
     createdByDiscordUserId: access.session.user.discordUserId
   }, bytes);
 
@@ -1863,12 +1863,12 @@ app.post("/api/guilds/:guildId/profile/avatar", async (c) => {
   const eventId = await enqueueSyncEvent(c.env, access.guild, "guild.member_avatar.update", {
     discordGuildId: access.guild.discordGuildId,
     mediaKey,
-    mimeType: file.type,
+    mimeType,
     previousMediaKey: previousSettings.bot_avatar_media_key
   });
 
-  await audit(c.env, access.guild.id, access.session.user.discordUserId, "profile.avatar.update", "bot_avatar", previousSettings.bot_avatar_media_key, { mediaKey, mimeType: file.type, sizeBytes: file.size });
-  return json(c, { ok: true, eventId, mediaKey });
+  await audit(c.env, access.guild.id, access.session.user.discordUserId, "profile.avatar.update", "bot_avatar", previousSettings.bot_avatar_media_key, { mediaKey, mimeType, sizeBytes: file.size });
+  return json(c, { ok: true, eventId, mediaKey, mimeType });
 });
 
 app.delete("/api/guilds/:guildId/profile/avatar", async (c) => {
@@ -2140,32 +2140,32 @@ app.post("/api/guilds/:guildId/welcome/image", async (c) => {
     throw new HttpError(400, "welcome_image_missing", "Bitte lade eine Bilddatei hoch.");
   }
 
-  const allowedTypes = new Set(["image/png", "image/jpeg", "image/gif", "image/webp"]);
-  if (!allowedTypes.has(file.type)) {
-    throw new HttpError(400, "welcome_image_type_invalid", "Erlaubt sind PNG, JPEG, GIF und WebP.");
-  }
-
   const maxBytes = 4 * 1024 * 1024;
   if (file.size > maxBytes) {
     throw new HttpError(400, "welcome_image_too_large", "Das Bild darf maximal 4 MiB groß sein.");
   }
 
-  const mediaId = newId("med");
-  const extension = file.type.split("/")[1]?.replace("jpeg", "jpg") ?? "img";
-  const mediaKey = `guilds/${access.guild.discordGuildId}/welcome/${mediaId}.${extension}`;
   const bytes = await file.arrayBuffer();
+  const mimeType = detectImageMimeType(bytes);
+
+  if (!mimeType) {
+    throw new HttpError(400, "welcome_image_type_invalid", "Die Datei enthält kein gültiges PNG-, JPEG-, GIF- oder WebP-Bild.");
+  }
+
+  const mediaId = newId("med");
+  const mediaKey = `guilds/${access.guild.discordGuildId}/welcome/${mediaId}.${imageExtension(mimeType)}`;
 
   await storeGuildMedia(c.env, {
     id: mediaId,
     guildId: access.guild.id,
     mediaKey,
-    mimeType: file.type,
+    mimeType,
     createdByDiscordUserId: access.session.user.discordUserId
   }, bytes);
 
   await audit(c.env, access.guild.id, access.session.user.discordUserId, "welcome.image.upload", "guild_media", null, {
     mediaKey,
-    mimeType: file.type,
+    mimeType,
     sizeBytes: file.size
   });
 
@@ -2173,7 +2173,7 @@ app.post("/api/guilds/:guildId/welcome/image", async (c) => {
     ok: true,
     mediaKey,
     mediaUrl: mediaPreviewUrl(access.guild.discordGuildId, mediaKey),
-    mimeType: file.type,
+    mimeType,
     sizeBytes: file.size
   });
 });
@@ -3267,6 +3267,23 @@ app.post("/api/internal/bot/sync-events/:eventId/complete", async (c) => {
     )
       .bind(nowIso(), row.guild_id)
       .run();
+
+    const result = body.result && typeof body.result === "object"
+      ? body.result as Record<string, unknown>
+      : {};
+    const correctedMimeType = String(result.mimeType ?? "");
+    const currentAvatarMediaKey = String(eventPayload.mediaKey ?? "");
+
+    if (
+      currentAvatarMediaKey
+      && new Set(["image/png", "image/jpeg", "image/gif", "image/webp"]).has(correctedMimeType)
+    ) {
+      await c.env.DB.prepare(
+        "UPDATE guild_media SET mime_type = ? WHERE guild_id = ? AND media_key = ?"
+      )
+        .bind(correctedMimeType, row.guild_id, currentAvatarMediaKey)
+        .run();
+    }
   }
 
   if (row.action === "custom_command.upsert") {
