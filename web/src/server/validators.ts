@@ -149,6 +149,7 @@ export const guildModuleSettingsSchema = z.object({
     logging: z.boolean().default(false),
     welcome: z.boolean().default(false),
     tempVoice: z.boolean().default(false),
+    counting: z.boolean().default(false),
     spotifyMusic: z.boolean().default(false),
     games: z.boolean().default(false),
     moderation: z.boolean().default(false)
@@ -189,6 +190,19 @@ export const tempVoiceSettingsSchema = z.object({
 
 export const tempVoicePanelSchema = z.object({
   channelId: nullableSnowflakeSchema
+});
+
+export const countingSettingsSchema = z.object({
+  enabled: z.boolean().default(false),
+  channelId: nullableSnowflakeSchema,
+  resetOnError: z.boolean().default(true),
+  deleteWrongMessages: z.boolean().default(false),
+  milestoneInterval: z.number().int().min(0).max(100000).default(100)
+});
+
+export const countingResetSchema = z.object({
+  number: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER).default(0),
+  clearRecord: z.boolean().default(false)
 });
 
 export function assertSameGuild(routeGuildId: string, rowGuildId: string): void {

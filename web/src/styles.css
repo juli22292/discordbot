@@ -4023,6 +4023,265 @@ textarea {
   font-size: 11px;
 }
 
+.counting-page {
+  display: grid;
+  gap: 16px;
+}
+
+.counting-hero {
+  display: flex;
+  min-height: 150px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 22px;
+  border: 1px solid rgba(119, 183, 255, 0.22);
+  border-radius: 8px;
+  background:
+    linear-gradient(135deg, rgba(70, 132, 255, 0.13), transparent 42%),
+    linear-gradient(315deg, rgba(245, 184, 76, 0.07), transparent 35%),
+    rgba(10, 14, 22, 0.94);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.045), var(--soft-shadow);
+}
+
+.counting-hero h2 {
+  margin: 8px 0 6px;
+  font-size: 32px;
+}
+
+.counting-hero p:not(.eyebrow) {
+  max-width: 760px;
+  color: var(--muted);
+}
+
+.counting-hero-actions {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 10px;
+}
+
+.counting-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.counting-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1.14fr) minmax(340px, 0.86fr);
+  gap: 16px;
+  align-items: start;
+}
+
+.counting-editor,
+.counting-control-panel,
+.counting-rule-list {
+  display: grid;
+  gap: 16px;
+}
+
+.counting-control-panel {
+  gap: 14px;
+}
+
+.counting-rule-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  min-height: 66px;
+  padding: 12px;
+  border: 1px solid var(--border-soft);
+  border-radius: 8px;
+  background: var(--field-bg);
+  cursor: pointer;
+}
+
+.counting-rule-row > span {
+  display: grid;
+  gap: 4px;
+}
+
+.counting-rule-row strong {
+  color: var(--text);
+}
+
+.counting-rule-row small,
+.counting-save-row small {
+  color: var(--muted);
+  line-height: 1.45;
+}
+
+.counting-rule-row input[type="checkbox"] {
+  width: 19px;
+  height: 19px;
+  accent-color: var(--blue);
+}
+
+.counting-save-row {
+  display: grid;
+  gap: 14px;
+}
+
+.counting-save-row > div:first-child {
+  display: grid;
+  gap: 4px;
+}
+
+.counting-preview {
+  position: sticky;
+  top: 76px;
+  display: grid;
+  gap: 16px;
+  padding: 18px;
+  border: 1px solid var(--border-soft);
+  border-radius: 8px;
+  background:
+    linear-gradient(145deg, rgba(255, 255, 255, 0.035), transparent 48%),
+    rgba(15, 18, 27, 0.94);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04), var(--soft-shadow);
+}
+
+.counting-preview-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.counting-preview-heading > div > span {
+  color: var(--blue);
+  font-size: 12px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.counting-preview-heading h2 {
+  margin: 5px 0 0;
+  font-size: 21px;
+}
+
+.counting-chat-preview {
+  display: grid;
+  gap: 2px;
+  padding: 10px 0;
+  border-radius: 8px;
+  background: #1e1f22;
+}
+
+.counting-chat-preview article {
+  display: grid;
+  grid-template-columns: 38px minmax(0, 1fr);
+  gap: 10px;
+  padding: 8px 13px;
+}
+
+.counting-chat-preview article.next {
+  margin-top: 5px;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  padding-top: 13px;
+}
+
+.counting-chat-preview article > div:last-child {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+
+.counting-chat-preview strong {
+  color: #f2f3f5;
+  font-size: 13px;
+}
+
+.counting-chat-preview strong small {
+  margin-left: 5px;
+  padding: 2px 4px;
+  border-radius: 3px;
+  color: #fff;
+  background: #5865f2;
+  font-size: 8px;
+}
+
+.counting-chat-preview p {
+  margin: 0;
+  color: #dbdee1;
+  font-size: 14px;
+}
+
+.counting-avatar {
+  display: grid;
+  width: 36px;
+  height: 36px;
+  place-items: center;
+  border-radius: 50%;
+  color: #fff;
+  background: #a85f8c;
+  font-weight: 800;
+}
+
+.counting-avatar.blue {
+  background: #4c74b7;
+}
+
+.counting-avatar.bot {
+  color: #07121d;
+  background: var(--green);
+}
+
+.counting-reaction {
+  display: inline-flex;
+  width: max-content;
+  align-items: center;
+  gap: 4px;
+  margin-top: 2px;
+  padding: 3px 7px;
+  border: 1px solid rgba(77, 219, 143, 0.28);
+  border-radius: 7px;
+  color: #65e59e;
+  background: rgba(77, 219, 143, 0.08);
+}
+
+.counting-logic-list {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 7px;
+}
+
+.counting-logic-list span {
+  display: grid;
+  min-height: 68px;
+  place-items: center;
+  gap: 6px;
+  padding: 9px;
+  border: 1px solid var(--border-soft);
+  border-radius: 8px;
+  color: var(--muted);
+  background: var(--field-bg);
+  text-align: center;
+  font-size: 11px;
+}
+
+.counting-logic-list svg {
+  color: var(--green);
+}
+
+.counting-command-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+
+.counting-command-list span {
+  padding: 6px 8px;
+  border: 1px solid var(--border-soft);
+  border-radius: 6px;
+  color: var(--muted);
+  background: var(--field-bg);
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-size: 11px;
+}
+
 .logging-page {
   display: grid;
   gap: 16px;
@@ -4308,6 +4567,7 @@ textarea {
 :root[data-theme="light"] .welcome-hero,
 :root[data-theme="light"] .logging-hero,
 :root[data-theme="light"] .tempvoice-hero,
+:root[data-theme="light"] .counting-hero,
 :root[data-theme="light"] .planned-hero,
 :root[data-theme="light"] .docs-hero {
   border-color: rgba(36, 107, 219, 0.18);
@@ -4360,6 +4620,7 @@ textarea {
 :root[data-theme="light"] .owner-module-card,
 :root[data-theme="light"] .welcome-preview,
 :root[data-theme="light"] .tempvoice-preview,
+:root[data-theme="light"] .counting-preview,
 :root[data-theme="light"] .discord-message,
 :root[data-theme="light"] .welcome-embed-preview,
 :root[data-theme="light"] .logging-category-card,
@@ -4944,5 +5205,44 @@ textarea {
   .secondary-action,
   .danger-action {
     width: 100%;
+  }
+}
+
+@media (max-width: 1080px) {
+  .counting-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .counting-preview {
+    position: static;
+  }
+}
+
+@media (max-width: 760px) {
+  .counting-summary-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .counting-hero {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .counting-hero-actions {
+    width: 100%;
+    justify-content: space-between;
+  }
+}
+
+@media (max-width: 520px) {
+  .counting-summary-grid,
+  .counting-logic-list {
+    grid-template-columns: 1fr;
+  }
+
+  .counting-preview-heading,
+  .counting-rule-row {
+    align-items: flex-start;
+    flex-direction: column;
   }
 }

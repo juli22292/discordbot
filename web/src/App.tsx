@@ -32,6 +32,7 @@ import {
   LayoutDashboard,
   LifeBuoy,
   ListFilter,
+  ListOrdered,
   Loader2,
   LogOut,
   Menu,
@@ -60,6 +61,7 @@ import {
   Star,
   Sun,
   Trash2,
+  Trophy,
   Upload,
   UserMinus,
   UserPlus,
@@ -202,6 +204,21 @@ type TempVoiceSettings = {
   defaultBitrateKbps: number;
   panelChannelId: string | null;
   panelMessageId: string | null;
+  syncStatus: string;
+  syncError: string | null;
+};
+
+type CountingSettings = {
+  enabled: boolean;
+  channelId: string | null;
+  resetOnError: boolean;
+  deleteWrongMessages: boolean;
+  milestoneInterval: number;
+  currentNumber: number;
+  recordNumber: number;
+  totalCounts: number;
+  totalFailures: number;
+  lastUserId: string | null;
   syncStatus: string;
   syncError: string | null;
 };
@@ -390,6 +407,7 @@ type AdminGuildDetail = {
     logging: boolean;
     welcome: boolean;
     tempVoice: boolean;
+    counting: boolean;
     spotifyMusic: boolean;
     games: boolean;
     moderation: boolean;
@@ -505,6 +523,17 @@ const plannedSections = [
     ]
   },
   {
+    section: "counting",
+    label: "Counting",
+    headline: "Counting",
+    description: "Gemeinsam von 1 aufwärts zählen, Rekorde brechen und Fehler automatisch erkennen.",
+    items: [
+      { kicker: "Kanal", title: "Counting-Kanal", text: "Ein eigener Textkanal für die serverweite Zahlenkette." },
+      { kicker: "Regeln", title: "Saubere Reihenfolge", text: "Nur die nächste Zahl zählt und niemand darf zweimal direkt hintereinander." },
+      { kicker: "Rekord", title: "Statistik", text: "Aktueller Lauf, Bestwert und Spielerbeiträge bleiben erhalten." }
+    ]
+  },
+  {
     section: "spotify-music",
     label: "Spotify Music",
     headline: "Spotify Music",
@@ -542,6 +571,8 @@ function plannedIcon(section: string, size = 17) {
       return <AlertTriangle size={size} />;
     case "temp-voice":
       return <Mic2 size={size} />;
+    case "counting":
+      return <ListOrdered size={size} />;
     case "spotify-music":
       return <Music2 size={size} />;
     case "games":
@@ -597,6 +628,7 @@ const guildModuleLabels = [
   { key: "logging", label: "Logging", text: "Server- und Moderationsereignisse sammeln.", icon: ListFilter },
   { key: "welcome", label: "Begrüßung", text: "Welcome-Nachrichten und Startrollen aktiv halten.", icon: Sparkles },
   { key: "tempVoice", label: "Temp-Voice", text: "Join-to-create und temporäre Sprachräume.", icon: Mic2 },
+  { key: "counting", label: "Counting", text: "Gemeinsame Zahlenkette mit Rekord und Rangliste.", icon: ListOrdered },
   { key: "spotifyMusic", label: "Spotify Music", text: "Musik, Lavalink und DJ-Regeln.", icon: Music2 },
   { key: "games", label: "Games", text: "Fun- und Mini-Game-Kommandos.", icon: Gamepad2 },
   { key: "moderation", label: "Moderation", text: "Warns, Timeouts und Schutzmodule.", icon: Shield }
@@ -3460,7 +3492,7 @@ function Dashboard({ path }: { path: string }) {
               section={item.section}
               current={section}
               guildId={guildId}
-              badge={item.section === "temp-voice" ? undefined : "geplant"}
+              badge={item.section === "temp-voice" || item.section === "counting" ? undefined : "geplant"}
               key={item.section}
             />
           ))}
@@ -3493,7 +3525,8 @@ function Dashboard({ path }: { path: string }) {
               {section === "audit-log" && <AuditLogPage guildId={guildId} />}
               {section === "welcome" && <WelcomePage guildId={guildId} />}
               {section === "temp-voice" && <TempVoicePage guildId={guildId} />}
-              {plannedSection && section !== "welcome" && section !== "logging" && section !== "temp-voice" && <PlannedPage section={plannedSection} />}
+              {section === "counting" && <CountingPage guildId={guildId} />}
+              {plannedSection && section !== "welcome" && section !== "logging" && section !== "temp-voice" && section !== "counting" && <PlannedPage section={plannedSection} />}
             </>
           )}
         </main>
@@ -3875,6 +3908,241 @@ const DEFAULT_TEMP_VOICE_DRAFT: TempVoiceSettings = {
   syncStatus: "idle",
   syncError: null
 };
+
+const DEFAULT_COUNTING_DRAFT: CountingSettings = {
+  enabled: false,
+  channelId: null,
+  resetOnError: true,
+  deleteWrongMessages: false,
+  milestoneInterval: 100,
+  currentNumber: 0,
+  recordNumber: 0,
+  totalCounts: 0,
+  totalFailures: 0,
+  lastUserId: null,
+  syncStatus: "idle",
+  syncError: null
+};
+
+function CountingPage({ guildId }: { guildId: string }) {
+  const settings = useApi<{ counting: CountingSettings }>(`/api/guilds/${guildId}/counting`, [guildId]);
+  const channels = useApi<{ channels: ChannelOption[] }>(`/api/guilds/${guildId}/channels`, [guildId]);
+  const [draft, setDraft] = useState<CountingSettings>(DEFAULT_COUNTING_DRAFT);
+  const [saving, setSaving] = useState(false);
+  const [resetting, setResetting] = useState(false);
+  const [status, setStatus] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (settings.data?.counting) setDraft(settings.data.counting);
+  }, [settings.data]);
+
+  const textChannels = useMemo(
+    () => (channels.data?.channels ?? []).filter(isTextGuildChannel),
+    [channels.data]
+  );
+  const selectedChannel = textChannels.find((channel) => channel.id === draft.channelId);
+  const nextNumber = draft.currentNumber + 1;
+  const loading = (settings.loading && !settings.data) || (channels.loading && !channels.data);
+  const loadError = settings.error || channels.error;
+
+  async function persist(nextDraft: CountingSettings = draft): Promise<boolean> {
+    if (nextDraft.enabled && !nextDraft.channelId) {
+      setStatus("Wähle zuerst einen Textkanal für Counting aus.");
+      return false;
+    }
+
+    setSaving(true);
+    setStatus(null);
+    try {
+      const response = await api<{ counting: CountingSettings }>(`/api/guilds/${guildId}/counting`, {
+        method: "PUT",
+        body: JSON.stringify({
+          enabled: nextDraft.enabled,
+          channelId: nextDraft.channelId,
+          resetOnError: nextDraft.resetOnError,
+          deleteWrongMessages: nextDraft.deleteWrongMessages,
+          milestoneInterval: nextDraft.milestoneInterval
+        })
+      });
+      setDraft(response.counting);
+      setStatus("Counting wurde gespeichert und wird jetzt mit dem Bot synchronisiert.");
+      await settings.reload();
+      return true;
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : "Counting konnte nicht gespeichert werden.");
+      return false;
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function updateEnabled(enabled: boolean) {
+    const previousDraft = draft;
+    const nextDraft = { ...draft, enabled };
+    setDraft(nextDraft);
+
+    if (enabled && !nextDraft.channelId) {
+      setStatus("Wähle jetzt den Counting-Kanal und speichere anschließend die Einstellungen.");
+      return;
+    }
+
+    const saved = await persist(nextDraft);
+    if (!saved) setDraft(previousDraft);
+  }
+
+  async function resetCounter() {
+    if (!window.confirm("Den aktuellen Counting-Lauf wirklich auf 0 zurücksetzen? Der Rekord bleibt erhalten.")) return;
+    setResetting(true);
+    setStatus(null);
+    try {
+      const response = await api<{ counting: CountingSettings }>(`/api/guilds/${guildId}/counting/reset`, {
+        method: "POST",
+        body: JSON.stringify({ number: 0, clearRecord: false })
+      });
+      setDraft(response.counting);
+      setStatus("Der aktuelle Lauf wird auf 0 zurückgesetzt. Der Rekord bleibt erhalten.");
+      await settings.reload();
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : "Der Lauf konnte nicht zurückgesetzt werden.");
+    } finally {
+      setResetting(false);
+    }
+  }
+
+  return (
+    <section className="counting-page">
+      <div className="counting-hero">
+        <div>
+          <p className="eyebrow"><ListOrdered size={15} /> Community Game</p>
+          <h2>Counting</h2>
+          <p>Eine saubere Zahlenkette für deinen Server, mit Reihenfolgeschutz, Rekord und Spielerstatistiken.</p>
+        </div>
+        <div className="counting-hero-actions">
+          <span className={`pill ${draft.syncStatus === "failed" ? "danger" : draft.syncStatus === "synced" ? "ok" : "neutral"}`}>
+            {draft.syncStatus === "failed" ? "Sync fehlgeschlagen" : draft.syncStatus === "pending" ? "Wird synchronisiert" : draft.syncStatus === "synced" ? "Synchronisiert" : "Bereit"}
+          </span>
+          <label className="welcome-switch">
+            <input type="checkbox" checked={draft.enabled} disabled={saving || resetting} onChange={(event) => void updateEnabled(event.target.checked)} />
+            <span>{draft.enabled ? "Aktiv" : "Inaktiv"}</span>
+          </label>
+        </div>
+      </div>
+
+      {loading && <LoadingBlock />}
+      {loadError && <Notice tone="danger" text={loadError} />}
+      {draft.syncError && <Notice tone="danger" text={draft.syncError} />}
+      <ActionStatus status={status} />
+
+      {!loading && !loadError && draft.enabled && (
+        <>
+          <section className="counting-summary-grid">
+            <StatusTile icon={<ListOrdered size={19} />} label="Aktueller Lauf" value={draft.currentNumber.toLocaleString("de-DE")} tone="ok" />
+            <StatusTile icon={<Trophy size={19} />} label="Rekord" value={draft.recordNumber.toLocaleString("de-DE")} />
+            <StatusTile icon={<Check size={19} />} label="Richtige Zahlen" value={draft.totalCounts.toLocaleString("de-DE")} tone="ok" />
+            <StatusTile icon={<X size={19} />} label="Fehlversuche" value={draft.totalFailures.toLocaleString("de-DE")} tone={draft.totalFailures ? "warn" : undefined} />
+          </section>
+
+          <div className="counting-layout">
+            <div className="counting-editor">
+              <section className="panel counting-control-panel">
+                <div className="panel-title">
+                  <div>
+                    <h2>Spielkanal</h2>
+                    <p className="muted">In diesem Kanal überwacht der Bot jede Zahl und reagiert sofort.</p>
+                  </div>
+                  <RefreshButton
+                    loading={(settings.loading && Boolean(settings.data)) || (channels.loading && Boolean(channels.data))}
+                    onClick={async () => { await Promise.all([settings.reload(), channels.reload()]); }}
+                    label="Neu laden"
+                  />
+                </div>
+                <label>
+                  Counting-Textkanal
+                  <select value={draft.channelId ?? ""} onChange={(event) => setDraft({ ...draft, channelId: event.target.value || null })}>
+                    <ChannelSelectOptions channels={textChannels} noneLabel="Textkanal auswählen" />
+                  </select>
+                  <small>{selectedChannel ? `Aktiv in #${selectedChannel.name}` : "Der Bot benötigt Schreiben, Reaktionen und Nachrichtenverlauf."}</small>
+                </label>
+              </section>
+
+              <section className="panel counting-control-panel">
+                <div className="panel-title compact">
+                  <div>
+                    <h2>Regeln</h2>
+                    <p className="muted">Die Reihenfolge bleibt serverweit eindeutig und manipulationssicher.</p>
+                  </div>
+                  <ShieldCheck size={18} />
+                </div>
+                <div className="counting-rule-list">
+                  <label className="counting-rule-row">
+                    <span><strong>Bei Fehler zurücksetzen</strong><small>Eine falsche Zahl oder derselbe Nutzer zweimal startet wieder bei 1.</small></span>
+                    <input type="checkbox" checked={draft.resetOnError} onChange={(event) => setDraft({ ...draft, resetOnError: event.target.checked })} />
+                  </label>
+                  <label className="counting-rule-row">
+                    <span><strong>Falsche Nachricht löschen</strong><small>Der Bot setzt zuerst die rote Reaktion und räumt die Nachricht danach auf.</small></span>
+                    <input type="checkbox" checked={draft.deleteWrongMessages} onChange={(event) => setDraft({ ...draft, deleteWrongMessages: event.target.checked })} />
+                  </label>
+                  <label>
+                    Meilenstein-Abstand
+                    <input
+                      type="number"
+                      min={0}
+                      max={100000}
+                      value={draft.milestoneInterval}
+                      onChange={(event) => setDraft({ ...draft, milestoneInterval: Math.max(0, Math.min(100000, Number(event.target.value) || 0)) })}
+                    />
+                    <small>0 deaktiviert Meldungen. Standard: alle 100 Zahlen.</small>
+                  </label>
+                </div>
+              </section>
+
+              <section className="panel counting-control-panel">
+                <div className="counting-save-row">
+                  <div>
+                    <strong>Nächste gültige Zahl: {nextNumber.toLocaleString("de-DE")}</strong>
+                    <small>Der aktuelle Rekord von {draft.recordNumber.toLocaleString("de-DE")} bleibt bei einem normalen Reset erhalten.</small>
+                  </div>
+                  <div className="form-actions">
+                    <button className="primary-action inline" onClick={() => void persist()} disabled={saving || resetting || !draft.channelId}>
+                      {saving ? <Loader2 className="spin" size={16} /> : <Save size={16} />}
+                      Einstellungen speichern
+                    </button>
+                    <button className="secondary-action inline" onClick={() => void resetCounter()} disabled={saving || resetting}>
+                      {resetting ? <Loader2 className="spin" size={16} /> : <RotateCcw size={16} />}
+                      Lauf zurücksetzen
+                    </button>
+                  </div>
+                </div>
+              </section>
+            </div>
+
+            <aside className="counting-preview">
+              <div className="counting-preview-heading">
+                <div><span>Live-Vorschau</span><h2>#{selectedChannel?.name ?? "counting"}</h2></div>
+                <span className="pill ok">Nächste: {nextNumber.toLocaleString("de-DE")}</span>
+              </div>
+              <div className="counting-chat-preview">
+                {draft.currentNumber >= 2 && <article><div className="counting-avatar">L</div><div><strong>Lena</strong><p>{(draft.currentNumber - 1).toLocaleString("de-DE")}</p><small className="counting-reaction ok"><Check size={12} /> 1</small></div></article>}
+                {draft.currentNumber >= 1 && <article><div className="counting-avatar blue">M</div><div><strong>Max</strong><p>{draft.currentNumber.toLocaleString("de-DE")}</p><small className="counting-reaction ok"><Check size={12} /> 1</small></div></article>}
+                <article className="next"><div className="counting-avatar bot"><Bot size={16} /></div><div><strong>Modmail Manager <small>APP</small></strong><p>Wartet auf <b>{nextNumber.toLocaleString("de-DE")}</b></p></div></article>
+              </div>
+              <div className="counting-logic-list">
+                <span><Check size={15} /> Exakt nächste Zahl</span>
+                <span><UsersRound size={15} /> Kein Nutzer zweimal</span>
+                <span><Trophy size={15} /> Rekord bleibt erhalten</span>
+              </div>
+              <div className="counting-command-list">
+                <span>/counting status</span>
+                <span>/counting leaderboard</span>
+                <span>/counting stats</span>
+              </div>
+            </aside>
+          </div>
+        </>
+      )}
+    </section>
+  );
+}
 
 const TEMPVOICE_ACTIONS = [
   { label: "Umbenennen", icon: Pencil },

@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import {
   assertSameGuild,
   commandConfigSchema,
+  countingResetSchema,
+  countingSettingsSchema,
   customCommandSchema,
   nicknameSchema,
   safeRedirectPath,
@@ -78,5 +80,21 @@ describe("guild-isolated validation", () => {
     expect(tempVoicePanelSchema.parse({ channelId: "123456789012345678" }).channelId).toBe("123456789012345678");
     expect(tempVoicePanelSchema.parse({ channelId: "" }).channelId).toBeNull();
     expect(() => tempVoicePanelSchema.parse({ channelId: "123" })).toThrow();
+  });
+
+  it("validates Counting settings and reset limits", () => {
+    const settings = countingSettingsSchema.parse({
+      enabled: true,
+      channelId: "123456789012345678",
+      resetOnError: true,
+      deleteWrongMessages: false,
+      milestoneInterval: 250
+    });
+
+    expect(settings.channelId).toBe("123456789012345678");
+    expect(settings.milestoneInterval).toBe(250);
+    expect(() => countingSettingsSchema.parse({ milestoneInterval: 100001 })).toThrow();
+    expect(countingResetSchema.parse({ number: 42 }).number).toBe(42);
+    expect(() => countingResetSchema.parse({ number: -1 })).toThrow();
   });
 });

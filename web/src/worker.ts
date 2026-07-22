@@ -38,6 +38,8 @@ import {
   adminRoleUpdateSchema,
   botAdminActionSchema,
   commandConfigSchema,
+  countingResetSchema,
+  countingSettingsSchema,
   customCommandSchema,
   guildModuleSettingsSchema,
   inviteCreateSchema,
@@ -199,6 +201,37 @@ interface TempVoiceSettingsResponse {
   syncError: string | null;
 }
 
+interface CountingSettingsRow {
+  guild_id: string;
+  enabled: number;
+  channel_id: string | null;
+  reset_on_error: number;
+  delete_wrong_messages: number;
+  milestone_interval: number;
+  current_number: number;
+  record_number: number;
+  total_counts: number;
+  total_failures: number;
+  last_user_id: string | null;
+  sync_status: string;
+  sync_error: string | null;
+}
+
+interface CountingSettingsResponse {
+  enabled: boolean;
+  channelId: string | null;
+  resetOnError: boolean;
+  deleteWrongMessages: boolean;
+  milestoneInterval: number;
+  currentNumber: number;
+  recordNumber: number;
+  totalCounts: number;
+  totalFailures: number;
+  lastUserId: string | null;
+  syncStatus: string;
+  syncError: string | null;
+}
+
 interface BotRuntimeRow {
   id: string;
   status: string | null;
@@ -257,6 +290,7 @@ interface AdminGuildModules {
   logging: boolean;
   welcome: boolean;
   tempVoice: boolean;
+  counting: boolean;
   spotifyMusic: boolean;
   games: boolean;
   moderation: boolean;
@@ -954,6 +988,99 @@ async function ensureTempVoiceSettings(env: Env, guildId: string): Promise<TempV
   return { ...DEFAULT_TEMP_VOICE_SETTINGS };
 }
 
+const DEFAULT_COUNTING_SETTINGS: CountingSettingsResponse = {
+  enabled: false,
+  channelId: null,
+  resetOnError: true,
+  deleteWrongMessages: false,
+  milestoneInterval: 100,
+  currentNumber: 0,
+  recordNumber: 0,
+  totalCounts: 0,
+  totalFailures: 0,
+  lastUserId: null,
+  syncStatus: "idle",
+  syncError: null
+};
+
+let countingStorageReady: Promise<void> | null = null;
+
+async function ensureCountingStorage(env: Env): Promise<void> {
+  if (!countingStorageReady) {
+    const db = requireDb(env);
+    countingStorageReady = (async () => {
+      await db.prepare(
+        `CREATE TABLE IF NOT EXISTS counting_settings (
+           guild_id TEXT PRIMARY KEY REFERENCES guilds(id) ON DELETE CASCADE,
+           enabled INTEGER NOT NULL DEFAULT 0,
+           channel_id TEXT,
+           reset_on_error INTEGER NOT NULL DEFAULT 1,
+           delete_wrong_messages INTEGER NOT NULL DEFAULT 0,
+           milestone_interval INTEGER NOT NULL DEFAULT 100,
+           current_number INTEGER NOT NULL DEFAULT 0,
+           record_number INTEGER NOT NULL DEFAULT 0,
+           total_counts INTEGER NOT NULL DEFAULT 0,
+           total_failures INTEGER NOT NULL DEFAULT 0,
+           last_user_id TEXT,
+           sync_status TEXT NOT NULL DEFAULT 'idle',
+           sync_error TEXT,
+           created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+           updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+         )`
+      ).run();
+      await db.prepare(
+        "CREATE INDEX IF NOT EXISTS idx_counting_settings_sync ON counting_settings(sync_status, updated_at)"
+      ).run();
+    })().catch((error) => {
+      countingStorageReady = null;
+      throw error;
+    });
+  }
+
+  await countingStorageReady;
+}
+
+function normalizeCountingSettings(row: CountingSettingsRow | null | undefined): CountingSettingsResponse {
+  if (!row) return { ...DEFAULT_COUNTING_SETTINGS };
+  return {
+    enabled: Boolean(row.enabled),
+    channelId: row.channel_id,
+    resetOnError: Boolean(row.reset_on_error),
+    deleteWrongMessages: Boolean(row.delete_wrong_messages),
+    milestoneInterval: Number(row.milestone_interval ?? 100),
+    currentNumber: Number(row.current_number ?? 0),
+    recordNumber: Number(row.record_number ?? 0),
+    totalCounts: Number(row.total_counts ?? 0),
+    totalFailures: Number(row.total_failures ?? 0),
+    lastUserId: row.last_user_id,
+    syncStatus: row.sync_status || "idle",
+    syncError: row.sync_error
+  };
+}
+
+async function ensureCountingSettings(env: Env, guildId: string): Promise<CountingSettingsResponse> {
+  await ensureCountingStorage(env);
+  const db = requireDb(env);
+  const existing = await first<CountingSettingsRow>(
+    db.prepare(
+      `SELECT guild_id, enabled, channel_id, reset_on_error, delete_wrong_messages,
+              milestone_interval, current_number, record_number, total_counts,
+              total_failures, last_user_id, sync_status, sync_error
+         FROM counting_settings
+        WHERE guild_id = ?`
+    ).bind(guildId)
+  );
+
+  if (existing) return normalizeCountingSettings(existing);
+
+  const timestamp = nowIso();
+  await db.prepare(
+    `INSERT INTO counting_settings (guild_id, created_at, updated_at)
+     VALUES (?, ?, ?)`
+  ).bind(guildId, timestamp, timestamp).run();
+  return { ...DEFAULT_COUNTING_SETTINGS };
+}
+
 function mediaPreviewUrl(discordGuildId: string, mediaKey: string): string {
   return `/api/guilds/${discordGuildId}/media?key=${encodeURIComponent(mediaKey)}`;
 }
@@ -1430,6 +1557,7 @@ function normalizeGuildModules(value: unknown): AdminGuildModules {
     logging: Boolean(raw.logging),
     welcome: Boolean(raw.welcome),
     tempVoice: Boolean(raw.tempVoice ?? raw.temp_voice),
+    counting: Boolean(raw.counting),
     spotifyMusic: Boolean(raw.spotifyMusic ?? raw.spotify_music),
     games: Boolean(raw.games),
     moderation: Boolean(raw.moderation)
@@ -2202,6 +2330,114 @@ app.post("/api/guilds/:guildId/temp-voice/panel", async (c) => {
 
   await audit(c.env, access.guild.id, access.session.user.discordUserId, "temp_voice.panel.send", channelId, null, { eventId });
   return json(c, { ok: true, eventId });
+});
+
+app.get("/api/guilds/:guildId/counting", async (c) => {
+  const access = await requireGuildManagementAccess(c, c.req.param("guildId"));
+  const counting = await ensureCountingSettings(c.env, access.guild.id);
+  return json(c, { counting });
+});
+
+app.put("/api/guilds/:guildId/counting", async (c) => {
+  const access = await requireGuildManagementAccess(c, c.req.param("guildId"));
+  const data = countingSettingsSchema.parse(await readJsonBody(c));
+  const oldValue = await ensureCountingSettings(c.env, access.guild.id);
+
+  if (data.enabled && !data.channelId) {
+    throw new HttpError(400, "counting_channel_required", "Wähle einen Textkanal für das aktive Counting-Modul aus.");
+  }
+
+  if (data.channelId) {
+    const channel = await first<{ type: string; canSend: number }>(
+      c.env.DB.prepare(
+        `SELECT channel_type AS type, can_send AS canSend
+           FROM guild_channels
+          WHERE guild_id = ? AND discord_channel_id = ?`
+      ).bind(access.guild.id, data.channelId)
+    );
+    const type = String(channel?.type ?? "").toLowerCase();
+
+    if (!channel || !new Set(["text", "news", "announcement"]).has(type)) {
+      throw new HttpError(400, "counting_channel_invalid", "Der Counting-Kanal muss ein Textkanal sein.");
+    }
+
+    if (!channel.canSend) {
+      throw new HttpError(400, "counting_channel_forbidden", "Der Bot kann im ausgewählten Counting-Kanal nicht schreiben.");
+    }
+  }
+
+  const timestamp = nowIso();
+  await ensureCountingStorage(c.env);
+  await c.env.DB.prepare(
+    `INSERT INTO counting_settings (
+       guild_id, enabled, channel_id, reset_on_error, delete_wrong_messages,
+       milestone_interval, sync_status, sync_error, created_at, updated_at
+     ) VALUES (?, ?, ?, ?, ?, ?, 'pending', NULL, ?, ?)
+     ON CONFLICT(guild_id) DO UPDATE SET
+       enabled = excluded.enabled,
+       channel_id = excluded.channel_id,
+       reset_on_error = excluded.reset_on_error,
+       delete_wrong_messages = excluded.delete_wrong_messages,
+       milestone_interval = excluded.milestone_interval,
+       sync_status = 'pending',
+       sync_error = NULL,
+       updated_at = excluded.updated_at`
+  ).bind(
+    access.guild.id,
+    data.enabled ? 1 : 0,
+    data.channelId,
+    data.resetOnError ? 1 : 0,
+    data.deleteWrongMessages ? 1 : 0,
+    data.milestoneInterval,
+    timestamp,
+    timestamp
+  ).run();
+
+  const saved: CountingSettingsResponse = {
+    ...oldValue,
+    ...data,
+    syncStatus: "pending",
+    syncError: null
+  };
+  const eventId = await enqueueSyncEvent(c.env, access.guild, "counting.settings.upsert", {
+    discordGuildId: access.guild.discordGuildId,
+    settings: data
+  });
+
+  await audit(c.env, access.guild.id, access.session.user.discordUserId, "counting.update", "counting_settings", oldValue, saved);
+  return json(c, { ok: true, eventId, counting: saved });
+});
+
+app.post("/api/guilds/:guildId/counting/reset", async (c) => {
+  const access = await requireGuildManagementAccess(c, c.req.param("guildId"));
+  const data = countingResetSchema.parse(await readJsonBody(c));
+  const oldValue = await ensureCountingSettings(c.env, access.guild.id);
+  const timestamp = nowIso();
+
+  await c.env.DB.prepare(
+    `UPDATE counting_settings
+        SET current_number = ?, last_user_id = NULL,
+            record_number = CASE WHEN ? = 1 THEN ? ELSE record_number END,
+            sync_status = 'pending', sync_error = NULL, updated_at = ?
+      WHERE guild_id = ?`
+  ).bind(data.number, data.clearRecord ? 1 : 0, data.number, timestamp, access.guild.id).run();
+
+  const eventId = await enqueueSyncEvent(c.env, access.guild, "counting.reset", {
+    discordGuildId: access.guild.discordGuildId,
+    number: data.number,
+    clearRecord: data.clearRecord
+  });
+  const saved: CountingSettingsResponse = {
+    ...oldValue,
+    currentNumber: data.number,
+    recordNumber: data.clearRecord ? data.number : oldValue.recordNumber,
+    lastUserId: null,
+    syncStatus: "pending",
+    syncError: null
+  };
+
+  await audit(c.env, access.guild.id, access.session.user.discordUserId, "counting.reset", "counting_settings", oldValue, saved);
+  return json(c, { ok: true, eventId, counting: saved });
 });
 
 app.get("/api/guilds/:guildId/roles", async (c) => {
@@ -3280,6 +3516,7 @@ app.post("/api/internal/bot/snapshot", async (c) => {
       icon?: string | null;
       channels?: Array<Record<string, unknown>>;
       roles?: Array<Record<string, unknown>>;
+      counting?: Record<string, unknown>;
     }>;
     commands?: Array<{ name: string; description?: string; type?: string }>;
   };
@@ -3332,6 +3569,7 @@ app.post("/api/internal/bot/snapshot", async (c) => {
   const internalGuildIdList = guildRows.map((guild) => guild.id);
   const channelRows: Array<Record<string, unknown>> = [];
   const roleRows: Array<Record<string, unknown>> = [];
+  const countingRows: Array<Record<string, unknown>> = [];
 
   for (const guild of guilds) {
     const internalGuildId = internalGuildIds.get(guild.id)!;
@@ -3369,8 +3607,29 @@ app.post("/api/internal/bot/snapshot", async (c) => {
         updatedAt: timestamp
       });
     }
+
+    const counting = guild.counting && typeof guild.counting === "object" ? guild.counting : {};
+    const safeInteger = (value: unknown, fallback = 0) => {
+      const parsed = Number(value);
+      return Number.isSafeInteger(parsed) && parsed >= 0 ? parsed : fallback;
+    };
+    countingRows.push({
+      guildId: internalGuildId,
+      enabled: counting.enabled ? 1 : 0,
+      channelId: /^\d{17,20}$/.test(String(counting.channelId ?? "")) ? String(counting.channelId) : null,
+      resetOnError: counting.resetOnError === false ? 0 : 1,
+      deleteWrongMessages: counting.deleteWrongMessages ? 1 : 0,
+      milestoneInterval: Math.min(100000, safeInteger(counting.milestoneInterval, 100)),
+      currentNumber: safeInteger(counting.currentNumber),
+      recordNumber: safeInteger(counting.recordNumber),
+      totalCounts: safeInteger(counting.totalCounts),
+      totalFailures: safeInteger(counting.totalFailures),
+      lastUserId: /^\d{17,20}$/.test(String(counting.lastUserId ?? "")) ? String(counting.lastUserId) : null,
+      timestamp
+    });
   }
 
+  await ensureCountingStorage(c.env);
   await db.batch([
     db.prepare(
       `INSERT INTO bot_commands (id, command_name, description, command_type, updated_at)
@@ -3452,7 +3711,45 @@ app.post("/api/internal/bot/snapshot", async (c) => {
          json_extract(value, '$.botCanManage'),
          json_extract(value, '$.updatedAt')
        FROM json_each(?)`
-    ).bind(asJson(roleRows))
+    ).bind(asJson(roleRows)),
+    db.prepare(
+      `INSERT INTO counting_settings (
+         guild_id, enabled, channel_id, reset_on_error, delete_wrong_messages,
+         milestone_interval, current_number, record_number, total_counts,
+         total_failures, last_user_id, sync_status, sync_error, created_at, updated_at
+       )
+       SELECT
+         json_extract(value, '$.guildId'),
+         json_extract(value, '$.enabled'),
+         json_extract(value, '$.channelId'),
+         json_extract(value, '$.resetOnError'),
+         json_extract(value, '$.deleteWrongMessages'),
+         json_extract(value, '$.milestoneInterval'),
+         json_extract(value, '$.currentNumber'),
+         json_extract(value, '$.recordNumber'),
+         json_extract(value, '$.totalCounts'),
+         json_extract(value, '$.totalFailures'),
+         json_extract(value, '$.lastUserId'),
+         'synced', NULL,
+         json_extract(value, '$.timestamp'),
+         json_extract(value, '$.timestamp')
+       FROM json_each(?)
+       WHERE true
+       ON CONFLICT(guild_id) DO UPDATE SET
+         enabled = CASE WHEN counting_settings.sync_status = 'pending' THEN counting_settings.enabled ELSE excluded.enabled END,
+         channel_id = CASE WHEN counting_settings.sync_status = 'pending' THEN counting_settings.channel_id ELSE excluded.channel_id END,
+         reset_on_error = CASE WHEN counting_settings.sync_status = 'pending' THEN counting_settings.reset_on_error ELSE excluded.reset_on_error END,
+         delete_wrong_messages = CASE WHEN counting_settings.sync_status = 'pending' THEN counting_settings.delete_wrong_messages ELSE excluded.delete_wrong_messages END,
+         milestone_interval = CASE WHEN counting_settings.sync_status = 'pending' THEN counting_settings.milestone_interval ELSE excluded.milestone_interval END,
+         current_number = excluded.current_number,
+         record_number = excluded.record_number,
+         total_counts = excluded.total_counts,
+         total_failures = excluded.total_failures,
+         last_user_id = excluded.last_user_id,
+         sync_status = CASE WHEN counting_settings.sync_status = 'pending' THEN 'pending' ELSE 'synced' END,
+         sync_error = CASE WHEN counting_settings.sync_status = 'pending' THEN counting_settings.sync_error ELSE NULL END,
+         updated_at = excluded.updated_at`
+    ).bind(asJson(countingRows))
   ]);
 
   return json(c, {
@@ -3461,7 +3758,8 @@ app.post("/api/internal/bot/snapshot", async (c) => {
       guilds: guilds.length,
       commands: commands.length,
       channels: channelRows.length,
-      roles: roleRows.length
+      roles: roleRows.length,
+      counting: countingRows.length
     }
   });
 });
@@ -3619,6 +3917,46 @@ app.post("/api/internal/bot/sync-events/:eventId/complete", async (c) => {
     }
   }
 
+  if (row.action === "counting.settings.upsert" || row.action === "counting.reset") {
+    await ensureCountingStorage(c.env);
+    const current = await ensureCountingSettings(c.env, row.guild_id);
+    const result = body.result && typeof body.result === "object"
+      ? body.result as Record<string, unknown>
+      : {};
+    const safeNumber = (key: string, fallback: number) => {
+      const value = Number(result[key]);
+      return Number.isSafeInteger(value) && value >= 0 ? value : fallback;
+    };
+    const channelId = Object.prototype.hasOwnProperty.call(result, "channelId")
+      ? (/^\d{17,20}$/.test(String(result.channelId ?? "")) ? String(result.channelId) : null)
+      : current.channelId;
+    const lastUserId = Object.prototype.hasOwnProperty.call(result, "lastUserId")
+      ? (/^\d{17,20}$/.test(String(result.lastUserId ?? "")) ? String(result.lastUserId) : null)
+      : current.lastUserId;
+
+    await c.env.DB.prepare(
+      `UPDATE counting_settings
+          SET enabled = ?, channel_id = ?, reset_on_error = ?, delete_wrong_messages = ?,
+              milestone_interval = ?, current_number = ?, record_number = ?, total_counts = ?,
+              total_failures = ?, last_user_id = ?, sync_status = 'synced', sync_error = NULL,
+              updated_at = ?
+        WHERE guild_id = ?`
+    ).bind(
+      typeof result.enabled === "boolean" ? (result.enabled ? 1 : 0) : (current.enabled ? 1 : 0),
+      channelId,
+      typeof result.resetOnError === "boolean" ? (result.resetOnError ? 1 : 0) : (current.resetOnError ? 1 : 0),
+      typeof result.deleteWrongMessages === "boolean" ? (result.deleteWrongMessages ? 1 : 0) : (current.deleteWrongMessages ? 1 : 0),
+      safeNumber("milestoneInterval", current.milestoneInterval),
+      safeNumber("currentNumber", current.currentNumber),
+      safeNumber("recordNumber", current.recordNumber),
+      safeNumber("totalCounts", current.totalCounts),
+      safeNumber("totalFailures", current.totalFailures),
+      lastUserId,
+      nowIso(),
+      row.guild_id
+    ).run();
+  }
+
   const currentMediaKey = row.action === "guild.member_avatar.update"
     ? String(eventPayload.mediaKey ?? "")
     : row.action === "welcome_settings.upsert"
@@ -3687,6 +4025,15 @@ app.post("/api/internal/bot/sync-events/:eventId/fail", async (c) => {
     await ensureTempVoiceStorage(c.env);
     await c.env.DB.prepare(
       "UPDATE temp_voice_settings SET sync_status = 'failed', sync_error = ?, updated_at = ? WHERE guild_id = ?"
+    )
+      .bind(String(body.error ?? "Unbekannter Fehler").slice(0, 1000), nowIso(), row.guild_id)
+      .run();
+  }
+
+  if (!retry && (row.action === "counting.settings.upsert" || row.action === "counting.reset")) {
+    await ensureCountingStorage(c.env);
+    await c.env.DB.prepare(
+      "UPDATE counting_settings SET sync_status = 'failed', sync_error = ?, updated_at = ? WHERE guild_id = ?"
     )
       .bind(String(body.error ?? "Unbekannter Fehler").slice(0, 1000), nowIso(), row.guild_id)
       .run();
