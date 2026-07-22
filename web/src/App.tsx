@@ -688,14 +688,14 @@ const plannedSections = [
     ]
   },
   {
-    section: "spotify-music",
-    label: "Spotify Music",
-    headline: "Spotify Music",
-    description: "Musiksteuerung für Spotify/Lavalink mit Queue, DJ-Regeln und stabilen Player-Einstellungen.",
+    section: "youtube-music",
+    label: "YouTube Music",
+    headline: "YouTube Music",
+    description: "Musiksteuerung für YouTube mit Queue, DJ-Regeln und stabilen Lavalink-Player-Einstellungen.",
     items: [
       { kicker: "Player", title: "Queue & Playback", text: "Aktuelle Queue, Lautstärke, Loop, Skip und Autoplay über das Panel steuern." },
       { kicker: "Rechte", title: "DJ-Modus", text: "DJ-Rollen, Vote-Skip und erlaubte Musikkanäle sauber einstellen." },
-      { kicker: "Quelle", title: "Spotify-Fokus", text: "Spotify-Suche, Playlists und Lavalink-Status zentral sichtbar machen." }
+      { kicker: "Quelle", title: "YouTube-Fokus", text: "YouTube-Suche, direkte Links und Lavalink-Status zentral sichtbar machen." }
     ]
   },
   {
@@ -731,8 +731,9 @@ function plannedIcon(section: string, size = 17) {
       return <BarChart3 size={size} />;
     case "autorole":
       return <UserPlus size={size} />;
+    case "youtube-music":
     case "spotify-music":
-      return <Music2 size={size} />;
+      return <Youtube size={size} />;
     case "games":
       return <Gamepad2 size={size} />;
     default:
@@ -741,7 +742,8 @@ function plannedIcon(section: string, size = 17) {
 }
 
 function getPlannedSection(section: string) {
-  return plannedSections.find((item) => item.section === section);
+  const normalizedSection = section === "spotify-music" ? "youtube-music" : section;
+  return plannedSections.find((item) => item.section === normalizedSection);
 }
 
 function navigate(path: string) {
@@ -789,7 +791,7 @@ const guildModuleLabels = [
   { key: "counting", label: "Counting", text: "Gemeinsame Zahlenkette mit Rekord und Rangliste.", icon: ListOrdered },
   { key: "levelSystem", label: "Level-System", text: "Nachrichten-XP, Aufstiege und automatische Levelrollen.", icon: BarChart3 },
   { key: "autorole", label: "Autorole", text: "Mehrere Startrollen für Mitglieder und Bots.", icon: UserPlus },
-  { key: "spotifyMusic", label: "Spotify Music", text: "Musik, Lavalink und DJ-Regeln.", icon: Music2 },
+  { key: "spotifyMusic", label: "YouTube Music", text: "YouTube-Musik, Lavalink und DJ-Regeln.", icon: Youtube },
   { key: "games", label: "Games", text: "Fun- und Mini-Game-Kommandos.", icon: Gamepad2 },
   { key: "moderation", label: "Moderation", text: "Warns, Timeouts und Schutzmodule.", icon: Shield }
 ] as const;
@@ -2358,7 +2360,6 @@ function AdminPageModern() {
   const [saveStatus, setSaveStatus] = useState<string | null>(null);
   const [actionBusy, setActionBusy] = useState<string | null>(null);
   const [actionStatus, setActionStatus] = useState<string | null>(null);
-  const [musicSource, setMusicSource] = useState<"youtube" | "spotify">("spotify");
   const [musicSourceStatus, setMusicSourceStatus] = useState<string | null>(null);
   const [exporting, setExporting] = useState(false);
   const [guildSearch, setGuildSearch] = useState("");
@@ -2376,11 +2377,6 @@ function AdminPageModern() {
       url: ""
     });
   }, [runtime?.updatedAt]);
-
-  useEffect(() => {
-    if (!runtime) return;
-    setMusicSource(reportedMusicSource);
-  }, [reportedMusicSource, runtime?.updatedAt]);
 
   useEffect(() => {
     if (!autoRefresh) return;
@@ -2543,16 +2539,15 @@ function AdminPageModern() {
     try {
       await api("/api/admin/bot/music-source", {
         method: "POST",
-        body: JSON.stringify({ source: musicSource })
+        body: JSON.stringify({ source: "youtube" })
       });
-      const label = musicSource === "youtube" ? "YouTube" : "Spotify";
-      setMusicSourceStatus(`${label} wird vom Bot geprüft und anschließend aktiviert.`);
-      notify({ tone: "success", title: "Playerwechsel gesendet", text: `${label} wird über Lavalink geprüft.` });
+      setMusicSourceStatus("YouTube wird vom Bot geprüft und als einzige Musikquelle aktiviert.");
+      notify({ tone: "success", title: "YouTube-Prüfung gesendet", text: "Der YouTube-Player wird über Lavalink geprüft." });
       window.setTimeout(() => void admin.reload(), 12000);
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Die Musikquelle konnte nicht geändert werden.";
+      const message = error instanceof Error ? error.message : "Der YouTube-Player konnte nicht geprüft werden.";
       setMusicSourceStatus(message);
-      notify({ tone: "danger", title: "Playerwechsel fehlgeschlagen", text: message });
+      notify({ tone: "danger", title: "YouTube-Prüfung fehlgeschlagen", text: message });
     } finally {
       setActionBusy(null);
     }
@@ -2717,47 +2712,30 @@ function AdminPageModern() {
                 <div className="owner-source-control">
                   <div className="owner-source-heading">
                     <div>
-                      <small>Aktiver Player</small>
-                      <strong>{reportedMusicSource === "youtube" ? "YouTube" : "Spotify"}</strong>
+                      <small>Aktiver Musikmodus</small>
+                      <strong>YouTube</strong>
                     </div>
-                    <span className="pill neutral">{music?.searchSource || lavalink?.searchSource || "nicht gemeldet"}</span>
+                    <span className={`pill ${reportedMusicSource === "youtube" ? "ok" : "warn"}`}>
+                      {reportedMusicSource === "youtube" ? "aktiv" : "Bot-Neustart ausstehend"}
+                    </span>
                   </div>
-                  <div className="owner-source-options" role="radiogroup" aria-label="Musikquelle auswählen">
-                    <button
-                      type="button"
-                      className={musicSource === "youtube" ? "active youtube" : ""}
-                      onClick={() => setMusicSource("youtube")}
-                      role="radio"
-                      aria-checked={musicSource === "youtube"}
-                      disabled={actionBusy === "music.source"}
-                    >
+                  <div className="owner-source-options single" aria-label="Aktive Musikquelle">
+                    <div className="owner-source-status active youtube">
                       <span><Youtube size={19} /></span>
                       <span><strong>YouTube</strong><small>ytsearch + ytmsearch</small></span>
                       {reportedMusicSource === "youtube" && <Check size={16} />}
-                    </button>
-                    <button
-                      type="button"
-                      className={musicSource === "spotify" ? "active spotify" : ""}
-                      onClick={() => setMusicSource("spotify")}
-                      role="radio"
-                      aria-checked={musicSource === "spotify"}
-                      disabled={actionBusy === "music.source"}
-                    >
-                      <span><Music2 size={19} /></span>
-                      <span><strong>Spotify</strong><small>LavaSrc + spsearch</small></span>
-                      {reportedMusicSource === "spotify" && <Check size={16} />}
-                    </button>
+                    </div>
                   </div>
                   <div className="owner-source-actions">
-                    <small>Queues bleiben erhalten. Aktive Player werden beim Wechsel getrennt.</small>
+                    <small>Spotify ist vorerst deaktiviert. Songnamen und YouTube-Links laufen ausschließlich über den YouTube-Player.</small>
                     <button
                       type="button"
                       className="primary-action inline"
                       onClick={() => void saveMusicSource()}
-                      disabled={Boolean(actionBusy) || musicSource === reportedMusicSource}
+                      disabled={Boolean(actionBusy)}
                     >
                       {actionBusy === "music.source" ? <Loader2 className="spin" size={16} /> : <Save size={16} />}
-                      {actionBusy === "music.source" ? "Prüfen" : "Player übernehmen"}
+                      {actionBusy === "music.source" ? "Prüfen" : "YouTube prüfen"}
                     </button>
                   </div>
                   <ActionStatus status={musicSourceStatus} />
@@ -3741,7 +3719,7 @@ function Dashboard({ path }: { path: string }) {
             </SidebarGroup>
             <SidebarGroup label="Voice & Unterhaltung" tone="amber">
               <SideLink icon={<Mic2 size={17} />} label="Temp-Voice" section="temp-voice" current={section} guildId={guildId} />
-              <SideLink icon={<Music2 size={17} />} label="Spotify Music" section="spotify-music" current={section} guildId={guildId} badge="geplant" />
+              <SideLink icon={<Youtube size={17} />} label="YouTube Music" section="youtube-music" current={section} guildId={guildId} badge="geplant" />
               <SideLink icon={<Gamepad2 size={17} />} label="Games" section="games" current={section} guildId={guildId} badge="geplant" />
             </SidebarGroup>
             <SidebarGroup label="Sicherheit" tone="red">

@@ -141,7 +141,7 @@ export const botAdminActionSchema = z.object({
 });
 
 export const musicSourceSchema = z.object({
-  source: z.enum(["youtube", "spotify"])
+  source: z.literal("youtube")
 });
 
 export const pterodactylPowerSchema = z.object({

@@ -164,9 +164,9 @@ describe("guild-isolated validation", () => {
     expect(backupActionSchema.parse({ action: "restore", scope: "roles", confirm: true }).scope).toBe("roles");
   });
 
-  it("allows only supported Lavalink music sources", () => {
+  it("allows only the enabled YouTube music source", () => {
     expect(musicSourceSchema.parse({ source: "youtube" }).source).toBe("youtube");
-    expect(musicSourceSchema.parse({ source: "spotify" }).source).toBe("spotify");
+    expect(() => musicSourceSchema.parse({ source: "spotify" })).toThrow();
     expect(() => musicSourceSchema.parse({ source: "soundcloud" })).toThrow();
   });
 

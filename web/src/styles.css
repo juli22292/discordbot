@@ -2917,6 +2917,67 @@ textarea {
   gap: 8px;
 }
 
+.owner-source-options.single {
+  grid-template-columns: 1fr;
+}
+
+.owner-source-status {
+  width: 100%;
+  min-width: 0;
+  min-height: 62px;
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr) 18px;
+  align-items: center;
+  gap: 9px;
+  padding: 9px 10px;
+  border: 1px solid var(--border-soft);
+  border-radius: 8px;
+  color: var(--muted-strong);
+  text-align: left;
+  background: var(--field-bg);
+}
+
+.owner-source-status > span:first-child {
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  border-radius: 7px;
+  background: rgba(119, 183, 255, 0.09);
+}
+
+.owner-source-status > span:nth-child(2),
+.owner-source-status strong,
+.owner-source-status small {
+  min-width: 0;
+  display: block;
+}
+
+.owner-source-status strong {
+  color: var(--text);
+  font-size: 14px;
+}
+
+.owner-source-status small {
+  margin-top: 2px;
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.owner-source-status.active.youtube {
+  border-color: rgba(255, 92, 92, 0.58);
+  color: #ff7272;
+  background: rgba(255, 77, 77, 0.08);
+}
+
+.owner-source-status.active.youtube > span:first-child {
+  color: #ff7272;
+  background: rgba(255, 77, 77, 0.12);
+}
+
 .owner-source-options button {
   width: 100%;
   min-width: 0;
@@ -5678,6 +5739,7 @@ textarea {
 :root[data-theme="light"] .owner-action-card,
 :root[data-theme="light"] .owner-source-control,
 :root[data-theme="light"] .owner-source-options button,
+:root[data-theme="light"] .owner-source-status,
 :root[data-theme="light"] .owner-log-row,
 :root[data-theme="light"] .owner-timeline-item > div,
 :root[data-theme="light"] .owner-security-banner,
