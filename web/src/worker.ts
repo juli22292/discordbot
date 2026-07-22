@@ -43,6 +43,7 @@ import {
   customCommandSchema,
   guildModuleSettingsSchema,
   inviteCreateSchema,
+  levelSettingsSchema,
   logCategories,
   loggingSettingsSchema,
   loggingTestSchema,
@@ -232,6 +233,28 @@ interface CountingSettingsResponse {
   syncError: string | null;
 }
 
+interface LevelRoleReward {
+  level: number;
+  roleId: string;
+}
+
+interface LevelSettingsRow {
+  guild_id: string;
+  enabled: number;
+  announcement_channel_id: string | null;
+  role_rewards: string;
+  sync_status: string;
+  sync_error: string | null;
+}
+
+interface LevelSettingsResponse {
+  enabled: boolean;
+  announcementChannelId: string | null;
+  roleRewards: LevelRoleReward[];
+  syncStatus: string;
+  syncError: string | null;
+}
+
 interface BotRuntimeRow {
   id: string;
   status: string | null;
@@ -291,6 +314,7 @@ interface AdminGuildModules {
   welcome: boolean;
   tempVoice: boolean;
   counting: boolean;
+  levelSystem: boolean;
   spotifyMusic: boolean;
   games: boolean;
   moderation: boolean;
@@ -1081,6 +1105,85 @@ async function ensureCountingSettings(env: Env, guildId: string): Promise<Counti
   return { ...DEFAULT_COUNTING_SETTINGS };
 }
 
+const DEFAULT_LEVEL_SETTINGS: LevelSettingsResponse = {
+  enabled: true,
+  announcementChannelId: null,
+  roleRewards: [],
+  syncStatus: "idle",
+  syncError: null
+};
+
+let levelStorageReady: Promise<void> | null = null;
+
+async function ensureLevelStorage(env: Env): Promise<void> {
+  if (!levelStorageReady) {
+    const db = requireDb(env);
+    levelStorageReady = (async () => {
+      await db.prepare(
+        `CREATE TABLE IF NOT EXISTS level_settings (
+           guild_id TEXT PRIMARY KEY REFERENCES guilds(id) ON DELETE CASCADE,
+           enabled INTEGER NOT NULL DEFAULT 1,
+           announcement_channel_id TEXT,
+           role_rewards TEXT NOT NULL DEFAULT '[]',
+           sync_status TEXT NOT NULL DEFAULT 'idle',
+           sync_error TEXT,
+           created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+           updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+         )`
+      ).run();
+      await db.prepare(
+        "CREATE INDEX IF NOT EXISTS idx_level_settings_sync ON level_settings(sync_status, updated_at)"
+      ).run();
+    })().catch((error) => {
+      levelStorageReady = null;
+      throw error;
+    });
+  }
+
+  await levelStorageReady;
+}
+
+function normalizeLevelSettings(row: LevelSettingsRow | null | undefined): LevelSettingsResponse {
+  if (!row) return { ...DEFAULT_LEVEL_SETTINGS, roleRewards: [] };
+  const rewards = parseJson<unknown>(row.role_rewards, []);
+  const roleRewards = Array.isArray(rewards)
+    ? rewards
+      .filter((reward): reward is Record<string, unknown> => Boolean(reward && typeof reward === "object"))
+      .map((reward) => ({ level: Number(reward.level), roleId: String(reward.roleId ?? reward.role_id ?? "") }))
+      .filter((reward) => Number.isInteger(reward.level) && reward.level >= 1 && reward.level <= 1000 && /^\d{17,20}$/.test(reward.roleId))
+      .sort((a, b) => a.level - b.level)
+    : [];
+
+  return {
+    enabled: Boolean(row.enabled),
+    announcementChannelId: row.announcement_channel_id,
+    roleRewards,
+    syncStatus: row.sync_status || "idle",
+    syncError: row.sync_error
+  };
+}
+
+async function ensureLevelSettings(env: Env, guildId: string): Promise<LevelSettingsResponse> {
+  await ensureLevelStorage(env);
+  const db = requireDb(env);
+  const existing = await first<LevelSettingsRow>(
+    db.prepare(
+      `SELECT guild_id, enabled, announcement_channel_id, role_rewards, sync_status, sync_error
+         FROM level_settings
+        WHERE guild_id = ?`
+    ).bind(guildId)
+  );
+
+  if (existing) return normalizeLevelSettings(existing);
+
+  const timestamp = nowIso();
+  await db.prepare(
+    `INSERT INTO level_settings (guild_id, created_at, updated_at)
+     VALUES (?, ?, ?)`
+  ).bind(guildId, timestamp, timestamp).run();
+  return { ...DEFAULT_LEVEL_SETTINGS, roleRewards: [] };
+}
+
 function mediaPreviewUrl(discordGuildId: string, mediaKey: string): string {
   return `/api/guilds/${discordGuildId}/media?key=${encodeURIComponent(mediaKey)}`;
 }
@@ -1558,6 +1661,7 @@ function normalizeGuildModules(value: unknown): AdminGuildModules {
     welcome: Boolean(raw.welcome),
     tempVoice: Boolean(raw.tempVoice ?? raw.temp_voice),
     counting: Boolean(raw.counting),
+    levelSystem: Boolean(raw.levelSystem ?? raw.level_system),
     spotifyMusic: Boolean(raw.spotifyMusic ?? raw.spotify_music),
     games: Boolean(raw.games),
     moderation: Boolean(raw.moderation)
@@ -2438,6 +2542,97 @@ app.post("/api/guilds/:guildId/counting/reset", async (c) => {
 
   await audit(c.env, access.guild.id, access.session.user.discordUserId, "counting.reset", "counting_settings", oldValue, saved);
   return json(c, { ok: true, eventId, counting: saved });
+});
+
+app.get("/api/guilds/:guildId/level-system", async (c) => {
+  const access = await requireGuildManagementAccess(c, c.req.param("guildId"));
+  const levelSystem = await ensureLevelSettings(c.env, access.guild.id);
+  return json(c, { levelSystem });
+});
+
+app.put("/api/guilds/:guildId/level-system", async (c) => {
+  const access = await requireGuildManagementAccess(c, c.req.param("guildId"));
+  const data = levelSettingsSchema.parse(await readJsonBody(c));
+  const oldValue = await ensureLevelSettings(c.env, access.guild.id);
+
+  if (data.announcementChannelId) {
+    const channel = await first<{ type: string; canSend: number }>(
+      c.env.DB.prepare(
+        `SELECT channel_type AS type, can_send AS canSend
+           FROM guild_channels
+          WHERE guild_id = ? AND discord_channel_id = ?`
+      ).bind(access.guild.id, data.announcementChannelId)
+    );
+    const type = String(channel?.type ?? "").toLowerCase();
+
+    if (!channel || !new Set(["text", "news", "announcement"]).has(type)) {
+      throw new HttpError(400, "level_channel_invalid", "Der Level-up-Kanal muss ein Textkanal sein.");
+    }
+    if (!channel.canSend) {
+      throw new HttpError(400, "level_channel_forbidden", "Der Bot kann im ausgewählten Level-up-Kanal nicht schreiben.");
+    }
+  }
+
+  if (data.roleRewards.length) {
+    const roleRows = await all<{ id: string; managed: number; botCanManage: number }>(
+      c.env.DB.prepare(
+        `SELECT discord_role_id AS id, managed, bot_can_manage AS botCanManage
+           FROM guild_roles
+          WHERE guild_id = ?`
+      ).bind(access.guild.id)
+    );
+    const availableRoles = new Map(roleRows.map((role) => [role.id, role]));
+
+    for (const reward of data.roleRewards) {
+      const role = availableRoles.get(reward.roleId);
+      if (!role || role.managed || !role.botCanManage) {
+        throw new HttpError(
+          400,
+          "level_role_unmanageable",
+          `Die Rolle für Level ${reward.level} kann vom Bot nicht vergeben werden. Prüfe die Rollenhierarchie.`
+        );
+      }
+    }
+  }
+
+  const roleRewards = [...data.roleRewards].sort((a, b) => a.level - b.level);
+  const timestamp = nowIso();
+  await ensureLevelStorage(c.env);
+  await c.env.DB.prepare(
+    `INSERT INTO level_settings (
+       guild_id, enabled, announcement_channel_id, role_rewards,
+       sync_status, sync_error, created_at, updated_at
+     ) VALUES (?, ?, ?, ?, 'pending', NULL, ?, ?)
+     ON CONFLICT(guild_id) DO UPDATE SET
+       enabled = excluded.enabled,
+       announcement_channel_id = excluded.announcement_channel_id,
+       role_rewards = excluded.role_rewards,
+       sync_status = 'pending',
+       sync_error = NULL,
+       updated_at = excluded.updated_at`
+  ).bind(
+    access.guild.id,
+    data.enabled ? 1 : 0,
+    data.announcementChannelId,
+    asJson(roleRewards),
+    timestamp,
+    timestamp
+  ).run();
+
+  const saved: LevelSettingsResponse = {
+    enabled: data.enabled,
+    announcementChannelId: data.announcementChannelId,
+    roleRewards,
+    syncStatus: "pending",
+    syncError: null
+  };
+  const eventId = await enqueueSyncEvent(c.env, access.guild, "level.settings.upsert", {
+    discordGuildId: access.guild.discordGuildId,
+    settings: saved
+  });
+
+  await audit(c.env, access.guild.id, access.session.user.discordUserId, "level.update", "level_settings", oldValue, saved);
+  return json(c, { ok: true, eventId, levelSystem: saved });
 });
 
 app.get("/api/guilds/:guildId/roles", async (c) => {
@@ -3517,6 +3712,7 @@ app.post("/api/internal/bot/snapshot", async (c) => {
       channels?: Array<Record<string, unknown>>;
       roles?: Array<Record<string, unknown>>;
       counting?: Record<string, unknown>;
+      levelSystem?: Record<string, unknown>;
     }>;
     commands?: Array<{ name: string; description?: string; type?: string }>;
   };
@@ -3570,6 +3766,7 @@ app.post("/api/internal/bot/snapshot", async (c) => {
   const channelRows: Array<Record<string, unknown>> = [];
   const roleRows: Array<Record<string, unknown>> = [];
   const countingRows: Array<Record<string, unknown>> = [];
+  const levelRows: Array<Record<string, unknown>> = [];
 
   for (const guild of guilds) {
     const internalGuildId = internalGuildIds.get(guild.id)!;
@@ -3627,9 +3824,38 @@ app.post("/api/internal/bot/snapshot", async (c) => {
       lastUserId: /^\d{17,20}$/.test(String(counting.lastUserId ?? "")) ? String(counting.lastUserId) : null,
       timestamp
     });
+
+    const levelSystem = guild.levelSystem && typeof guild.levelSystem === "object" ? guild.levelSystem : {};
+    const rawRewards = Array.isArray(levelSystem.roleRewards) ? levelSystem.roleRewards : [];
+    const usedLevels = new Set<number>();
+    const usedRoles = new Set<string>();
+    const roleRewards: LevelRoleReward[] = [];
+
+    for (const rawReward of rawRewards) {
+      if (!rawReward || typeof rawReward !== "object") continue;
+      const reward = rawReward as Record<string, unknown>;
+      const level = Number(reward.level);
+      const roleId = String(reward.roleId ?? reward.role_id ?? "");
+      if (!Number.isInteger(level) || level < 1 || level > 1000 || !/^\d{17,20}$/.test(roleId)) continue;
+      if (usedLevels.has(level) || usedRoles.has(roleId)) continue;
+      usedLevels.add(level);
+      usedRoles.add(roleId);
+      roleRewards.push({ level, roleId });
+    }
+
+    levelRows.push({
+      guildId: internalGuildId,
+      enabled: levelSystem.enabled === false ? 0 : 1,
+      announcementChannelId: /^\d{17,20}$/.test(String(levelSystem.announcementChannelId ?? ""))
+        ? String(levelSystem.announcementChannelId)
+        : null,
+      roleRewards: roleRewards.sort((a, b) => a.level - b.level),
+      timestamp
+    });
   }
 
   await ensureCountingStorage(c.env);
+  await ensureLevelStorage(c.env);
   await db.batch([
     db.prepare(
       `INSERT INTO bot_commands (id, command_name, description, command_type, updated_at)
@@ -3749,7 +3975,30 @@ app.post("/api/internal/bot/snapshot", async (c) => {
          sync_status = CASE WHEN counting_settings.sync_status = 'pending' THEN 'pending' ELSE 'synced' END,
          sync_error = CASE WHEN counting_settings.sync_status = 'pending' THEN counting_settings.sync_error ELSE NULL END,
          updated_at = excluded.updated_at`
-    ).bind(asJson(countingRows))
+    ).bind(asJson(countingRows)),
+    db.prepare(
+      `INSERT INTO level_settings (
+         guild_id, enabled, announcement_channel_id, role_rewards,
+         sync_status, sync_error, created_at, updated_at
+       )
+       SELECT
+         json_extract(value, '$.guildId'),
+         json_extract(value, '$.enabled'),
+         json_extract(value, '$.announcementChannelId'),
+         json_extract(value, '$.roleRewards'),
+         'synced', NULL,
+         json_extract(value, '$.timestamp'),
+         json_extract(value, '$.timestamp')
+       FROM json_each(?)
+       WHERE true
+       ON CONFLICT(guild_id) DO UPDATE SET
+         enabled = CASE WHEN level_settings.sync_status = 'pending' THEN level_settings.enabled ELSE excluded.enabled END,
+         announcement_channel_id = CASE WHEN level_settings.sync_status = 'pending' THEN level_settings.announcement_channel_id ELSE excluded.announcement_channel_id END,
+         role_rewards = CASE WHEN level_settings.sync_status = 'pending' THEN level_settings.role_rewards ELSE excluded.role_rewards END,
+         sync_status = CASE WHEN level_settings.sync_status = 'pending' THEN 'pending' ELSE 'synced' END,
+         sync_error = CASE WHEN level_settings.sync_status = 'pending' THEN level_settings.sync_error ELSE NULL END,
+         updated_at = excluded.updated_at`
+    ).bind(asJson(levelRows))
   ]);
 
   return json(c, {
@@ -3759,7 +4008,8 @@ app.post("/api/internal/bot/snapshot", async (c) => {
       commands: commands.length,
       channels: channelRows.length,
       roles: roleRows.length,
-      counting: countingRows.length
+      counting: countingRows.length,
+      levelSettings: levelRows.length
     }
   });
 });
@@ -3957,6 +4207,37 @@ app.post("/api/internal/bot/sync-events/:eventId/complete", async (c) => {
     ).run();
   }
 
+  if (row.action === "level.settings.upsert") {
+    await ensureLevelStorage(c.env);
+    const current = await ensureLevelSettings(c.env, row.guild_id);
+    const result = body.result && typeof body.result === "object"
+      ? body.result as Record<string, unknown>
+      : {};
+    const announcementChannelId = Object.prototype.hasOwnProperty.call(result, "announcementChannelId")
+      ? (/^\d{17,20}$/.test(String(result.announcementChannelId ?? "")) ? String(result.announcementChannelId) : null)
+      : current.announcementChannelId;
+    const parsedRewards = Array.isArray(result.roleRewards)
+      ? result.roleRewards
+        .filter((reward): reward is Record<string, unknown> => Boolean(reward && typeof reward === "object"))
+        .map((reward) => ({ level: Number(reward.level), roleId: String(reward.roleId ?? "") }))
+        .filter((reward) => Number.isInteger(reward.level) && reward.level >= 1 && reward.level <= 1000 && /^\d{17,20}$/.test(reward.roleId))
+        .sort((a, b) => a.level - b.level)
+      : current.roleRewards;
+
+    await c.env.DB.prepare(
+      `UPDATE level_settings
+          SET enabled = ?, announcement_channel_id = ?, role_rewards = ?,
+              sync_status = 'synced', sync_error = NULL, updated_at = ?
+        WHERE guild_id = ?`
+    ).bind(
+      typeof result.enabled === "boolean" ? (result.enabled ? 1 : 0) : (current.enabled ? 1 : 0),
+      announcementChannelId,
+      asJson(parsedRewards),
+      nowIso(),
+      row.guild_id
+    ).run();
+  }
+
   const currentMediaKey = row.action === "guild.member_avatar.update"
     ? String(eventPayload.mediaKey ?? "")
     : row.action === "welcome_settings.upsert"
@@ -4034,6 +4315,15 @@ app.post("/api/internal/bot/sync-events/:eventId/fail", async (c) => {
     await ensureCountingStorage(c.env);
     await c.env.DB.prepare(
       "UPDATE counting_settings SET sync_status = 'failed', sync_error = ?, updated_at = ? WHERE guild_id = ?"
+    )
+      .bind(String(body.error ?? "Unbekannter Fehler").slice(0, 1000), nowIso(), row.guild_id)
+      .run();
+  }
+
+  if (!retry && row.action === "level.settings.upsert") {
+    await ensureLevelStorage(c.env);
+    await c.env.DB.prepare(
+      "UPDATE level_settings SET sync_status = 'failed', sync_error = ?, updated_at = ? WHERE guild_id = ?"
     )
       .bind(String(body.error ?? "Unbekannter Fehler").slice(0, 1000), nowIso(), row.guild_id)
       .run();

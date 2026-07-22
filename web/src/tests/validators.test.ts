@@ -5,6 +5,7 @@ import {
   countingResetSchema,
   countingSettingsSchema,
   customCommandSchema,
+  levelSettingsSchema,
   nicknameSchema,
   safeRedirectPath,
   snowflakeSchema,
@@ -96,5 +97,25 @@ describe("guild-isolated validation", () => {
     expect(() => countingSettingsSchema.parse({ milestoneInterval: 100001 })).toThrow();
     expect(countingResetSchema.parse({ number: 42 }).number).toBe(42);
     expect(() => countingResetSchema.parse({ number: -1 })).toThrow();
+  });
+
+  it("validates level channels and unique role rewards", () => {
+    const settings = levelSettingsSchema.parse({
+      enabled: true,
+      announcementChannelId: "123456789012345678",
+      roleRewards: [
+        { level: 5, roleId: "223456789012345678" },
+        { level: 10, roleId: "323456789012345678" }
+      ]
+    });
+
+    expect(settings.roleRewards).toHaveLength(2);
+    expect(levelSettingsSchema.parse({ announcementChannelId: "" }).announcementChannelId).toBeNull();
+    expect(() => levelSettingsSchema.parse({
+      roleRewards: [
+        { level: 5, roleId: "223456789012345678" },
+        { level: 5, roleId: "323456789012345678" }
+      ]
+    })).toThrow(/Level 5/);
   });
 });

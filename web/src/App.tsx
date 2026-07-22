@@ -223,6 +223,19 @@ type CountingSettings = {
   syncError: string | null;
 };
 
+type LevelRoleReward = {
+  level: number;
+  roleId: string;
+};
+
+type LevelSettings = {
+  enabled: boolean;
+  announcementChannelId: string | null;
+  roleRewards: LevelRoleReward[];
+  syncStatus: string;
+  syncError: string | null;
+};
+
 type AdminRuntime = {
   id: string;
   status: string | null;
@@ -408,6 +421,7 @@ type AdminGuildDetail = {
     welcome: boolean;
     tempVoice: boolean;
     counting: boolean;
+    levelSystem: boolean;
     spotifyMusic: boolean;
     games: boolean;
     moderation: boolean;
@@ -534,6 +548,17 @@ const plannedSections = [
     ]
   },
   {
+    section: "level-system",
+    label: "Level-System",
+    headline: "Level-System",
+    description: "Nachrichten-XP, Levelaufstiege und automatische Rollenbelohnungen zentral verwalten.",
+    items: [
+      { kicker: "Aufstiege", title: "Level-up-Kanal", text: "Optionaler Zielkanal mit automatischem Fallback auf den Nachrichtenkanal." },
+      { kicker: "Belohnungen", title: "Levelrollen", text: "Für frei wählbare Level automatisch passende Discord-Rollen vergeben." },
+      { kicker: "Fortschritt", title: "Nachrichten-XP", text: "Aktivität mit Cooldown fair in XP und sichtbare Level umwandeln." }
+    ]
+  },
+  {
     section: "spotify-music",
     label: "Spotify Music",
     headline: "Spotify Music",
@@ -573,6 +598,8 @@ function plannedIcon(section: string, size = 17) {
       return <Mic2 size={size} />;
     case "counting":
       return <ListOrdered size={size} />;
+    case "level-system":
+      return <BarChart3 size={size} />;
     case "spotify-music":
       return <Music2 size={size} />;
     case "games":
@@ -629,6 +656,7 @@ const guildModuleLabels = [
   { key: "welcome", label: "Begrüßung", text: "Welcome-Nachrichten und Startrollen aktiv halten.", icon: Sparkles },
   { key: "tempVoice", label: "Temp-Voice", text: "Join-to-create und temporäre Sprachräume.", icon: Mic2 },
   { key: "counting", label: "Counting", text: "Gemeinsame Zahlenkette mit Rekord und Rangliste.", icon: ListOrdered },
+  { key: "levelSystem", label: "Level-System", text: "Nachrichten-XP, Aufstiege und automatische Levelrollen.", icon: BarChart3 },
   { key: "spotifyMusic", label: "Spotify Music", text: "Musik, Lavalink und DJ-Regeln.", icon: Music2 },
   { key: "games", label: "Games", text: "Fun- und Mini-Game-Kommandos.", icon: Gamepad2 },
   { key: "moderation", label: "Moderation", text: "Warns, Timeouts und Schutzmodule.", icon: Shield }
@@ -3134,7 +3162,7 @@ function AdminGuildViewPage({ path }: { path: string }) {
                     <h2>Module</h2>
                     <p className="muted">Wichtige Features pro Guild schnell aktivieren.</p>
                   </div>
-                  <span className="pill neutral">{Object.values(modules ?? data.modules).filter(Boolean).length}/6 aktiv</span>
+                  <span className="pill neutral">{Object.values(modules ?? data.modules).filter(Boolean).length}/{guildModuleLabels.length} aktiv</span>
                 </div>
                 <div className="owner-module-grid">
                   {guildModuleLabels.map((module) => {
@@ -3492,7 +3520,7 @@ function Dashboard({ path }: { path: string }) {
               section={item.section}
               current={section}
               guildId={guildId}
-              badge={item.section === "temp-voice" || item.section === "counting" ? undefined : "geplant"}
+              badge={item.section === "temp-voice" || item.section === "counting" || item.section === "level-system" ? undefined : "geplant"}
               key={item.section}
             />
           ))}
@@ -3526,7 +3554,8 @@ function Dashboard({ path }: { path: string }) {
               {section === "welcome" && <WelcomePage guildId={guildId} />}
               {section === "temp-voice" && <TempVoicePage guildId={guildId} />}
               {section === "counting" && <CountingPage guildId={guildId} />}
-              {plannedSection && section !== "welcome" && section !== "logging" && section !== "temp-voice" && section !== "counting" && <PlannedPage section={plannedSection} />}
+              {section === "level-system" && <LevelSystemPage guildId={guildId} />}
+              {plannedSection && section !== "welcome" && section !== "logging" && section !== "temp-voice" && section !== "counting" && section !== "level-system" && <PlannedPage section={plannedSection} />}
             </>
           )}
         </main>
@@ -3923,6 +3952,262 @@ const DEFAULT_COUNTING_DRAFT: CountingSettings = {
   syncStatus: "idle",
   syncError: null
 };
+
+const DEFAULT_LEVEL_DRAFT: LevelSettings = {
+  enabled: true,
+  announcementChannelId: null,
+  roleRewards: [],
+  syncStatus: "idle",
+  syncError: null
+};
+
+function LevelSystemPage({ guildId }: { guildId: string }) {
+  const settings = useApi<{ levelSystem: LevelSettings }>(`/api/guilds/${guildId}/level-system`, [guildId]);
+  const channels = useApi<{ channels: ChannelOption[] }>(`/api/guilds/${guildId}/channels`, [guildId]);
+  const roles = useApi<{ roles: RoleOption[] }>(`/api/guilds/${guildId}/roles`, [guildId]);
+  const [draft, setDraft] = useState<LevelSettings>(DEFAULT_LEVEL_DRAFT);
+  const [rewardLevel, setRewardLevel] = useState(5);
+  const [rewardRoleId, setRewardRoleId] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [status, setStatus] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (settings.data?.levelSystem) setDraft(settings.data.levelSystem);
+  }, [settings.data]);
+
+  const textChannels = useMemo(
+    () => (channels.data?.channels ?? []).filter((channel) => isTextGuildChannel(channel) && channel.canSend !== false),
+    [channels.data]
+  );
+  const manageableRoles = useMemo(
+    () => (roles.data?.roles ?? []).filter((role) => role.botCanManage && !role.managed),
+    [roles.data]
+  );
+  const selectedChannel = textChannels.find((channel) => channel.id === draft.announcementChannelId);
+  const previewReward = draft.roleRewards[0];
+  const previewRole = previewReward ? manageableRoles.find((role) => role.id === previewReward.roleId) : null;
+  const loading = (settings.loading && !settings.data) || (channels.loading && !channels.data) || (roles.loading && !roles.data);
+  const loadError = settings.error || channels.error || roles.error;
+
+  async function persist(nextDraft: LevelSettings = draft): Promise<boolean> {
+    setSaving(true);
+    setStatus(null);
+    try {
+      const response = await api<{ levelSystem: LevelSettings }>(`/api/guilds/${guildId}/level-system`, {
+        method: "PUT",
+        body: JSON.stringify({
+          enabled: nextDraft.enabled,
+          announcementChannelId: nextDraft.announcementChannelId,
+          roleRewards: nextDraft.roleRewards
+        })
+      });
+      setDraft(response.levelSystem);
+      setStatus("Level-System gespeichert. Der Bot übernimmt die Einstellungen jetzt.");
+      await settings.reload();
+      return true;
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : "Das Level-System konnte nicht gespeichert werden.");
+      return false;
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function updateEnabled(enabled: boolean) {
+    const previousDraft = draft;
+    const nextDraft = { ...draft, enabled };
+    setDraft(nextDraft);
+    const saved = await persist(nextDraft);
+    if (!saved) setDraft(previousDraft);
+  }
+
+  function addReward() {
+    if (!rewardRoleId) {
+      setStatus("Wähle zuerst eine Rolle aus.");
+      return;
+    }
+    if (!Number.isInteger(rewardLevel) || rewardLevel < 1 || rewardLevel > 1000) {
+      setStatus("Das Level muss zwischen 1 und 1000 liegen.");
+      return;
+    }
+    if (draft.roleRewards.some((reward) => reward.level === rewardLevel)) {
+      setStatus(`Für Level ${rewardLevel} ist bereits eine Rolle eingetragen.`);
+      return;
+    }
+    if (draft.roleRewards.some((reward) => reward.roleId === rewardRoleId)) {
+      setStatus("Diese Rolle wird bereits als Levelbelohnung verwendet.");
+      return;
+    }
+
+    setDraft({
+      ...draft,
+      roleRewards: [...draft.roleRewards, { level: rewardLevel, roleId: rewardRoleId }].sort((a, b) => a.level - b.level)
+    });
+    setRewardRoleId("");
+    setStatus("Rollenstufe hinzugefügt. Speichere die Einstellungen, um sie an den Bot zu senden.");
+  }
+
+  function removeReward(level: number) {
+    setDraft({ ...draft, roleRewards: draft.roleRewards.filter((reward) => reward.level !== level) });
+    setStatus("Rollenstufe entfernt. Die Änderung ist noch nicht gespeichert.");
+  }
+
+  return (
+    <section className="level-page">
+      <div className="level-hero">
+        <div>
+          <p className="eyebrow"><BarChart3 size={15} /> Community Progress</p>
+          <h2>Level-System</h2>
+          <p>Nachrichten werden zu Fortschritt. Aufstiege landen im richtigen Kanal und Rollen werden automatisch vergeben.</p>
+        </div>
+        <div className="level-hero-actions">
+          <span className={`pill ${draft.syncStatus === "failed" ? "danger" : draft.syncStatus === "synced" ? "ok" : "neutral"}`}>
+            {draft.syncStatus === "failed" ? "Sync fehlgeschlagen" : draft.syncStatus === "pending" ? "Wird synchronisiert" : draft.syncStatus === "synced" ? "Synchronisiert" : "Bereit"}
+          </span>
+          <label className="welcome-switch">
+            <input type="checkbox" checked={draft.enabled} disabled={saving} onChange={(event) => void updateEnabled(event.target.checked)} />
+            <span>{draft.enabled ? "Aktiv" : "Inaktiv"}</span>
+          </label>
+        </div>
+      </div>
+
+      {loading && <LoadingBlock />}
+      {loadError && <Notice tone="danger" text={loadError} />}
+      {draft.syncError && <Notice tone="danger" text={draft.syncError} />}
+      <ActionStatus status={status} />
+
+      {!loading && !loadError && draft.enabled && (
+        <>
+          <section className="level-summary-grid">
+            <StatusTile icon={<MessageSquare size={19} />} label="Nachrichten-XP" value="8-15 XP" tone="ok" />
+            <StatusTile icon={<Clock3 size={19} />} label="Cooldown" value="60 Sek." />
+            <StatusTile icon={<Trophy size={19} />} label="Levelrollen" value={String(draft.roleRewards.length)} tone={draft.roleRewards.length ? "ok" : undefined} />
+            <StatusTile icon={<Hash size={19} />} label="Aufstiegsziel" value={selectedChannel ? `#${selectedChannel.name}` : "Automatisch"} />
+          </section>
+
+          <div className="level-layout">
+            <div className="level-editor">
+              <section className="panel level-control-panel">
+                <div className="panel-title">
+                  <div>
+                    <h2>Levelaufstiege</h2>
+                    <p className="muted">Ein fester Kanal ist optional. Ohne Auswahl antwortet der Bot dort, wo das Level erreicht wurde.</p>
+                  </div>
+                  <RefreshButton
+                    loading={(settings.loading && Boolean(settings.data)) || (channels.loading && Boolean(channels.data)) || (roles.loading && Boolean(roles.data))}
+                    onClick={async () => { await Promise.all([settings.reload(), channels.reload(), roles.reload()]); }}
+                    label="Neu laden"
+                  />
+                </div>
+                <label>
+                  Kanal für Levelaufstiege
+                  <select
+                    value={draft.announcementChannelId ?? ""}
+                    onChange={(event) => setDraft({ ...draft, announcementChannelId: event.target.value || null })}
+                  >
+                    <ChannelSelectOptions channels={textChannels} noneLabel="Automatisch: aktueller Nachrichtenkanal" />
+                  </select>
+                  <small>{selectedChannel ? `Alle Aufstiege werden in #${selectedChannel.name} gesendet.` : "Fallback aktiv: Die Meldung erscheint direkt im Kanal der auslösenden Nachricht."}</small>
+                </label>
+              </section>
+
+              <section className="panel level-control-panel">
+                <div className="panel-title compact">
+                  <div>
+                    <h2>Rollenbelohnungen</h2>
+                    <p className="muted">Mitglieder erhalten alle erreichten Rollen, die der Bot in der Hierarchie verwalten darf.</p>
+                  </div>
+                  <span className="pill neutral">{draft.roleRewards.length}/50</span>
+                </div>
+
+                <div className="level-reward-builder">
+                  <label>
+                    Ab Level
+                    <input
+                      type="number"
+                      min={1}
+                      max={1000}
+                      value={rewardLevel}
+                      onChange={(event) => setRewardLevel(Math.max(1, Math.min(1000, Number(event.target.value) || 1)))}
+                    />
+                  </label>
+                  <label>
+                    Discord-Rolle
+                    <select value={rewardRoleId} onChange={(event) => setRewardRoleId(event.target.value)}>
+                      <option value="">Rolle auswählen</option>
+                      {manageableRoles.map((role) => <option value={role.id} key={role.id}>{role.name}</option>)}
+                    </select>
+                  </label>
+                  <button className="secondary-action icon-action" onClick={addReward} disabled={!rewardRoleId} title="Rollenstufe hinzufügen" aria-label="Rollenstufe hinzufügen">
+                    <Plus size={18} />
+                  </button>
+                </div>
+
+                <div className="level-reward-list">
+                  {draft.roleRewards.length === 0 && (
+                    <div className="level-reward-empty"><Trophy size={20} /><span>Noch keine Rollenbelohnungen eingerichtet.</span></div>
+                  )}
+                  {draft.roleRewards.map((reward) => {
+                    const role = manageableRoles.find((entry) => entry.id === reward.roleId);
+                    return (
+                      <article key={reward.level}>
+                        <strong>Level {reward.level}</strong>
+                        <span className="level-role-name"><i style={{ background: role ? roleColor(role) : "#7b8494" }} />{role?.name ?? `Unbekannte Rolle (${reward.roleId})`}</span>
+                        <button className="secondary-action icon-action" onClick={() => removeReward(reward.level)} title="Rollenstufe entfernen" aria-label={`Rollenstufe ${reward.level} entfernen`}>
+                          <Trash2 size={17} />
+                        </button>
+                      </article>
+                    );
+                  })}
+                </div>
+              </section>
+
+              <section className="panel level-save-panel">
+                <div>
+                  <strong>Konfiguration bereit</strong>
+                  <small>Änderungen werden nach dem Speichern über die sichere Bot-Queue synchronisiert.</small>
+                </div>
+                <button className="primary-action inline" onClick={() => void persist()} disabled={saving}>
+                  {saving ? <Loader2 className="spin" size={16} /> : <Save size={16} />}
+                  Einstellungen speichern
+                </button>
+              </section>
+            </div>
+
+            <aside className="level-preview">
+              <div className="level-preview-heading">
+                <div><span>Discord-Vorschau</span><h2>Levelaufstieg</h2></div>
+                <span className="pill ok">Live</span>
+              </div>
+              <div className="level-discord-message">
+                <div className="level-bot-avatar"><Bot size={20} /></div>
+                <div>
+                  <strong>Modmail Manager <small>APP</small></strong>
+                  <div className="level-embed-preview">
+                    <h3>🎉 Levelaufstieg</h3>
+                    <p><b>@Mitglied</b> ist jetzt Level <strong>{previewReward?.level ?? 5}</strong>.</p>
+                    {previewRole && <p><b>Neue Rolle:</b> <span style={{ color: roleColor(previewRole) }}>@{previewRole.name}</span></p>}
+                  </div>
+                </div>
+              </div>
+              <div className="level-facts">
+                <span><ShieldCheck size={15} /> Rollenhierarchie geprüft</span>
+                <span><Hash size={15} /> Kanal-Fallback aktiv</span>
+                <span><Clock3 size={15} /> XP-Cooldown schützt vor Spam</span>
+              </div>
+              <div className="counting-command-list">
+                <span>/level show</span>
+                <span>/level rank</span>
+                <span>/level channel</span>
+                <span>/levelroles add</span>
+              </div>
+            </aside>
+          </div>
+        </>
+      )}
+    </section>
+  );
+}
 
 function CountingPage({ guildId }: { guildId: string }) {
   const settings = useApi<{ counting: CountingSettings }>(`/api/guilds/${guildId}/counting`, [guildId]);

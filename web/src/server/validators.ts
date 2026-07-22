@@ -150,6 +150,7 @@ export const guildModuleSettingsSchema = z.object({
     welcome: z.boolean().default(false),
     tempVoice: z.boolean().default(false),
     counting: z.boolean().default(false),
+    levelSystem: z.boolean().default(false),
     spotifyMusic: z.boolean().default(false),
     games: z.boolean().default(false),
     moderation: z.boolean().default(false)
@@ -203,6 +204,39 @@ export const countingSettingsSchema = z.object({
 export const countingResetSchema = z.object({
   number: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER).default(0),
   clearRecord: z.boolean().default(false)
+});
+
+const levelRoleRewardSchema = z.object({
+  level: z.number().int().min(1).max(1000),
+  roleId: snowflakeSchema
+});
+
+export const levelSettingsSchema = z.object({
+  enabled: z.boolean().default(true),
+  announcementChannelId: nullableSnowflakeSchema,
+  roleRewards: z.array(levelRoleRewardSchema).max(50).default([])
+}).superRefine((value, context) => {
+  const levels = new Set<number>();
+  const roles = new Set<string>();
+
+  value.roleRewards.forEach((reward, index) => {
+    if (levels.has(reward.level)) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["roleRewards", index, "level"],
+        message: `Für Level ${reward.level} darf nur eine Rolle hinterlegt werden.`
+      });
+    }
+    if (roles.has(reward.roleId)) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["roleRewards", index, "roleId"],
+        message: "Jede Discord-Rolle darf nur einmal als Levelbelohnung verwendet werden."
+      });
+    }
+    levels.add(reward.level);
+    roles.add(reward.roleId);
+  });
 });
 
 export function assertSameGuild(routeGuildId: string, rowGuildId: string): void {
