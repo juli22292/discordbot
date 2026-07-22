@@ -20,6 +20,10 @@ export interface DiscordBotGuild {
   approximate_member_count?: number;
   approximate_presence_count?: number;
   features?: string[];
+  system_channel_id?: string | null;
+  rules_channel_id?: string | null;
+  public_updates_channel_id?: string | null;
+  afk_channel_id?: string | null;
 }
 
 export interface DiscordBotMember {
@@ -55,6 +59,11 @@ export interface DiscordBotChannel {
   type?: number;
   parent_id?: string | null;
   position?: number;
+  topic?: string | null;
+  nsfw?: boolean;
+  rate_limit_per_user?: number;
+  bitrate?: number;
+  user_limit?: number;
 }
 
 export interface DiscordBotInvite {

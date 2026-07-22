@@ -1,7 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
   assertSameGuild,
+  adminChannelUpdateSchema,
   adminMemberModerationSchema,
+  adminResourceDeleteSchema,
+  adminRoleUpdateSchema,
   autoroleSettingsSchema,
   backupActionSchema,
   commandConfigSchema,
@@ -77,6 +80,27 @@ describe("guild-isolated validation", () => {
     expect(() => adminMemberModerationSchema.parse({ action: "timeout" })).toThrow(/Dauer/);
     expect(() => adminMemberModerationSchema.parse({ action: "ban", deleteMessageSeconds: 604801 })).toThrow();
     expect(() => adminMemberModerationSchema.parse({ action: "delete" })).toThrow();
+  });
+
+  it("validates role and channel management payloads", () => {
+    const role = adminRoleUpdateSchema.parse({
+      name: "Support",
+      color: "#4DDB8F",
+      permissions: "1099511635974"
+    });
+    expect(role.permissions).toBe("1099511635974");
+    expect(() => adminRoleUpdateSchema.parse({ name: "Support", color: "#4DDB8F", permissions: "admin" })).toThrow();
+
+    const channel = adminChannelUpdateSchema.parse({
+      name: "team-chat",
+      topic: "Interner Austausch",
+      categoryId: "123456789012345678",
+      slowmodeSeconds: 10
+    });
+    expect(channel.slowmodeSeconds).toBe(10);
+    expect(() => adminChannelUpdateSchema.parse({ name: "voice", bitrateKbps: 500 })).toThrow();
+    expect(adminResourceDeleteSchema.parse({ confirm: true }).confirm).toBe(true);
+    expect(() => adminResourceDeleteSchema.parse({ confirm: false })).toThrow(/bestätigt/);
   });
 
   it("validates complete TempVoice settings", () => {

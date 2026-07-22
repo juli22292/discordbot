@@ -22,6 +22,7 @@ import {
   Download,
   ExternalLink,
   FileJson,
+  Folder,
   Gauge,
   Gamepad2,
   Globe2,
@@ -67,6 +68,7 @@ import {
   UserPlus,
   UserRound,
   UsersRound,
+  Volume2,
   Wifi,
   X,
   Youtube
@@ -515,11 +517,19 @@ type AdminGuildDetail = {
     id: string;
     name: string;
     type: string;
+    typeCode: number;
     categoryId: string | null;
     categoryName: string | null;
     position: number;
     canView: boolean | null;
     canSend: boolean | null;
+    topic: string | null;
+    nsfw: boolean;
+    slowmodeSeconds: number;
+    bitrateKbps: number;
+    userLimit: number;
+    botCanManage: boolean;
+    specialUse: string | null;
   }>;
   members: Array<{
     id: string;
@@ -562,6 +572,37 @@ type AdminGuildDetail = {
 };
 
 type AdminMemberAction = "timeout" | "timeout_remove" | "kick" | "ban";
+
+const ADMIN_ROLE_PERMISSION_OPTIONS = [
+  { bit: "1024", label: "Kanäle sehen", group: "Basis" },
+  { bit: "2048", label: "Nachrichten senden", group: "Basis" },
+  { bit: "16384", label: "Links einbetten", group: "Basis" },
+  { bit: "32768", label: "Dateien anhängen", group: "Basis" },
+  { bit: "65536", label: "Verlauf lesen", group: "Basis" },
+  { bit: "8192", label: "Nachrichten verwalten", group: "Moderation" },
+  { bit: "1099511627776", label: "Timeouts setzen", group: "Moderation" },
+  { bit: "2", label: "Mitglieder kicken", group: "Moderation" },
+  { bit: "4", label: "Mitglieder bannen", group: "Moderation" },
+  { bit: "16", label: "Kanäle verwalten", group: "Verwaltung" },
+  { bit: "268435456", label: "Rollen verwalten", group: "Verwaltung" },
+  { bit: "8", label: "Administrator", group: "Verwaltung", danger: true }
+] as const;
+
+function permissionBitEnabled(value: string | null, bit: string): boolean {
+  try {
+    return (BigInt(value || "0") & BigInt(bit)) === BigInt(bit);
+  } catch {
+    return false;
+  }
+}
+
+function togglePermissionBit(value: string, bit: string): string {
+  try {
+    return (BigInt(value || "0") ^ BigInt(bit)).toString();
+  } catch {
+    return value;
+  }
+}
 
 type AdminGuildInvite = {
   code: string;
@@ -3092,9 +3133,23 @@ function AdminGuildViewPage({ path }: { path: string }) {
   const [modulesSaving, setModulesSaving] = useState(false);
   const [modulesStatus, setModulesStatus] = useState<string | null>(null);
   const [roleEditor, setRoleEditor] = useState<AdminGuildDetail["roles"][number] | null>(null);
-  const [roleDraft, setRoleDraft] = useState({ name: "", color: "#5865F2", hoist: false, mentionable: false });
+  const [roleDraft, setRoleDraft] = useState({ name: "", color: "#5865F2", hoist: false, mentionable: false, permissions: "0" });
   const [roleSaving, setRoleSaving] = useState(false);
   const [roleStatus, setRoleStatus] = useState<string | null>(null);
+  const [roleDeleteConfirmed, setRoleDeleteConfirmed] = useState(false);
+  const [channelEditor, setChannelEditor] = useState<AdminGuildDetail["channels"][number] | null>(null);
+  const [channelDraft, setChannelDraft] = useState({
+    name: "",
+    topic: "",
+    categoryId: "",
+    nsfw: false,
+    slowmodeSeconds: "0",
+    bitrateKbps: "64",
+    userLimit: "0"
+  });
+  const [channelSaving, setChannelSaving] = useState(false);
+  const [channelStatus, setChannelStatus] = useState<string | null>(null);
+  const [channelDeleteConfirmed, setChannelDeleteConfirmed] = useState(false);
   const [memberEditor, setMemberEditor] = useState<AdminGuildDetail["members"][number] | null>(null);
   const [memberAction, setMemberAction] = useState<AdminMemberAction>("timeout");
   const [memberReason, setMemberReason] = useState("");
@@ -3117,9 +3172,26 @@ function AdminGuildViewPage({ path }: { path: string }) {
       name: roleEditor.name,
       color: roleEditor.color,
       hoist: roleEditor.hoist,
-      mentionable: roleEditor.mentionable
+      mentionable: roleEditor.mentionable,
+      permissions: roleEditor.permissions || "0"
     });
+    setRoleDeleteConfirmed(false);
   }, [roleEditor?.id]);
+
+  useEffect(() => {
+    if (!channelEditor) return;
+    setChannelDraft({
+      name: channelEditor.name,
+      topic: channelEditor.topic || "",
+      categoryId: channelEditor.categoryId || "",
+      nsfw: channelEditor.nsfw,
+      slowmodeSeconds: String(channelEditor.slowmodeSeconds),
+      bitrateKbps: String(channelEditor.bitrateKbps),
+      userLimit: String(channelEditor.userLimit)
+    });
+    setChannelDeleteConfirmed(false);
+    setChannelStatus(null);
+  }, [channelEditor?.id]);
 
   useEffect(() => {
     if (!memberEditor) return;
@@ -3148,6 +3220,10 @@ function AdminGuildViewPage({ path }: { path: string }) {
     return (data?.channels ?? []).filter((channel) => {
       return isInviteGuildChannel(channel);
     });
+  }, [data?.channels]);
+
+  const guildCategories = useMemo(() => {
+    return (data?.channels ?? []).filter((channel) => channel.typeCode === 4);
   }, [data?.channels]);
 
   useEffect(() => {
@@ -3267,6 +3343,10 @@ function AdminGuildViewPage({ path }: { path: string }) {
 
   async function saveRole() {
     if (!validGuildId || !roleEditor) return;
+    if (!roleEditor.botCanManage) {
+      setRoleStatus("Diese Rolle ist durch Discord oder die Rollen-Hierarchie geschützt.");
+      return;
+    }
     setRoleSaving(true);
     setRoleStatus(null);
     try {
@@ -3274,13 +3354,86 @@ function AdminGuildViewPage({ path }: { path: string }) {
         method: "PATCH",
         body: JSON.stringify(roleDraft)
       });
-      setRoleStatus("Rolle wurde aktualisiert.");
-      setRoleEditor(null);
-      await detail.reload();
+      setRoleStatus("Die Rollenänderungen wurden sicher an den Bot gesendet.");
+      window.setTimeout(() => void detail.reload(), 5000);
     } catch (error) {
       setRoleStatus(error instanceof Error ? error.message : "Rolle konnte nicht gespeichert werden.");
     } finally {
       setRoleSaving(false);
+    }
+  }
+
+  async function deleteRole() {
+    if (!validGuildId || !roleEditor || !roleDeleteConfirmed || !roleEditor.botCanManage) return;
+    setRoleSaving(true);
+    setRoleStatus(null);
+    try {
+      await api(`/api/admin/discordguilds/${guildId}/roles/${roleEditor.id}`, {
+        method: "DELETE",
+        body: JSON.stringify({ confirm: true })
+      });
+      setRoleStatus("Das Löschen der Rolle wurde an den Bot gesendet.");
+      setRoleDeleteConfirmed(false);
+      window.setTimeout(() => {
+        setRoleEditor(null);
+        void detail.reload();
+      }, 5000);
+    } catch (error) {
+      setRoleStatus(error instanceof Error ? error.message : "Rolle konnte nicht gelöscht werden.");
+    } finally {
+      setRoleSaving(false);
+    }
+  }
+
+  async function saveChannel() {
+    if (!validGuildId || !channelEditor) return;
+    if (!channelEditor.botCanManage) {
+      setChannelStatus("Dem Bot fehlt die Berechtigung, Kanäle zu verwalten.");
+      return;
+    }
+    setChannelSaving(true);
+    setChannelStatus(null);
+    try {
+      await api(`/api/admin/discordguilds/${guildId}/channels/${channelEditor.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({
+          name: channelDraft.name,
+          topic: channelDraft.topic.trim() || null,
+          categoryId: channelEditor.typeCode === 4 ? null : channelDraft.categoryId || null,
+          nsfw: channelDraft.nsfw,
+          slowmodeSeconds: Number(channelDraft.slowmodeSeconds),
+          bitrateKbps: Number(channelDraft.bitrateKbps),
+          userLimit: Number(channelDraft.userLimit)
+        })
+      });
+      setChannelStatus(`${channelEditor.typeCode === 4 ? "Kategorie" : "Kanal"} wurde sicher an den Bot gesendet.`);
+      window.setTimeout(() => void detail.reload(), 5000);
+    } catch (error) {
+      setChannelStatus(error instanceof Error ? error.message : "Kanal konnte nicht gespeichert werden.");
+    } finally {
+      setChannelSaving(false);
+    }
+  }
+
+  async function deleteChannel() {
+    if (!validGuildId || !channelEditor || !channelDeleteConfirmed || !channelEditor.botCanManage) return;
+    setChannelSaving(true);
+    setChannelStatus(null);
+    try {
+      await api(`/api/admin/discordguilds/${guildId}/channels/${channelEditor.id}`, {
+        method: "DELETE",
+        body: JSON.stringify({ confirm: true })
+      });
+      setChannelStatus(`Das Löschen ${channelEditor.typeCode === 4 ? "der Kategorie" : "des Kanals"} wurde an den Bot gesendet.`);
+      setChannelDeleteConfirmed(false);
+      window.setTimeout(() => {
+        setChannelEditor(null);
+        void detail.reload();
+      }, 5000);
+    } catch (error) {
+      setChannelStatus(error instanceof Error ? error.message : "Kanal konnte nicht gelöscht werden.");
+    } finally {
+      setChannelSaving(false);
     }
   }
 
@@ -3356,6 +3509,8 @@ function AdminGuildViewPage({ path }: { path: string }) {
     kick: "Mitglied kicken",
     ban: "Mitglied bannen"
   };
+  const selectedChannelIsText = Boolean(channelEditor && [0, 5, 15, 16].includes(channelEditor.typeCode));
+  const selectedChannelIsVoice = Boolean(channelEditor && [2, 13].includes(channelEditor.typeCode));
   const missingPermissions = data?.permissionChecks.filter((check) => check.ok === false).length ?? 0;
 
   return (
@@ -3633,39 +3788,75 @@ function AdminGuildViewPage({ path }: { path: string }) {
                 <div className="owner-detail-list">
                   {roleEditor && (
                     <article className="owner-role-editor">
-                      <div className="panel-title">
-                        <div>
-                          <h3>Rolle bearbeiten</h3>
-                          <p className="muted">{roleEditor.id}</p>
+                      <div className="owner-resource-editor-head">
+                        <div className="owner-resource-identity">
+                          <span className="role-dot" style={{ backgroundColor: roleDraft.color }} />
+                          <div>
+                            <h3>{roleEditor.name}</h3>
+                            <p className="muted">Rolle · {roleEditor.id} · Position {roleEditor.position}</p>
+                          </div>
                         </div>
-                        <span className={roleEditor.botCanManage ? "pill ok" : "pill warn"}>{roleEditor.botCanManage ? "verwaltbar" : "Hierarchie prüfen"}</span>
+                        <span className={roleEditor.botCanManage ? "pill ok" : "pill danger"}>{roleEditor.botCanManage ? "Bot kann verwalten" : "Geschützt"}</span>
                       </div>
-                      <div className="form-grid">
+
+                      {!roleEditor.botCanManage && <Notice tone="warning" text={roleEditor.managed ? "Diese Rolle wird von Discord oder einer Integration verwaltet." : roleEditor.id === guildId ? "Die @everyone-Rolle ist in dieser Verwaltung geschützt." : "Die Rolle liegt gleich hoch oder höher als die höchste Bot-Rolle."} />}
+
+                      <div className="form-grid owner-resource-basics">
                         <label>
-                          Name
+                          Rollenname
                           <input value={roleDraft.name} maxLength={100} onChange={(event) => setRoleDraft({ ...roleDraft, name: event.target.value })} />
                         </label>
-                        <label>
+                        <label className="owner-color-field">
                           Farbe
-                          <input type="color" value={roleDraft.color} onChange={(event) => setRoleDraft({ ...roleDraft, color: event.target.value })} />
+                          <span><input type="color" value={roleDraft.color} onChange={(event) => setRoleDraft({ ...roleDraft, color: event.target.value })} /><code>{roleDraft.color.toUpperCase()}</code></span>
                         </label>
                         <label className="toggle">
                           <input type="checkbox" checked={roleDraft.hoist} onChange={(event) => setRoleDraft({ ...roleDraft, hoist: event.target.checked })} />
-                          Separat anzeigen
+                          Rolle separat anzeigen
                         </label>
                         <label className="toggle">
                           <input type="checkbox" checked={roleDraft.mentionable} onChange={(event) => setRoleDraft({ ...roleDraft, mentionable: event.target.checked })} />
-                          Erwähnbar
+                          Rolle ist erwähnbar
                         </label>
                       </div>
+
+                      <div className="owner-resource-section-head">
+                        <div>
+                          <h4>Berechtigungen</h4>
+                          <p className="muted">Die wichtigsten Discord-Rechte dieser Rolle gezielt schalten.</p>
+                        </div>
+                        <span className="pill neutral">{ADMIN_ROLE_PERMISSION_OPTIONS.filter((option) => permissionBitEnabled(roleDraft.permissions, option.bit)).length} aktiv</span>
+                      </div>
+                      <div className="owner-role-permissions">
+                        {ADMIN_ROLE_PERMISSION_OPTIONS.map((option) => {
+                          const checked = permissionBitEnabled(roleDraft.permissions, option.bit);
+                          const dangerous = "danger" in option && option.danger;
+                          return (
+                            <label key={option.bit} className={`${checked ? "active" : ""}${dangerous ? " danger" : ""}`}>
+                              <input type="checkbox" checked={checked} onChange={() => setRoleDraft({ ...roleDraft, permissions: togglePermissionBit(roleDraft.permissions, option.bit) })} />
+                              <span><strong>{option.label}</strong><small>{option.group}</small></span>
+                            </label>
+                          );
+                        })}
+                      </div>
+
+                      {permissionBitEnabled(roleDraft.permissions, "8") && <Notice tone="warning" text="Administrator umgeht sämtliche Kanalberechtigungen. Vergib dieses Recht nur bewusst." />}
+
+                      <label className="owner-member-confirm">
+                        <input type="checkbox" checked={roleDeleteConfirmed} onChange={(event) => setRoleDeleteConfirmed(event.target.checked)} disabled={!roleEditor.botCanManage} />
+                        <span>Ich bestätige, dass diese Rolle endgültig gelöscht werden darf.</span>
+                      </label>
                       <ActionStatus status={roleStatus} />
                       <div className="form-actions">
-                        <button className="primary-action inline" onClick={saveRole} disabled={roleSaving || roleEditor.managed}>
+                        <button className="primary-action inline" onClick={saveRole} disabled={roleSaving || !roleEditor.botCanManage}>
                           {roleSaving ? <Loader2 className="spin" size={16} /> : <Save size={16} />}
                           Rolle speichern
                         </button>
-                        <button type="button" className="secondary-action inline" onClick={() => setRoleEditor(null)}>
-                          Schließen
+                        <button type="button" className="danger-action inline" onClick={deleteRole} disabled={roleSaving || !roleEditor.botCanManage || !roleDeleteConfirmed}>
+                          <Trash2 size={16} /> Rolle löschen
+                        </button>
+                        <button type="button" className="secondary-action inline" onClick={() => setRoleEditor(null)} disabled={roleSaving}>
+                          <X size={16} /> Schließen
                         </button>
                       </div>
                     </article>
@@ -3686,7 +3877,7 @@ function AdminGuildViewPage({ path }: { path: string }) {
                           setRoleStatus(null);
                           setRoleEditor(role);
                         }}>
-                          Bearbeiten
+                          <Pencil size={14} /> Verwalten
                         </button>
                       </div>
                     </article>
@@ -3826,9 +4017,102 @@ function AdminGuildViewPage({ path }: { path: string }) {
 
               {activeTab === "channels" && (
                 <div className="owner-detail-list">
+                  {channelEditor && (
+                    <article className="owner-channel-editor">
+                      <div className="owner-resource-editor-head">
+                        <div className="owner-resource-identity">
+                          <span className={`channel-symbol ${channelEditor.typeCode === 4 ? "category" : selectedChannelIsVoice ? "voice" : ""}`}>
+                            {channelEditor.typeCode === 4 ? <Folder size={17} /> : selectedChannelIsVoice ? <Volume2 size={17} /> : <Hash size={17} />}
+                          </span>
+                          <div>
+                            <h3>{channelEditor.name}</h3>
+                            <p className="muted">{channelEditor.type} · {channelEditor.id}</p>
+                          </div>
+                        </div>
+                        <div className="owner-member-state">
+                          {channelEditor.specialUse && <span className="pill warn">{channelEditor.specialUse}</span>}
+                          <span className={channelEditor.botCanManage ? "pill ok" : "pill danger"}>{channelEditor.botCanManage ? "Bot kann verwalten" : "Rechte fehlen"}</span>
+                        </div>
+                      </div>
+
+                      {!channelEditor.botCanManage && <Notice tone="warning" text="Dem Bot fehlt die Discord-Berechtigung „Kanäle verwalten“." />}
+
+                      <div className="form-grid owner-resource-basics">
+                        <label>
+                          {channelEditor.typeCode === 4 ? "Kategoriename" : "Kanalname"}
+                          <input value={channelDraft.name} maxLength={100} onChange={(event) => setChannelDraft({ ...channelDraft, name: event.target.value })} />
+                        </label>
+                        {channelEditor.typeCode !== 4 && (
+                          <label>
+                            Kategorie
+                            <select value={channelDraft.categoryId} onChange={(event) => setChannelDraft({ ...channelDraft, categoryId: event.target.value })}>
+                              <option value="">Keine Kategorie</option>
+                              {guildCategories.filter((category) => category.id !== channelEditor.id).map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}
+                            </select>
+                          </label>
+                        )}
+                        {selectedChannelIsText && (
+                          <label className="owner-channel-topic">
+                            Kanalthema
+                            <textarea value={channelDraft.topic} maxLength={1024} rows={3} placeholder="Optionales Thema oder kurze Kanalbeschreibung" onChange={(event) => setChannelDraft({ ...channelDraft, topic: event.target.value })} />
+                            <small>{channelDraft.topic.length}/1024 Zeichen</small>
+                          </label>
+                        )}
+                        {selectedChannelIsText && (
+                          <label>
+                            Slowmode in Sekunden
+                            <input type="number" min={0} max={21600} value={channelDraft.slowmodeSeconds} onChange={(event) => setChannelDraft({ ...channelDraft, slowmodeSeconds: event.target.value })} />
+                          </label>
+                        )}
+                        {selectedChannelIsText && (
+                          <label className="toggle">
+                            <input type="checkbox" checked={channelDraft.nsfw} onChange={(event) => setChannelDraft({ ...channelDraft, nsfw: event.target.checked })} />
+                            Altersbeschränkter Kanal (NSFW)
+                          </label>
+                        )}
+                        {selectedChannelIsVoice && (
+                          <label>
+                            Bitrate in kbit/s
+                            <input type="number" min={8} max={384} value={channelDraft.bitrateKbps} onChange={(event) => setChannelDraft({ ...channelDraft, bitrateKbps: event.target.value })} />
+                          </label>
+                        )}
+                        {selectedChannelIsVoice && (
+                          <label>
+                            Nutzerlimit
+                            <input type="number" min={0} max={99} value={channelDraft.userLimit} onChange={(event) => setChannelDraft({ ...channelDraft, userLimit: event.target.value })} />
+                          </label>
+                        )}
+                      </div>
+
+                      {channelEditor.typeCode === 4 && (
+                        <Notice tone="warning" text={`${data.channels.filter((channel) => channel.categoryId === channelEditor.id).length} Kanal/Kanäle liegen in dieser Kategorie. Beim Löschen bleiben sie bestehen und werden nicht mehr kategorisiert.`} />
+                      )}
+                      {channelEditor.specialUse && <Notice tone="warning" text={`Dieser Kanal wird von Discord als ${channelEditor.specialUse} verwendet. Prüfe die Servereinstellungen vor dem Löschen.`} />}
+
+                      <label className="owner-member-confirm">
+                        <input type="checkbox" checked={channelDeleteConfirmed} onChange={(event) => setChannelDeleteConfirmed(event.target.checked)} disabled={!channelEditor.botCanManage} />
+                        <span>Ich bestätige, dass {channelEditor.typeCode === 4 ? "diese Kategorie" : "dieser Kanal"} endgültig gelöscht werden darf.</span>
+                      </label>
+                      <ActionStatus status={channelStatus} />
+                      <div className="form-actions">
+                        <button type="button" className="primary-action inline" onClick={saveChannel} disabled={channelSaving || !channelEditor.botCanManage}>
+                          {channelSaving ? <Loader2 className="spin" size={16} /> : <Save size={16} />}
+                          Speichern
+                        </button>
+                        <button type="button" className="danger-action inline" onClick={deleteChannel} disabled={channelSaving || !channelEditor.botCanManage || !channelDeleteConfirmed}>
+                          <Trash2 size={16} /> {channelEditor.typeCode === 4 ? "Kategorie löschen" : "Kanal löschen"}
+                        </button>
+                        <button type="button" className="secondary-action inline" onClick={() => setChannelEditor(null)} disabled={channelSaving}>
+                          <X size={16} /> Schließen
+                        </button>
+                      </div>
+                    </article>
+                  )}
                   {visibleChannels.map((channel) => (
                     <article key={channel.id} className="owner-detail-row">
-                      <span className="channel-symbol">#</span>
+                      <span className={`channel-symbol ${channel.typeCode === 4 ? "category" : [2, 13].includes(channel.typeCode) ? "voice" : ""}`}>
+                        {channel.typeCode === 4 ? <Folder size={17} /> : [2, 13].includes(channel.typeCode) ? <Volume2 size={17} /> : <Hash size={17} />}
+                      </span>
                       <div>
                         <strong>{channel.name}</strong>
                         <small>{channel.id}{channel.categoryName ? ` · ${channel.categoryName}` : ""}</small>
@@ -3836,7 +4120,11 @@ function AdminGuildViewPage({ path }: { path: string }) {
                       <div className="owner-detail-tags">
                         <span>{channel.type}</span>
                         <span>Position {channel.position}</span>
+                        {channel.specialUse && <span>{channel.specialUse}</span>}
                         {channel.canSend !== null && <span>{channel.canSend ? "sendbar" : "nicht sendbar"}</span>}
+                        <button type="button" className="mini-text-button" onClick={() => setChannelEditor(channel)} title="Kanal oder Kategorie verwalten">
+                          <Pencil size={14} /> Verwalten
+                        </button>
                       </div>
                     </article>
                   ))}

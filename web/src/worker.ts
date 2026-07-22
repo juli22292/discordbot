@@ -28,14 +28,15 @@ import {
   fetchDiscordGuilds,
   fetchDiscordUser,
   refreshDiscordToken,
-  updateDiscordGuildRole,
   updateDiscordBotGuildNickname
 } from "./server/discord";
 import { PANEL_OWNER_DISCORD_USER_ID, canManageGuild, canUseOwnerAdmin, permissionLabel } from "./server/permissions";
 import type { ActiveSession, DiscordGuild, Env, GuildAccess, SessionUser, TokenData } from "./server/types";
 import {
   assertSameGuild,
+  adminChannelUpdateSchema,
   adminMemberModerationSchema,
+  adminResourceDeleteSchema,
   adminRoleUpdateSchema,
   autoroleSettingsSchema,
   backupActionSchema,
@@ -1877,10 +1878,6 @@ function discordRoleColor(value: unknown): string {
   return `#${Math.max(0, Math.min(0xffffff, color)).toString(16).padStart(6, "0").toUpperCase()}`;
 }
 
-function discordRoleColorInt(value: string): number {
-  return parseInt(value.replace("#", ""), 16);
-}
-
 const DISCORD_PERMISSION_BITS = {
   createInstantInvite: 1n,
   kickMembers: 2n,
@@ -1987,7 +1984,8 @@ function discordChannelTypeLabel(value: unknown): string {
       11: "Thread",
       12: "Privater Thread",
       13: "Stage",
-      15: "Forum"
+      15: "Forum",
+      16: "Media"
     };
     return labels[numeric] ?? `Typ ${numeric}`;
   }
@@ -2025,16 +2023,41 @@ function normalizeAdminRole(role: Record<string, unknown>) {
 }
 
 function normalizeAdminChannel(channel: Record<string, unknown>) {
+  const rawType = channel.type ?? channel.channel_type;
+  const numericType = Number(rawType);
   return {
     id: String(channel.id ?? channel.discord_channel_id ?? ""),
     name: String(channel.name ?? "unbenannt"),
-    type: discordChannelTypeLabel(channel.type ?? channel.channel_type),
-    categoryId: channel.categoryId ? String(channel.categoryId) : channel.category_id ? String(channel.category_id) : null,
+    type: discordChannelTypeLabel(rawType),
+    typeCode: Number.isFinite(numericType) ? numericType : -1,
+    categoryId: channel.categoryId ? String(channel.categoryId) : channel.category_id ? String(channel.category_id) : channel.parent_id ? String(channel.parent_id) : null,
     categoryName: channel.categoryName ? String(channel.categoryName) : channel.category_name ? String(channel.category_name) : null,
     position: Number(channel.position ?? 0),
     canView: channel.canView !== undefined ? Boolean(channel.canView) : channel.can_view !== undefined ? Boolean(channel.can_view) : null,
-    canSend: channel.canSend !== undefined ? Boolean(channel.canSend) : channel.can_send !== undefined ? Boolean(channel.can_send) : null
+    canSend: channel.canSend !== undefined ? Boolean(channel.canSend) : channel.can_send !== undefined ? Boolean(channel.can_send) : null,
+    topic: channel.topic ? String(channel.topic) : null,
+    nsfw: Boolean(channel.nsfw),
+    slowmodeSeconds: Number(channel.rate_limit_per_user ?? channel.slowmodeSeconds ?? 0),
+    bitrateKbps: Math.max(8, Math.round(Number(channel.bitrate ?? 64_000) / 1000)),
+    userLimit: Number(channel.user_limit ?? channel.userLimit ?? 0)
   };
+}
+
+function highestRolePosition(roleIds: string[], roles: Array<ReturnType<typeof normalizeAdminRole>>): number {
+  const positions = new Map(roles.map((role) => [role.id, role.position]));
+  return Math.max(0, ...roleIds.map((roleId) => positions.get(roleId) ?? 0));
+}
+
+function adminRoleManageability(
+  role: ReturnType<typeof normalizeAdminRole>,
+  guildId: string,
+  botMember: Record<string, unknown> | null,
+  roles: Array<ReturnType<typeof normalizeAdminRole>>
+) {
+  if (!botMember) return false;
+  if (role.id === guildId || role.managed) return false;
+  const botRoleIds = Array.isArray(botMember.roles) ? botMember.roles.map((roleId) => String(roleId)) : [];
+  return role.position < highestRolePosition(botRoleIds, roles);
 }
 
 function normalizeAdminMember(member: Record<string, unknown>) {
@@ -2068,10 +2091,9 @@ function adminMemberManageability(
   if (member.id === guildOwnerId) return { manageable: false, manageBlockReason: "Der Serverbesitzer ist geschützt." };
   if (member.id === botUserId) return { manageable: false, manageBlockReason: "Der Bot kann sich nicht selbst moderieren." };
 
-  const positions = new Map(roles.map((role) => [role.id, role.position]));
   const botRoleIds = Array.isArray(botMember.roles) ? botMember.roles.map((roleId) => String(roleId)) : [];
-  const botTopPosition = Math.max(0, ...botRoleIds.map((roleId) => positions.get(roleId) ?? 0));
-  const memberTopPosition = Math.max(0, ...member.roles.map((roleId) => positions.get(roleId) ?? 0));
+  const botTopPosition = highestRolePosition(botRoleIds, roles);
+  const memberTopPosition = highestRolePosition(member.roles, roles);
 
   if (memberTopPosition >= botTopPosition) {
     return { manageable: false, manageBlockReason: "Die höchste Rolle liegt gleich hoch oder höher als die Bot-Rolle." };
@@ -4015,8 +4037,28 @@ app.get("/api/admin/discordguilds/:guildId", async (c) => {
     }
   }
 
-  const roles = (liveRoles.length ? liveRoles : dbRoles).map(normalizeAdminRole).filter((role) => role.id);
-  const channels = (liveChannels.length ? liveChannels : dbChannels).map(normalizeAdminChannel).filter((channel) => channel.id);
+  const baseRoles = (liveRoles.length ? liveRoles : dbRoles).map(normalizeAdminRole).filter((role) => role.id);
+  const permissionChecks = buildPermissionChecks(guildId, liveRoles.length ? liveRoles : dbRoles, botMember);
+  const canManageRoles = permissionChecks.find((check) => check.key === "manageRoles")?.ok === true;
+  const roles = baseRoles.map((role) => ({
+    ...role,
+    botCanManage: canManageRoles && adminRoleManageability(role, guildId, botMember, baseRoles)
+  }));
+  const canManageChannels = permissionChecks.find((check) => check.key === "manageChannels")?.ok ?? null;
+  const specialChannelIds = new Map<string, string>([
+    [String(liveGuild?.system_channel_id ?? ""), "Systemkanal"],
+    [String(liveGuild?.rules_channel_id ?? ""), "Regelkanal"],
+    [String(liveGuild?.public_updates_channel_id ?? ""), "Community-Updates"],
+    [String(liveGuild?.afk_channel_id ?? ""), "AFK-Kanal"]
+  ].filter(([id]) => Boolean(id)) as Array<[string, string]>);
+  const baseChannels = (liveChannels.length ? liveChannels : dbChannels).map(normalizeAdminChannel).filter((channel) => channel.id);
+  const categoryNames = new Map(baseChannels.filter((channel) => channel.typeCode === 4).map((channel) => [channel.id, channel.name]));
+  const channels = baseChannels.map((channel) => ({
+    ...channel,
+    categoryName: channel.categoryName ?? (channel.categoryId ? categoryNames.get(channel.categoryId) ?? null : null),
+    botCanManage: canManageChannels === true,
+    specialUse: specialChannelIds.get(channel.id) ?? null
+  }));
   const guildOwnerValue = liveGuild?.owner_id ?? runtimeGuild?.ownerId ?? null;
   const guildOwnerId = guildOwnerValue ? String(guildOwnerValue) : null;
   const botUserId = c.env.DISCORD_CLIENT_ID?.trim() || null;
@@ -4028,7 +4070,6 @@ app.get("/api/admin/discordguilds/:guildId", async (c) => {
       ...adminMemberManageability(member, guildOwnerId, botUserId, botMember, roles)
     }));
   const moduleSettings = normalizeGuildModules(runtimeGuild?.modules);
-  const permissionChecks = buildPermissionChecks(guildId, liveRoles.length ? liveRoles : dbRoles, botMember);
   const memberCount = finiteNumber(liveGuild?.member_count)
     ?? finiteNumber(liveGuild?.approximate_member_count)
     ?? finiteNumber(runtimeGuild?.memberCount)
@@ -4224,15 +4265,116 @@ app.patch("/api/admin/discordguilds/:guildId/roles/:roleId", async (c) => {
   if (roleId === guildId) throw new HttpError(400, "role_everyone_forbidden", "Die @everyone-Rolle kann nicht bearbeitet werden.");
   if (Boolean(role.managed)) throw new HttpError(400, "role_managed_forbidden", "Verwaltete Discord-/Bot-Rollen können nicht bearbeitet werden.");
 
-  const updated = await updateDiscordGuildRole(c.env, guildId, roleId, {
-    name: data.name,
-    color: discordRoleColorInt(data.color),
-    hoist: data.hoist,
-    mentionable: data.mentionable
+  const eventId = await enqueueSyncEvent(c.env, {
+    id: guild.id,
+    discordGuildId: guild.discord_guild_id,
+    name: guild.name,
+    icon: guild.icon,
+    botJoinedAt: guild.bot_joined_at
+  }, "guild.role.update", {
+    discordGuildId: guild.discord_guild_id,
+    roleId,
+    ...data,
+    actorDiscordUserId: session.user.discordUserId,
+    actorUsername: session.user.displayName || session.user.username
   });
 
-  await audit(c.env, guild.id, session.user.discordUserId, "owner.guild.role.update", roleId, normalizeAdminRole(role), normalizeAdminRole(updated as unknown as Record<string, unknown>));
-  return json(c, { ok: true, role: normalizeAdminRole(updated as unknown as Record<string, unknown>) });
+  await audit(c.env, guild.id, session.user.discordUserId, "owner.guild.role.update", roleId, normalizeAdminRole(role), { eventId, ...data });
+  return json(c, { ok: true, eventId, roleId });
+});
+
+app.delete("/api/admin/discordguilds/:guildId/roles/:roleId", async (c) => {
+  const session = await requireAdminSession(c);
+  const guildId = snowflakeSchema.parse(c.req.param("guildId"));
+  const roleId = snowflakeSchema.parse(c.req.param("roleId"));
+  const guild = await requireAdminGuild(c.env, guildId);
+  adminResourceDeleteSchema.parse(await readJsonBody(c));
+  const roles = await fetchDiscordBotGuildRoles(c.env, guildId) as unknown as Record<string, unknown>[];
+  const role = roles.find((item) => String(item.id) === roleId);
+
+  if (!role) throw new HttpError(404, "role_not_found", "Diese Rolle wurde auf der Guild nicht gefunden.");
+  if (roleId === guildId) throw new HttpError(400, "role_everyone_forbidden", "Die @everyone-Rolle kann nicht gelöscht werden.");
+  if (Boolean(role.managed)) throw new HttpError(400, "role_managed_forbidden", "Verwaltete Discord-/Bot-Rollen können nicht gelöscht werden.");
+
+  const eventId = await enqueueSyncEvent(c.env, {
+    id: guild.id,
+    discordGuildId: guild.discord_guild_id,
+    name: guild.name,
+    icon: guild.icon,
+    botJoinedAt: guild.bot_joined_at
+  }, "guild.role.delete", {
+    discordGuildId: guild.discord_guild_id,
+    roleId,
+    actorDiscordUserId: session.user.discordUserId,
+    actorUsername: session.user.displayName || session.user.username
+  });
+
+  await audit(c.env, guild.id, session.user.discordUserId, "owner.guild.role.delete", roleId, normalizeAdminRole(role), { eventId });
+  return json(c, { ok: true, eventId, roleId });
+});
+
+app.patch("/api/admin/discordguilds/:guildId/channels/:channelId", async (c) => {
+  const session = await requireAdminSession(c);
+  const guildId = snowflakeSchema.parse(c.req.param("guildId"));
+  const channelId = snowflakeSchema.parse(c.req.param("channelId"));
+  const guild = await requireAdminGuild(c.env, guildId);
+  const data = adminChannelUpdateSchema.parse(await readJsonBody(c));
+  const channels = await fetchDiscordBotGuildChannels(c.env, guildId) as unknown as Record<string, unknown>[];
+  const channel = channels.find((item) => String(item.id) === channelId);
+
+  if (!channel) throw new HttpError(404, "channel_not_found", "Dieser Kanal wurde auf der Guild nicht gefunden.");
+  if (data.categoryId === channelId) throw new HttpError(400, "channel_parent_invalid", "Ein Kanal kann nicht seine eigene Kategorie sein.");
+  if (data.categoryId) {
+    const category = channels.find((item) => String(item.id) === data.categoryId);
+    if (!category || Number(category.type) !== 4) {
+      throw new HttpError(400, "channel_category_invalid", "Die ausgewählte Kategorie wurde auf dieser Guild nicht gefunden.");
+    }
+  }
+
+  const eventId = await enqueueSyncEvent(c.env, {
+    id: guild.id,
+    discordGuildId: guild.discord_guild_id,
+    name: guild.name,
+    icon: guild.icon,
+    botJoinedAt: guild.bot_joined_at
+  }, "guild.channel.update", {
+    discordGuildId: guild.discord_guild_id,
+    channelId,
+    ...data,
+    actorDiscordUserId: session.user.discordUserId,
+    actorUsername: session.user.displayName || session.user.username
+  });
+
+  await audit(c.env, guild.id, session.user.discordUserId, "owner.guild.channel.update", channelId, normalizeAdminChannel(channel), { eventId, ...data });
+  return json(c, { ok: true, eventId, channelId });
+});
+
+app.delete("/api/admin/discordguilds/:guildId/channels/:channelId", async (c) => {
+  const session = await requireAdminSession(c);
+  const guildId = snowflakeSchema.parse(c.req.param("guildId"));
+  const channelId = snowflakeSchema.parse(c.req.param("channelId"));
+  const guild = await requireAdminGuild(c.env, guildId);
+  adminResourceDeleteSchema.parse(await readJsonBody(c));
+  const channels = await fetchDiscordBotGuildChannels(c.env, guildId) as unknown as Record<string, unknown>[];
+  const channel = channels.find((item) => String(item.id) === channelId);
+
+  if (!channel) throw new HttpError(404, "channel_not_found", "Dieser Kanal wurde auf der Guild nicht gefunden.");
+
+  const eventId = await enqueueSyncEvent(c.env, {
+    id: guild.id,
+    discordGuildId: guild.discord_guild_id,
+    name: guild.name,
+    icon: guild.icon,
+    botJoinedAt: guild.bot_joined_at
+  }, "guild.channel.delete", {
+    discordGuildId: guild.discord_guild_id,
+    channelId,
+    actorDiscordUserId: session.user.discordUserId,
+    actorUsername: session.user.displayName || session.user.username
+  });
+
+  await audit(c.env, guild.id, session.user.discordUserId, "owner.guild.channel.delete", channelId, normalizeAdminChannel(channel), { eventId });
+  return json(c, { ok: true, eventId, channelId });
 });
 
 app.get("/api/admin/discordguilds/:guildId/export", async (c) => {

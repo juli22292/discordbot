@@ -166,7 +166,25 @@ export const adminRoleUpdateSchema = z.object({
   name: z.string().trim().min(1, "Der Rollenname darf nicht leer sein.").max(100, "Der Rollenname darf maximal 100 Zeichen lang sein."),
   color: hexColorSchema,
   hoist: z.boolean().default(false),
-  mentionable: z.boolean().default(false)
+  mentionable: z.boolean().default(false),
+  permissions: z
+    .string()
+    .regex(/^\d{1,20}$/, "Die Rollenberechtigungen sind ungültig.")
+    .refine((value) => BigInt(value) <= 18_446_744_073_709_551_615n, "Die Rollenberechtigungen überschreiten Discords Zahlenbereich.")
+});
+
+export const adminChannelUpdateSchema = z.object({
+  name: z.string().trim().min(1, "Der Kanalname darf nicht leer sein.").max(100, "Der Kanalname darf maximal 100 Zeichen lang sein."),
+  topic: z.union([z.string().trim().max(1024, "Das Kanalthema darf maximal 1024 Zeichen lang sein."), z.null()]).default(null),
+  categoryId: nullableSnowflakeSchema,
+  nsfw: z.boolean().default(false),
+  slowmodeSeconds: z.number().int().min(0).max(21_600).default(0),
+  bitrateKbps: z.number().int().min(8).max(384).default(64),
+  userLimit: z.number().int().min(0).max(99).default(0)
+});
+
+export const adminResourceDeleteSchema = z.object({
+  confirm: z.literal(true, { errorMap: () => ({ message: "Das Löschen muss ausdrücklich bestätigt werden." }) })
 });
 
 export const adminMemberModerationSchema = z.object({

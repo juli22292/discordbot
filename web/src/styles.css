@@ -3850,7 +3850,8 @@ textarea {
   outline: none;
 }
 
-.owner-role-editor {
+.owner-role-editor,
+.owner-channel-editor {
   display: grid;
   gap: 12px;
   padding: 14px;
@@ -3865,6 +3866,159 @@ textarea {
   margin: 0;
   color: var(--text);
   font-size: 18px;
+}
+
+.owner-channel-editor h3,
+.owner-resource-identity h3 {
+  margin: 0;
+  color: var(--text);
+  font-size: 18px;
+}
+
+.owner-resource-editor-head,
+.owner-resource-identity {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.owner-resource-editor-head {
+  justify-content: space-between;
+}
+
+.owner-resource-identity {
+  min-width: 0;
+}
+
+.owner-resource-identity > div {
+  min-width: 0;
+}
+
+.owner-resource-identity p {
+  margin: 3px 0 0;
+  overflow-wrap: anywhere;
+}
+
+.owner-resource-basics {
+  align-items: end;
+}
+
+.owner-color-field > span {
+  min-height: 44px;
+  display: grid;
+  grid-template-columns: 52px minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+  padding: 5px;
+  border: 1px solid var(--border-soft);
+  border-radius: 8px;
+  background: var(--control-bg);
+}
+
+.owner-color-field input[type="color"] {
+  width: 52px;
+  height: 32px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+
+.owner-color-field code {
+  color: var(--muted-strong);
+  font-size: 12px;
+}
+
+.owner-resource-section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.owner-resource-section-head h4 {
+  margin: 0 0 3px;
+  color: var(--text);
+  font-size: 15px;
+}
+
+.owner-resource-section-head p {
+  margin: 0;
+}
+
+.owner-role-permissions {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.owner-role-permissions label {
+  min-width: 0;
+  min-height: 54px;
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr);
+  align-items: center;
+  gap: 9px;
+  padding: 9px 10px;
+  border: 1px solid var(--border-soft);
+  border-radius: 8px;
+  color: var(--muted-strong);
+  background: var(--control-bg);
+  cursor: pointer;
+}
+
+.owner-role-permissions label.active {
+  color: var(--text);
+  border-color: rgba(119, 183, 255, 0.34);
+  background: rgba(119, 183, 255, 0.075);
+}
+
+.owner-role-permissions label.danger.active {
+  border-color: rgba(255, 116, 116, 0.34);
+  background: rgba(255, 116, 116, 0.075);
+}
+
+.owner-role-permissions input {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--blue);
+}
+
+.owner-role-permissions label.danger input {
+  accent-color: var(--red);
+}
+
+.owner-role-permissions strong,
+.owner-role-permissions small {
+  display: block;
+}
+
+.owner-role-permissions strong {
+  overflow: hidden;
+  color: inherit;
+  font-size: 13px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.owner-role-permissions small {
+  margin-top: 2px;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.owner-channel-topic {
+  grid-column: span 2;
+}
+
+.owner-channel-topic textarea {
+  min-height: 82px;
+  resize: vertical;
+}
+
+.owner-channel-topic small {
+  justify-self: end;
+  color: var(--muted);
+  font-size: 11px;
 }
 
 .owner-member-editor {
@@ -4051,6 +4205,18 @@ textarea {
   color: var(--blue);
   background: rgba(119, 183, 255, 0.1);
   font-weight: 900;
+}
+
+.channel-symbol.category {
+  color: var(--amber);
+  border-color: rgba(244, 189, 99, 0.22);
+  background: rgba(244, 189, 99, 0.08);
+}
+
+.channel-symbol.voice {
+  color: var(--green);
+  border-color: rgba(47, 191, 122, 0.22);
+  background: rgba(47, 191, 122, 0.08);
 }
 
 .member-avatar {
@@ -5914,6 +6080,7 @@ textarea {
 :root[data-theme="light"] .owner-invite-row,
 :root[data-theme="light"] .owner-detail-row,
 :root[data-theme="light"] .owner-role-editor,
+:root[data-theme="light"] .owner-channel-editor,
 :root[data-theme="light"] .owner-member-editor,
 :root[data-theme="light"] .owner-permission-card,
 :root[data-theme="light"] .owner-module-card,
@@ -6603,6 +6770,19 @@ textarea {
   .owner-member-reason {
     grid-column: span 1;
   }
+
+  .owner-resource-editor-head {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .owner-role-permissions {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .owner-channel-topic {
+    grid-column: span 1;
+  }
 }
 
 @media (max-width: 440px) {
@@ -6619,6 +6799,10 @@ textarea {
   .panel-title {
     align-items: flex-start;
     flex-direction: column;
+  }
+
+  .owner-role-permissions {
+    grid-template-columns: 1fr;
   }
 
   .mobile-nav-menu {
