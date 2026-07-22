@@ -246,6 +246,108 @@ type AutoroleSettings = {
   syncError: string | null;
 };
 
+type SecuritySettings = {
+  antispamEnabled: boolean;
+  antispamMessageLimit: number;
+  antispamWindowSeconds: number;
+  antispamTimeoutSeconds: number;
+  antilinkEnabled: boolean;
+  antilinkTimeoutSeconds: number;
+  antiinviteEnabled: boolean;
+  antiinviteTimeoutSeconds: number;
+  antimentionLimit: number;
+  antimentionTimeoutSeconds: number;
+  accountAgeMinDays: number;
+  quarantineRoleId: string | null;
+  verificationEnabled: boolean;
+  verificationChannelId: string | null;
+  verificationRoleId: string | null;
+  verificationTitle: string;
+  verificationText: string;
+  auditLogWatchEnabled: boolean;
+  antinukeEnabled: boolean;
+  antinukeLimit: number;
+  antinukeWindowSeconds: number;
+  antinukePunishment: "log" | "timeout" | "kick" | "ban" | "quarantine";
+  allowedDomains: string[];
+  blockedDomains: string[];
+  healthScore: number;
+  activeProtections: number;
+  totalProtections: number;
+  botCanManageRoles: boolean;
+  botCanViewAuditLog: boolean;
+  verificationMessageId: string | null;
+  syncStatus: string;
+  syncError: string | null;
+};
+
+type RaidSettings = {
+  profile: "off" | "light" | "strict";
+  panicEnabled: boolean;
+  panicSlowmodeSeconds: number;
+  raidmodeEnabled: boolean;
+  memberCount: number;
+  textChannelCount: number;
+  changedSlowmodeChannels?: number;
+  syncStatus: string;
+  syncError: string | null;
+};
+
+type TicketCategory = {
+  label: string;
+  description: string;
+  emoji: string;
+  value: string;
+};
+
+type TicketSettings = {
+  enabled: boolean;
+  ticketCategoryId: string | null;
+  panelChannelId: string | null;
+  logChannelId: string | null;
+  supportRoleIds: string[];
+  notifyRoleId: string | null;
+  panelTitle: string;
+  panelDescription: string;
+  formTitle: string;
+  formQuestions: string[];
+  selectCategories: TicketCategory[];
+  ratingEnabled: boolean;
+  autoCloseHours: number;
+  reminderHours: number;
+  slaHours: number;
+  blacklistRoleIds: string[];
+  blacklistUserIds: string[];
+  totalTickets: number;
+  openTickets: number;
+  closedTickets: number;
+  deletedTickets: number;
+  averageRating: number | null;
+  panelMessageId: string | null;
+  syncStatus: string;
+  syncError: string | null;
+};
+
+type BackupItem = {
+  scope: "roles" | "channels" | "full";
+  savedAt: string | null;
+  itemCount: number;
+};
+
+type BackupSettings = {
+  items: BackupItem[];
+  lastSavedAt: string | null;
+  guildRoleCount: number;
+  guildChannelCount: number;
+  pendingAction?: string | null;
+  pendingScope?: string | null;
+  lastAction?: string | null;
+  lastScope?: string | null;
+  restoredItems?: number;
+  syncStatus: string;
+  syncError: string | null;
+};
+
 type AdminRuntime = {
   id: string;
   status: string | null;
@@ -3543,6 +3645,7 @@ function Dashboard({ path }: { path: string }) {
               <SideLink icon={<UserPlus size={17} />} label="Autorole" section="autorole" current={section} guildId={guildId} />
               <SideLink icon={<BarChart3 size={17} />} label="Level-System" section="level-system" current={section} guildId={guildId} />
               <SideLink icon={<ListOrdered size={17} />} label="Counting" section="counting" current={section} guildId={guildId} />
+              <SideLink icon={<LifeBuoy size={17} />} label="Ticket-System" section="tickets" current={section} guildId={guildId} />
             </SidebarGroup>
             <SidebarGroup label="Automatisierung" tone="violet">
               <SideLink icon={<Command size={17} />} label="Slash-Befehle" section="commands" current={section} guildId={guildId} />
@@ -3556,7 +3659,9 @@ function Dashboard({ path }: { path: string }) {
               <SideLink icon={<Gamepad2 size={17} />} label="Games" section="games" current={section} guildId={guildId} badge="geplant" />
             </SidebarGroup>
             <SidebarGroup label="Sicherheit" tone="red">
-              <SideLink icon={<Shield size={17} />} label="Moderation" section="moderation" current={section} guildId={guildId} badge="geplant" />
+              <SideLink icon={<ShieldCheck size={17} />} label="Security Center" section="security" current={section} guildId={guildId} />
+              <SideLink icon={<AlertTriangle size={17} />} label="Raidmode" section="raidmode" current={section} guildId={guildId} />
+              <SideLink icon={<Database size={17} />} label="Backups" section="backups" current={section} guildId={guildId} />
               <SideLink icon={<AlertTriangle size={17} />} label="Gefahrenbereich" section="danger-zone" current={section} guildId={guildId} badge="geplant" />
             </SidebarGroup>
           </nav>
@@ -3599,6 +3704,10 @@ function Dashboard({ path }: { path: string }) {
               {section === "counting" && <CountingPage guildId={guildId} />}
               {section === "level-system" && <LevelSystemPage guildId={guildId} />}
               {section === "autorole" && <AutorolePage guildId={guildId} />}
+              {section === "security" && <SecurityPage guildId={guildId} />}
+              {section === "raidmode" && <RaidmodePage guildId={guildId} />}
+              {section === "tickets" && <TicketSystemPage guildId={guildId} />}
+              {section === "backups" && <BackupsPage guildId={guildId} />}
               {plannedSection && section !== "welcome" && section !== "logging" && section !== "temp-voice" && section !== "counting" && section !== "level-system" && section !== "autorole" && <PlannedPage section={plannedSection} />}
             </>
           )}
@@ -4032,6 +4141,93 @@ const DEFAULT_AUTOROLE_DRAFT: AutoroleSettings = {
   botRoleIds: [],
   delaySeconds: 0,
   waitForScreening: true,
+  syncStatus: "idle",
+  syncError: null
+};
+
+const DEFAULT_SECURITY_DRAFT: SecuritySettings = {
+  antispamEnabled: false,
+  antispamMessageLimit: 5,
+  antispamWindowSeconds: 8,
+  antispamTimeoutSeconds: 60,
+  antilinkEnabled: false,
+  antilinkTimeoutSeconds: 0,
+  antiinviteEnabled: false,
+  antiinviteTimeoutSeconds: 60,
+  antimentionLimit: 0,
+  antimentionTimeoutSeconds: 60,
+  accountAgeMinDays: 0,
+  quarantineRoleId: null,
+  verificationEnabled: false,
+  verificationChannelId: null,
+  verificationRoleId: null,
+  verificationTitle: "Verifizierung",
+  verificationText: "Klicke auf den Button, um dich zu verifizieren.",
+  auditLogWatchEnabled: false,
+  antinukeEnabled: false,
+  antinukeLimit: 3,
+  antinukeWindowSeconds: 60,
+  antinukePunishment: "log",
+  allowedDomains: [],
+  blockedDomains: [],
+  healthScore: 0,
+  activeProtections: 0,
+  totalProtections: 8,
+  botCanManageRoles: false,
+  botCanViewAuditLog: false,
+  verificationMessageId: null,
+  syncStatus: "idle",
+  syncError: null
+};
+
+const DEFAULT_RAID_DRAFT: RaidSettings = {
+  profile: "off",
+  panicEnabled: false,
+  panicSlowmodeSeconds: 10,
+  raidmodeEnabled: false,
+  memberCount: 0,
+  textChannelCount: 0,
+  syncStatus: "idle",
+  syncError: null
+};
+
+const DEFAULT_TICKET_DRAFT: TicketSettings = {
+  enabled: false,
+  ticketCategoryId: null,
+  panelChannelId: null,
+  logChannelId: null,
+  supportRoleIds: [],
+  notifyRoleId: null,
+  panelTitle: "Ticketsystem",
+  panelDescription: "Wähle unten eine Kategorie aus, um ein Ticket zu erstellen.",
+  formTitle: "Ticket-Fragen",
+  formQuestions: [],
+  selectCategories: [
+    { label: "Support", description: "Allgemeine Hilfe und Fragen", emoji: "🎫", value: "support" },
+    { label: "Technik", description: "Technische Probleme melden", emoji: "🛠️", value: "technik" },
+    { label: "Sonstiges", description: "Andere Anliegen", emoji: "💬", value: "sonstiges" }
+  ],
+  ratingEnabled: false,
+  autoCloseHours: 0,
+  reminderHours: 0,
+  slaHours: 0,
+  blacklistRoleIds: [],
+  blacklistUserIds: [],
+  totalTickets: 0,
+  openTickets: 0,
+  closedTickets: 0,
+  deletedTickets: 0,
+  averageRating: null,
+  panelMessageId: null,
+  syncStatus: "idle",
+  syncError: null
+};
+
+const DEFAULT_BACKUP_DRAFT: BackupSettings = {
+  items: [],
+  lastSavedAt: null,
+  guildRoleCount: 0,
+  guildChannelCount: 0,
   syncStatus: "idle",
   syncError: null
 };
@@ -5922,6 +6118,364 @@ function AuditLogPage({ guildId }: { guildId: string }) {
           </article>
         ))}
       </div>
+    </section>
+  );
+}
+
+function SyncPill({ status }: { status: string }) {
+  const tone = status === "failed" ? "danger" : status === "synced" ? "ok" : "neutral";
+  const label = status === "failed" ? "Sync fehlgeschlagen" : status === "pending" ? "Wird synchronisiert" : status === "synced" ? "Synchronisiert" : "Bereit";
+  return <span className={`pill ${tone}`}>{label}</span>;
+}
+
+function ControlToggle({
+  icon,
+  title,
+  text,
+  checked,
+  onChange,
+  children
+}: {
+  icon: React.ReactNode;
+  title: string;
+  text: string;
+  checked: boolean;
+  onChange: (checked: boolean) => void;
+  children?: React.ReactNode;
+}) {
+  return (
+    <div className={`control-toggle-row ${checked ? "active" : ""}`}>
+      <span className="control-toggle-icon">{icon}</span>
+      <div className="control-toggle-copy"><strong>{title}</strong><small>{text}</small></div>
+      <label className="compact-switch">
+        <input type="checkbox" checked={checked} onChange={(event) => onChange(event.target.checked)} />
+        <span />
+      </label>
+      {children && <div className="control-toggle-settings">{children}</div>}
+    </div>
+  );
+}
+
+function NumberSetting({ label, value, min, max, suffix, onChange }: { label: string; value: number; min: number; max: number; suffix: string; onChange: (value: number) => void }) {
+  return (
+    <label className="number-setting">
+      <span>{label}</span>
+      <div><input type="number" min={min} max={max} value={value} onChange={(event) => onChange(Math.max(min, Math.min(max, Number(event.target.value) || 0)))} /><small>{suffix}</small></div>
+    </label>
+  );
+}
+
+function RoleChecklist({
+  roles,
+  selected,
+  onToggle,
+  emptyText = "Keine verwaltbaren Rollen verfügbar."
+}: {
+  roles: RoleOption[];
+  selected: string[];
+  onToggle: (roleId: string) => void;
+  emptyText?: string;
+}) {
+  if (!roles.length) return <p className="muted">{emptyText}</p>;
+  return (
+    <div className="control-role-list">
+      {roles.map((role) => {
+        const active = selected.includes(role.id);
+        return (
+          <button type="button" className={active ? "selected" : ""} onClick={() => onToggle(role.id)} key={role.id}>
+            <i style={{ background: roleColor(role) }} />
+            <span><strong>{role.name}</strong><small>{role.id}</small></span>
+            {active ? <Check size={15} /> : <Plus size={15} />}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+function SecurityPage({ guildId }: { guildId: string }) {
+  const settings = useApi<{ security: SecuritySettings }>(`/api/guilds/${guildId}/security`, [guildId]);
+  const channels = useApi<{ channels: ChannelOption[] }>(`/api/guilds/${guildId}/channels`, [guildId]);
+  const roles = useApi<{ roles: RoleOption[] }>(`/api/guilds/${guildId}/roles`, [guildId]);
+  const [draft, setDraft] = useState(DEFAULT_SECURITY_DRAFT);
+  const [saving, setSaving] = useState(false);
+  const [status, setStatus] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (settings.data?.security) setDraft(settings.data.security);
+  }, [settings.data]);
+
+  const textChannels = useMemo(() => (channels.data?.channels ?? []).filter(isTextGuildChannel), [channels.data]);
+  const manageableRoles = useMemo(() => (roles.data?.roles ?? []).filter((role) => role.botCanManage && !role.managed), [roles.data]);
+  const loading = (settings.loading && !settings.data) || (channels.loading && !channels.data) || (roles.loading && !roles.data);
+  const loadError = settings.error || channels.error || roles.error;
+
+  async function save() {
+    setSaving(true);
+    setStatus(null);
+    try {
+      const response = await api<{ security: SecuritySettings }>(`/api/guilds/${guildId}/security`, {
+        method: "PUT",
+        body: JSON.stringify({
+          antispamEnabled: draft.antispamEnabled,
+          antispamMessageLimit: draft.antispamMessageLimit,
+          antispamWindowSeconds: draft.antispamWindowSeconds,
+          antispamTimeoutSeconds: draft.antispamTimeoutSeconds,
+          antilinkEnabled: draft.antilinkEnabled,
+          antilinkTimeoutSeconds: draft.antilinkTimeoutSeconds,
+          antiinviteEnabled: draft.antiinviteEnabled,
+          antiinviteTimeoutSeconds: draft.antiinviteTimeoutSeconds,
+          antimentionLimit: draft.antimentionLimit,
+          antimentionTimeoutSeconds: draft.antimentionTimeoutSeconds,
+          accountAgeMinDays: draft.accountAgeMinDays,
+          quarantineRoleId: draft.quarantineRoleId,
+          verificationEnabled: draft.verificationEnabled,
+          verificationChannelId: draft.verificationChannelId,
+          verificationRoleId: draft.verificationRoleId,
+          verificationTitle: draft.verificationTitle,
+          verificationText: draft.verificationText,
+          auditLogWatchEnabled: draft.auditLogWatchEnabled,
+          antinukeEnabled: draft.antinukeEnabled,
+          antinukeLimit: draft.antinukeLimit,
+          antinukeWindowSeconds: draft.antinukeWindowSeconds,
+          antinukePunishment: draft.antinukePunishment,
+          allowedDomains: draft.allowedDomains,
+          blockedDomains: draft.blockedDomains
+        })
+      });
+      setDraft(response.security);
+      setStatus("Security-Einstellungen gespeichert. Der Bot übernimmt sie jetzt.");
+      await settings.reload();
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : "Security-Einstellungen konnten nicht gespeichert werden.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  function parseDomains(value: string) {
+    return Array.from(new Set(value.split(/[\s,;]+/).map((entry) => entry.trim().toLowerCase().replace(/^https?:\/\//, "").split("/")[0]).filter(Boolean)));
+  }
+
+  return (
+    <section className="control-page security-control">
+      <header className="control-hero">
+        <div><p className="eyebrow"><ShieldCheck size={15} /> Guild Protection</p><h2>Security Center</h2><p>Alle aktiven Schutzregeln, Prüfungen und Eskalationen in einer sauberen Sicherheitszentrale.</p></div>
+        <div className="control-hero-actions"><SyncPill status={draft.syncStatus} /><RefreshButton loading={settings.loading} onClick={async () => { await Promise.all([settings.reload(), channels.reload(), roles.reload()]); }} /></div>
+      </header>
+      {loading && <LoadingBlock />}
+      {loadError && <Notice tone="danger" text={loadError} />}
+      {draft.syncError && <Notice tone="danger" text={draft.syncError} />}
+      <ActionStatus status={status} />
+      {!loading && !loadError && <>
+        <div className="control-stat-grid">
+          <StatusTile icon={<ShieldCheck size={19} />} label="Security Score" value={`${draft.healthScore}%`} tone={draft.healthScore >= 70 ? "ok" : "warn"} />
+          <StatusTile icon={<Activity size={19} />} label="Aktive Schutzmodule" value={`${draft.activeProtections}/${draft.totalProtections}`} />
+          <StatusTile icon={<BadgeCheck size={19} />} label="Rollenrechte" value={draft.botCanManageRoles ? "bereit" : "fehlen"} tone={draft.botCanManageRoles ? "ok" : "warn"} />
+          <StatusTile icon={<ClipboardList size={19} />} label="Audit-Log" value={draft.botCanViewAuditLog ? "sichtbar" : "nicht sichtbar"} tone={draft.botCanViewAuditLog ? "ok" : "warn"} />
+        </div>
+        <div className="control-columns">
+          <div className="control-stack">
+            <section className="panel control-panel">
+              <div className="panel-title compact"><div><h2>Nachrichten-Schutz</h2><p className="muted">Spam, Links, Einladungen und Mention-Fluten begrenzen.</p></div></div>
+              <div className="control-toggle-list">
+                <ControlToggle icon={<MessageSquare size={17} />} title="Antispam" text="Zu viele Nachrichten in einem Zeitfenster erkennen." checked={draft.antispamEnabled} onChange={(value) => setDraft({ ...draft, antispamEnabled: value })}>
+                  <NumberSetting label="Nachrichten" value={draft.antispamMessageLimit} min={2} max={30} suffix="Anzahl" onChange={(value) => setDraft({ ...draft, antispamMessageLimit: value })} />
+                  <NumberSetting label="Zeitfenster" value={draft.antispamWindowSeconds} min={2} max={120} suffix="Sek." onChange={(value) => setDraft({ ...draft, antispamWindowSeconds: value })} />
+                  <NumberSetting label="Timeout" value={draft.antispamTimeoutSeconds} min={0} max={86400} suffix="Sek." onChange={(value) => setDraft({ ...draft, antispamTimeoutSeconds: value })} />
+                </ControlToggle>
+                <ControlToggle icon={<Globe2 size={17} />} title="Antilink" text="Weblinks anhand deiner Domainregeln filtern." checked={draft.antilinkEnabled} onChange={(value) => setDraft({ ...draft, antilinkEnabled: value })}>
+                  <NumberSetting label="Timeout" value={draft.antilinkTimeoutSeconds} min={0} max={86400} suffix="Sek." onChange={(value) => setDraft({ ...draft, antilinkTimeoutSeconds: value })} />
+                </ControlToggle>
+                <ControlToggle icon={<ExternalLink size={17} />} title="Antiinvite" text="Discord-Einladungslinks blockieren." checked={draft.antiinviteEnabled} onChange={(value) => setDraft({ ...draft, antiinviteEnabled: value })}>
+                  <NumberSetting label="Timeout" value={draft.antiinviteTimeoutSeconds} min={0} max={86400} suffix="Sek." onChange={(value) => setDraft({ ...draft, antiinviteTimeoutSeconds: value })} />
+                </ControlToggle>
+              </div>
+              <div className="control-field-grid">
+                <NumberSetting label="Mention-Limit (0 = aus)" value={draft.antimentionLimit} min={0} max={50} suffix="Mentions" onChange={(value) => setDraft({ ...draft, antimentionLimit: value })} />
+                <NumberSetting label="Mention-Timeout" value={draft.antimentionTimeoutSeconds} min={0} max={86400} suffix="Sek." onChange={(value) => setDraft({ ...draft, antimentionTimeoutSeconds: value })} />
+                <NumberSetting label="Account-Mindestalter" value={draft.accountAgeMinDays} min={0} max={3650} suffix="Tage" onChange={(value) => setDraft({ ...draft, accountAgeMinDays: value })} />
+              </div>
+            </section>
+            <section className="panel control-panel">
+              <div className="panel-title compact"><div><h2>Domainregeln</h2><p className="muted">Eine Domain pro Zeile oder durch Komma getrennt, ohne Protokoll.</p></div></div>
+              <div className="control-field-grid two">
+                <label>Erlaubte Domains<textarea rows={5} value={draft.allowedDomains.join("\n")} onChange={(event) => setDraft({ ...draft, allowedDomains: parseDomains(event.target.value) })} placeholder="example.com" /></label>
+                <label>Blockierte Domains<textarea rows={5} value={draft.blockedDomains.join("\n")} onChange={(event) => setDraft({ ...draft, blockedDomains: parseDomains(event.target.value) })} placeholder="bad-example.com" /></label>
+              </div>
+            </section>
+          </div>
+          <div className="control-stack">
+            <section className="panel control-panel">
+              <div className="panel-title compact"><div><h2>Verifizierung</h2><p className="muted">Button-Panel und Rolle direkt vom Bot verwalten lassen.</p></div></div>
+              <ControlToggle icon={<BadgeCheck size={17} />} title="Button-Verifizierung" text="Sendet oder aktualisiert das Verifizierungspanel." checked={draft.verificationEnabled} onChange={(value) => setDraft({ ...draft, verificationEnabled: value })} />
+              <div className="control-field-grid two">
+                <label>Textkanal<select value={draft.verificationChannelId ?? ""} onChange={(event) => setDraft({ ...draft, verificationChannelId: event.target.value || null })}><ChannelSelectOptions channels={textChannels} noneLabel="Kanal auswählen" /></select></label>
+                <label>Verifizierungsrolle<select value={draft.verificationRoleId ?? ""} onChange={(event) => setDraft({ ...draft, verificationRoleId: event.target.value || null })}><option value="">Rolle auswählen</option>{manageableRoles.map((role) => <option value={role.id} key={role.id}>{role.name}</option>)}</select></label>
+                <label>Titel<input maxLength={100} value={draft.verificationTitle} onChange={(event) => setDraft({ ...draft, verificationTitle: event.target.value })} /></label>
+                <label className="wide">Nachricht<textarea rows={4} maxLength={1500} value={draft.verificationText} onChange={(event) => setDraft({ ...draft, verificationText: event.target.value })} /></label>
+              </div>
+            </section>
+            <section className="panel control-panel danger-panel">
+              <div className="panel-title compact"><div><h2>Anti-Nuke & Quarantäne</h2><p className="muted">Massenaktionen erkennen und kontrolliert bestrafen.</p></div></div>
+              <ControlToggle icon={<Shield size={17} />} title="Anti-Nuke" text="Audit-Aktionen innerhalb eines Zeitfensters zählen." checked={draft.antinukeEnabled} onChange={(value) => setDraft({ ...draft, antinukeEnabled: value })} />
+              <div className="control-field-grid two">
+                <NumberSetting label="Aktionslimit" value={draft.antinukeLimit} min={1} max={20} suffix="Aktionen" onChange={(value) => setDraft({ ...draft, antinukeLimit: value })} />
+                <NumberSetting label="Zeitfenster" value={draft.antinukeWindowSeconds} min={10} max={600} suffix="Sek." onChange={(value) => setDraft({ ...draft, antinukeWindowSeconds: value })} />
+                <label>Reaktion<select value={draft.antinukePunishment} onChange={(event) => setDraft({ ...draft, antinukePunishment: event.target.value as SecuritySettings["antinukePunishment"] })}><option value="log">Nur protokollieren</option><option value="timeout">Timeout</option><option value="kick">Kicken</option><option value="ban">Bannen</option><option value="quarantine">Quarantäne</option></select></label>
+                <label>Quarantäne-Rolle<select value={draft.quarantineRoleId ?? ""} onChange={(event) => setDraft({ ...draft, quarantineRoleId: event.target.value || null })}><option value="">Keine Rolle</option>{manageableRoles.map((role) => <option value={role.id} key={role.id}>{role.name}</option>)}</select></label>
+              </div>
+              <ControlToggle icon={<ClipboardList size={17} />} title="Audit-Watch" text="Kritische Audit-Log-Aktionen überwachen." checked={draft.auditLogWatchEnabled} onChange={(value) => setDraft({ ...draft, auditLogWatchEnabled: value })} />
+            </section>
+          </div>
+        </div>
+        <div className="control-savebar"><div><strong>{draft.activeProtections} Schutzmodule aktiv</strong><small>Änderungen werden über die sichere Bot-Queue synchronisiert.</small></div><button className="primary-action inline" onClick={() => void save()} disabled={saving}>{saving ? <Loader2 className="spin" size={16} /> : <Save size={16} />} Security speichern</button></div>
+      </>}
+    </section>
+  );
+}
+
+function RaidmodePage({ guildId }: { guildId: string }) {
+  const settings = useApi<{ raidmode: RaidSettings }>(`/api/guilds/${guildId}/raidmode`, [guildId]);
+  const [draft, setDraft] = useState(DEFAULT_RAID_DRAFT);
+  const [saving, setSaving] = useState(false);
+  const [status, setStatus] = useState<string | null>(null);
+  useEffect(() => { if (settings.data?.raidmode) setDraft(settings.data.raidmode); }, [settings.data]);
+
+  async function save() {
+    setSaving(true); setStatus(null);
+    try {
+      const response = await api<{ raidmode: RaidSettings }>(`/api/guilds/${guildId}/raidmode`, { method: "PUT", body: JSON.stringify({ profile: draft.profile, panicEnabled: draft.panicEnabled, panicSlowmodeSeconds: draft.panicSlowmodeSeconds }) });
+      setDraft(response.raidmode); setStatus("Raid-Schutz gespeichert. Der Bot setzt das Profil jetzt um."); await settings.reload();
+    } catch (error) { setStatus(error instanceof Error ? error.message : "Raidmode konnte nicht gespeichert werden."); }
+    finally { setSaving(false); }
+  }
+
+  const profiles = [
+    { key: "off" as const, title: "Aus", text: "Kein Raid-Profil greift in die Schutzmodule ein.", icon: Power },
+    { key: "light" as const, title: "Leicht", text: "Antispam, Antiinvite und Mention-Limit für normalen Schutz.", icon: ShieldCheck },
+    { key: "strict" as const, title: "Streng", text: "Join-Sperre plus verschärfter Nachrichten- und Accountschutz.", icon: AlertTriangle }
+  ];
+  return (
+    <section className="control-page raid-control">
+      <header className="control-hero raid"><div><p className="eyebrow"><AlertTriangle size={15} /> Incident Response</p><h2>Raidmode</h2><p>Schutzprofile kontrolliert aktivieren und bei einem laufenden Angriff sofort den Panic-Modus auslösen.</p></div><div className="control-hero-actions"><SyncPill status={draft.syncStatus} /><RefreshButton loading={settings.loading} onClick={settings.reload} /></div></header>
+      {settings.loading && !settings.data && <LoadingBlock />}{settings.error && <Notice tone="danger" text={settings.error} />}{draft.syncError && <Notice tone="danger" text={draft.syncError} />}<ActionStatus status={status} />
+      {settings.data && <>
+        <div className="control-stat-grid"><StatusTile icon={<Activity size={19} />} label="Raidmode" value={draft.raidmodeEnabled ? "aktiv" : "inaktiv"} tone={draft.raidmodeEnabled ? "warn" : "ok"} /><StatusTile icon={<AlertTriangle size={19} />} label="Panic" value={draft.panicEnabled ? "aktiv" : "bereit"} tone={draft.panicEnabled ? "warn" : "ok"} /><StatusTile icon={<UsersRound size={19} />} label="Mitglieder" value={String(draft.memberCount)} /><StatusTile icon={<Hash size={19} />} label="Textkanäle" value={String(draft.textChannelCount)} /></div>
+        <section className="panel control-panel"><div className="panel-title compact"><div><h2>Schutzprofil</h2><p className="muted">Ein Profil setzt die zusammengehörigen Security-Regeln atomar.</p></div></div><div className="raid-profile-grid">{profiles.map((profile) => { const Icon = profile.icon; return <button type="button" className={draft.profile === profile.key ? "selected" : ""} onClick={() => setDraft({ ...draft, profile: profile.key })} key={profile.key}><span><Icon size={19} /></span><strong>{profile.title}</strong><small>{profile.text}</small>{draft.profile === profile.key && <Check size={17} />}</button>; })}</div></section>
+        <section className={`panel panic-panel ${draft.panicEnabled ? "active" : ""}`}><div className="panic-copy"><span><AlertTriangle size={21} /></span><div><h2>Panic-Modus</h2><p>Aktiviert das strenge Profil und setzt den gewählten Slowmode auf alle Textkanäle. Beim Ausschalten stellt der Bot die vorherigen Werte wieder her.</p></div></div><label className="welcome-switch"><input type="checkbox" checked={draft.panicEnabled} onChange={(event) => setDraft({ ...draft, panicEnabled: event.target.checked })} /><span>{draft.panicEnabled ? "Aktiv" : "Bereit"}</span></label><NumberSetting label="Slowmode" value={draft.panicSlowmodeSeconds} min={0} max={21600} suffix="Sek." onChange={(value) => setDraft({ ...draft, panicSlowmodeSeconds: value })} /></section>
+        <div className="control-savebar"><div><strong>Profil: {profiles.find((profile) => profile.key === draft.profile)?.title}</strong><small>{draft.panicEnabled ? "Panic wird beim Speichern sofort ausgelöst." : "Änderungen werden nach dem Speichern vom Bot angewendet."}</small></div><button className={draft.panicEnabled ? "danger-action inline" : "primary-action inline"} onClick={() => void save()} disabled={saving}>{saving ? <Loader2 className="spin" size={16} /> : <Save size={16} />}{draft.panicEnabled ? "Panic aktivieren" : "Raidmode speichern"}</button></div>
+      </>}
+    </section>
+  );
+}
+
+function TicketSystemPage({ guildId }: { guildId: string }) {
+  const settings = useApi<{ tickets: TicketSettings }>(`/api/guilds/${guildId}/tickets`, [guildId]);
+  const channels = useApi<{ channels: ChannelOption[] }>(`/api/guilds/${guildId}/channels`, [guildId]);
+  const roles = useApi<{ roles: RoleOption[] }>(`/api/guilds/${guildId}/roles`, [guildId]);
+  const [draft, setDraft] = useState(DEFAULT_TICKET_DRAFT);
+  const [saving, setSaving] = useState(false);
+  const [sending, setSending] = useState(false);
+  const [status, setStatus] = useState<string | null>(null);
+  useEffect(() => { if (settings.data?.tickets) setDraft(settings.data.tickets); }, [settings.data]);
+  const textChannels = useMemo(() => (channels.data?.channels ?? []).filter(isTextGuildChannel), [channels.data]);
+  const categoryChannels = useMemo(() => (channels.data?.channels ?? []).filter((channel) => channel.type.toLowerCase() === "category"), [channels.data]);
+  const manageableRoles = useMemo(() => (roles.data?.roles ?? []).filter((role) => role.botCanManage && !role.managed), [roles.data]);
+  const loading = (settings.loading && !settings.data) || (channels.loading && !channels.data) || (roles.loading && !roles.data);
+  const loadError = settings.error || channels.error || roles.error;
+
+  function toggleList(key: "supportRoleIds" | "blacklistRoleIds", id: string) {
+    setDraft((current) => ({ ...current, [key]: current[key].includes(id) ? current[key].filter((value) => value !== id) : [...current[key], id] }));
+  }
+  function updateCategory(index: number, patch: Partial<TicketCategory>) {
+    setDraft((current) => ({ ...current, selectCategories: current.selectCategories.map((category, position) => position === index ? { ...category, ...patch } : category) }));
+  }
+  function ticketPayload(value: TicketSettings) {
+    return {
+      enabled: value.enabled, ticketCategoryId: value.ticketCategoryId, panelChannelId: value.panelChannelId, logChannelId: value.logChannelId,
+      supportRoleIds: value.supportRoleIds, notifyRoleId: value.notifyRoleId, panelTitle: value.panelTitle, panelDescription: value.panelDescription,
+      formTitle: value.formTitle, formQuestions: value.formQuestions, selectCategories: value.selectCategories, ratingEnabled: value.ratingEnabled,
+      autoCloseHours: value.autoCloseHours, reminderHours: value.reminderHours, slaHours: value.slaHours,
+      blacklistRoleIds: value.blacklistRoleIds, blacklistUserIds: value.blacklistUserIds
+    };
+  }
+  async function persist(): Promise<boolean> {
+    setSaving(true); setStatus(null);
+    try {
+      const response = await api<{ tickets: TicketSettings }>(`/api/guilds/${guildId}/tickets`, { method: "PUT", body: JSON.stringify(ticketPayload(draft)) });
+      setDraft(response.tickets); setStatus("Ticketsystem gespeichert. Der Bot übernimmt die Konfiguration jetzt."); await settings.reload(); return true;
+    } catch (error) { setStatus(error instanceof Error ? error.message : "Ticketsystem konnte nicht gespeichert werden."); return false; }
+    finally { setSaving(false); }
+  }
+  async function sendPanel() {
+    if (!draft.panelChannelId) { setStatus("Wähle zuerst einen Panel-Kanal aus."); return; }
+    setSending(true); setStatus(null);
+    try {
+      if (!(await persist())) return;
+      await api(`/api/guilds/${guildId}/tickets/panel`, { method: "POST", body: JSON.stringify({ channelId: draft.panelChannelId }) });
+      setStatus("Das Ticket-Panel wird jetzt vom Bot in Discord gesendet."); await settings.reload();
+    } catch (error) { setStatus(error instanceof Error ? error.message : "Ticket-Panel konnte nicht gesendet werden."); }
+    finally { setSending(false); }
+  }
+
+  return (
+    <section className="control-page ticket-control">
+      <header className="control-hero"><div><p className="eyebrow"><LifeBuoy size={15} /> Support Operations</p><h2>Ticket-System</h2><p>Panel, Teamrollen, Formular, Kategorien und Ticket-Automationen vollständig an einem Ort steuern.</p></div><div className="control-hero-actions"><SyncPill status={draft.syncStatus} /><label className="welcome-switch"><input type="checkbox" checked={draft.enabled} onChange={(event) => setDraft({ ...draft, enabled: event.target.checked })} /><span>{draft.enabled ? "Aktiv" : "Inaktiv"}</span></label></div></header>
+      {loading && <LoadingBlock />}{loadError && <Notice tone="danger" text={loadError} />}{draft.syncError && <Notice tone="danger" text={draft.syncError} />}<ActionStatus status={status} />
+      {!loading && !loadError && <>
+        <div className="control-stat-grid"><StatusTile icon={<LifeBuoy size={19} />} label="Offen" value={String(draft.openTickets)} tone={draft.openTickets ? "warn" : "ok"} /><StatusTile icon={<Check size={19} />} label="Geschlossen" value={String(draft.closedTickets)} /><StatusTile icon={<ClipboardList size={19} />} label="Gesamt" value={String(draft.totalTickets)} /><StatusTile icon={<Star size={19} />} label="Bewertung" value={draft.averageRating === null ? "keine" : `${draft.averageRating}/5`} tone={draft.averageRating !== null && draft.averageRating >= 4 ? "ok" : undefined} /></div>
+        <div className="control-columns ticket-columns">
+          <div className="control-stack">
+            <section className="panel control-panel"><div className="panel-title compact"><div><h2>Grundkonfiguration</h2><p className="muted">Discord-Ziele für neue Tickets, Panel und Protokolle.</p></div><RefreshButton loading={settings.loading || channels.loading || roles.loading} onClick={async () => { await Promise.all([settings.reload(), channels.reload(), roles.reload()]); }} /></div><div className="control-field-grid two"><label>Ticket-Kategorie<select value={draft.ticketCategoryId ?? ""} onChange={(event) => setDraft({ ...draft, ticketCategoryId: event.target.value || null })}><option value="">Kategorie auswählen</option>{categoryChannels.map((channel) => <option value={channel.id} key={channel.id}>{channel.name}</option>)}</select></label><label>Panel-Kanal<select value={draft.panelChannelId ?? ""} onChange={(event) => setDraft({ ...draft, panelChannelId: event.target.value || null })}><ChannelSelectOptions channels={textChannels} noneLabel="Kanal auswählen" /></select></label><label>Log-Kanal<select value={draft.logChannelId ?? ""} onChange={(event) => setDraft({ ...draft, logChannelId: event.target.value || null })}><ChannelSelectOptions channels={textChannels} noneLabel="Kein eigener Log-Kanal" /></select></label><label>Benachrichtigungsrolle<select value={draft.notifyRoleId ?? ""} onChange={(event) => setDraft({ ...draft, notifyRoleId: event.target.value || null })}><option value="">Keine Rolle</option>{manageableRoles.map((role) => <option value={role.id} key={role.id}>{role.name}</option>)}</select></label></div></section>
+            <section className="panel control-panel"><div className="panel-title compact"><div><h2>Supportrollen</h2><p className="muted">Alle ausgewählten Rollen erhalten Zugriff auf neu erstellte Tickets.</p></div><span className="pill neutral">{draft.supportRoleIds.length}/10</span></div><RoleChecklist roles={manageableRoles} selected={draft.supportRoleIds} onToggle={(id) => { if (!draft.supportRoleIds.includes(id) && draft.supportRoleIds.length >= 10) return setStatus("Maximal 10 Supportrollen sind möglich."); toggleList("supportRoleIds", id); }} /></section>
+            <section className="panel control-panel"><div className="panel-title compact"><div><h2>Panel-Inhalt</h2><p className="muted">So erscheint der Einstieg in Discord.</p></div>{draft.panelMessageId && <span className="pill ok">Panel vorhanden</span>}</div><div className="control-field-grid"><label>Titel<input maxLength={100} value={draft.panelTitle} onChange={(event) => setDraft({ ...draft, panelTitle: event.target.value })} /></label><label>Beschreibung<textarea rows={4} maxLength={1000} value={draft.panelDescription} onChange={(event) => setDraft({ ...draft, panelDescription: event.target.value })} /></label></div></section>
+            <section className="panel control-panel"><div className="panel-title compact"><div><h2>Ticket-Kategorien</h2><p className="muted">Bis zu 25 Auswahlpunkte für das Discord-Panel.</p></div><button type="button" className="secondary-action inline" disabled={draft.selectCategories.length >= 25} onClick={() => setDraft({ ...draft, selectCategories: [...draft.selectCategories, { label: "Neue Kategorie", description: "Beschreibe das Anliegen", emoji: "🎫", value: `kategorie-${draft.selectCategories.length + 1}` }] })}><Plus size={16} /> Kategorie</button></div><div className="ticket-builder-list">{draft.selectCategories.map((category, index) => <article key={`${category.value}-${index}`}><input aria-label="Emoji" className="ticket-emoji-input" maxLength={20} value={category.emoji} onChange={(event) => updateCategory(index, { emoji: event.target.value })} /><label>Name<input maxLength={80} value={category.label} onChange={(event) => updateCategory(index, { label: event.target.value })} /></label><label>Beschreibung<input maxLength={100} value={category.description} onChange={(event) => updateCategory(index, { description: event.target.value })} /></label><label>Wert<input maxLength={80} value={category.value} onChange={(event) => updateCategory(index, { value: event.target.value.toLowerCase().replace(/[^a-z0-9_-]/g, "-") })} /></label><button type="button" className="icon-button danger" title="Kategorie entfernen" onClick={() => setDraft({ ...draft, selectCategories: draft.selectCategories.filter((_, position) => position !== index) })}><Trash2 size={16} /></button></article>)}</div></section>
+          </div>
+          <div className="control-stack">
+            <section className="panel control-panel"><div className="panel-title compact"><div><h2>Ticket-Formular</h2><p className="muted">Bis zu fünf Fragen werden im neuen Ticket angezeigt.</p></div><button type="button" className="secondary-action inline" disabled={draft.formQuestions.length >= 5} onClick={() => setDraft({ ...draft, formQuestions: [...draft.formQuestions, "Neue Frage"] })}><Plus size={16} /> Frage</button></div><label>Formular-Titel<input maxLength={100} value={draft.formTitle} onChange={(event) => setDraft({ ...draft, formTitle: event.target.value })} /></label><div className="ticket-question-list">{draft.formQuestions.map((question, index) => <div key={index}><span>{index + 1}</span><input maxLength={250} value={question} onChange={(event) => setDraft({ ...draft, formQuestions: draft.formQuestions.map((value, position) => position === index ? event.target.value : value) })} /><button type="button" className="icon-button" title="Frage entfernen" onClick={() => setDraft({ ...draft, formQuestions: draft.formQuestions.filter((_, position) => position !== index) })}><X size={16} /></button></div>)}{!draft.formQuestions.length && <p className="muted">Keine Zusatzfragen eingerichtet.</p>}</div></section>
+            <section className="panel control-panel"><div className="panel-title compact"><div><h2>Automationen</h2><p className="muted">Zeiten in Stunden; 0 deaktiviert die jeweilige Funktion.</p></div></div><ControlToggle icon={<Star size={17} />} title="Bewertungen" text="Nach dem Schließen eine 1-5-Sterne-Bewertung anfragen." checked={draft.ratingEnabled} onChange={(value) => setDraft({ ...draft, ratingEnabled: value })} /><div className="control-field-grid"><NumberSetting label="Erinnerung" value={draft.reminderHours} min={0} max={720} suffix="Std." onChange={(value) => setDraft({ ...draft, reminderHours: value })} /><NumberSetting label="Auto-Close" value={draft.autoCloseHours} min={0} max={720} suffix="Std." onChange={(value) => setDraft({ ...draft, autoCloseHours: value })} /><NumberSetting label="SLA-Ziel" value={draft.slaHours} min={0} max={720} suffix="Std." onChange={(value) => setDraft({ ...draft, slaHours: value })} /></div></section>
+            <section className="panel control-panel"><div className="panel-title compact"><div><h2>Zugriffssperren</h2><p className="muted">Rollen und einzelne Discord-Nutzer vom Erstellen ausschließen.</p></div></div><h3 className="control-subheading">Gesperrte Rollen</h3><RoleChecklist roles={manageableRoles} selected={draft.blacklistRoleIds} onToggle={(id) => toggleList("blacklistRoleIds", id)} /><label className="control-user-ids">Gesperrte Nutzer-IDs<textarea rows={4} value={draft.blacklistUserIds.join("\n")} onChange={(event) => setDraft({ ...draft, blacklistUserIds: Array.from(new Set(event.target.value.split(/[\s,;]+/).filter((value) => /^\d{17,20}$/.test(value)))) })} placeholder="Eine Discord-ID pro Zeile" /></label></section>
+            <aside className="ticket-preview"><span>Discord Vorschau</span><div className="ticket-preview-embed"><h3>{draft.panelTitle || "Ticketsystem"}</h3><p>{draft.panelDescription || "Wähle eine Kategorie aus."}</p><small>Kategorien</small>{draft.selectCategories.slice(0, 5).map((category) => <div key={category.value}>{category.emoji} {category.label}</div>)}</div><select aria-label="Vorschau Kategorie"><option>Wähle eine Ticketkategorie...</option>{draft.selectCategories.map((category) => <option key={category.value}>{category.emoji} {category.label}</option>)}</select></aside>
+          </div>
+        </div>
+        <div className="control-savebar"><div><strong>{draft.enabled ? "Ticketsystem aktiv" : "Ticketsystem inaktiv"}</strong><small>Speichern aktualisiert Regeln; Panel senden veröffentlicht eine neue Discord-Nachricht.</small></div><div className="form-actions"><button className="primary-action inline" onClick={() => void persist()} disabled={saving || sending}>{saving ? <Loader2 className="spin" size={16} /> : <Save size={16} />} Einstellungen speichern</button><button className="secondary-action inline" onClick={() => void sendPanel()} disabled={saving || sending || !draft.enabled || !draft.panelChannelId}>{sending ? <Loader2 className="spin" size={16} /> : <Rocket size={16} />} Panel senden</button></div></div>
+      </>}
+    </section>
+  );
+}
+
+function BackupsPage({ guildId }: { guildId: string }) {
+  const backups = useApi<{ backups: BackupSettings }>(`/api/guilds/${guildId}/backups`, [guildId]);
+  const [state, setState] = useState(DEFAULT_BACKUP_DRAFT);
+  const [running, setRunning] = useState<string | null>(null);
+  const [status, setStatus] = useState<string | null>(null);
+  useEffect(() => { if (backups.data?.backups) setState(backups.data.backups); }, [backups.data]);
+  const scopes = [
+    { key: "roles" as const, title: "Rollen", text: "Namen, Farben, Rechte und Anzeigeeinstellungen.", icon: BadgeCheck, live: state.guildRoleCount },
+    { key: "channels" as const, title: "Kanäle", text: "Kategorien, Text- und Sprachkanäle mit Basiswerten.", icon: Hash, live: state.guildChannelCount },
+    { key: "full" as const, title: "Vollbackup", text: "Serverstruktur plus aktuelle Bot-Konfiguration.", icon: Database, live: state.guildRoleCount + state.guildChannelCount }
+  ];
+  async function action(kind: "create" | "restore" | "delete", scope: "roles" | "channels" | "full" | "all") {
+    const destructive = kind !== "create";
+    if (destructive && !window.confirm(kind === "restore" ? `Fehlende ${scope === "roles" ? "Rollen" : "Kanäle"} aus dem Backup wiederherstellen? Bestehende Einträge werden nicht gelöscht.` : scope === "all" ? "Wirklich alle Backups dieser Guild löschen?" : `Backup-Bereich ${scope} wirklich löschen?`)) return;
+    const key = `${kind}:${scope}`; setRunning(key); setStatus(null);
+    try {
+      await api(`/api/guilds/${guildId}/backups/actions`, { method: "POST", body: JSON.stringify({ action: kind, scope, confirm: destructive }) });
+      setStatus(kind === "create" ? "Backup wird jetzt vom Bot erstellt." : kind === "restore" ? "Wiederherstellung wurde an den Bot gesendet." : "Backup wird jetzt gelöscht.");
+      await backups.reload();
+    } catch (error) { setStatus(error instanceof Error ? error.message : "Backup-Aktion konnte nicht gestartet werden."); }
+    finally { setRunning(null); }
+  }
+  return (
+    <section className="control-page backup-control">
+      <header className="control-hero"><div><p className="eyebrow"><Database size={15} /> Recovery Center</p><h2>Server-Backups</h2><p>Serverstruktur sichern, vorhandene Stände prüfen und fehlende Rollen oder Kanäle kontrolliert wiederherstellen.</p></div><div className="control-hero-actions"><SyncPill status={state.syncStatus} /><RefreshButton loading={backups.loading} onClick={backups.reload} /></div></header>
+      {backups.loading && !backups.data && <LoadingBlock />}{backups.error && <Notice tone="danger" text={backups.error} />}{state.syncError && <Notice tone="danger" text={state.syncError} />}<ActionStatus status={status} />
+      {backups.data && <>
+        <div className="control-stat-grid"><StatusTile icon={<BadgeCheck size={19} />} label="Live-Rollen" value={String(state.guildRoleCount)} /><StatusTile icon={<Hash size={19} />} label="Live-Kanäle" value={String(state.guildChannelCount)} /><StatusTile icon={<Database size={19} />} label="Backup-Bereiche" value={String(state.items.length)} tone={state.items.length ? "ok" : "warn"} /><StatusTile icon={<Clock3 size={19} />} label="Letzte Sicherung" value={state.lastSavedAt ? formatDateTime(state.lastSavedAt) : "keine"} /></div>
+        <div className="backup-grid">{scopes.map((scope) => { const Icon = scope.icon; const item = state.items.find((entry) => entry.scope === scope.key); return <article className="backup-card" key={scope.key}><header><span><Icon size={19} /></span><div><h2>{scope.title}</h2><p>{scope.text}</p></div><span className={`pill ${item ? "ok" : "neutral"}`}>{item ? "gesichert" : "leer"}</span></header><dl><div><dt>Live</dt><dd>{scope.live} Einträge</dd></div><div><dt>Backup</dt><dd>{item ? `${item.itemCount} Einträge` : "Noch keines"}</dd></div><div><dt>Stand</dt><dd>{item?.savedAt ? formatDateTime(item.savedAt) : "-"}</dd></div></dl><div className="backup-actions"><button className="primary-action inline" onClick={() => void action("create", scope.key)} disabled={Boolean(running)}>{running === `create:${scope.key}` ? <Loader2 className="spin" size={16} /> : <Save size={16} />}{item ? "Neu sichern" : "Backup erstellen"}</button>{scope.key !== "full" && <button className="secondary-action inline" onClick={() => void action("restore", scope.key)} disabled={!item || Boolean(running)}>{running === `restore:${scope.key}` ? <Loader2 className="spin" size={16} /> : <RotateCcw size={16} />} Wiederherstellen</button>}<button className="icon-button danger" title={`${scope.title}-Backup löschen`} onClick={() => void action("delete", scope.key)} disabled={!item || Boolean(running)}><Trash2 size={16} /></button></div></article>; })}</div>
+        <section className="backup-note"><ShieldCheck size={19} /><div><strong>Sichere Wiederherstellung</strong><p>Restore erstellt ausschließlich fehlende Rollen, Kategorien und Kanäle. Bestehende Discord-Strukturen werden dabei nicht gelöscht oder überschrieben.</p></div>{state.items.length > 0 && <button className="danger-action inline" onClick={() => void action("delete", "all")} disabled={Boolean(running)}>{running === "delete:all" ? <Loader2 className="spin" size={16} /> : <Trash2 size={16} />} Alle Backups löschen</button>}</section>
+      </>}
     </section>
   );
 }

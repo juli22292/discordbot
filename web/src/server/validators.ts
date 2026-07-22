@@ -270,6 +270,146 @@ export const autoroleSettingsSchema = z.object({
   }
 });
 
+const domainSchema = z
+  .string()
+  .trim()
+  .toLowerCase()
+  .min(3, "Eine Domain muss mindestens 3 Zeichen lang sein.")
+  .max(120)
+  .regex(/^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$/, "Bitte nutze eine gültige Domain ohne Protokoll oder Pfad.");
+
+export const securitySettingsSchema = z.object({
+  antispamEnabled: z.boolean().default(false),
+  antispamMessageLimit: z.number().int().min(2).max(30).default(5),
+  antispamWindowSeconds: z.number().int().min(2).max(120).default(8),
+  antispamTimeoutSeconds: z.number().int().min(0).max(86400).default(60),
+  antilinkEnabled: z.boolean().default(false),
+  antilinkTimeoutSeconds: z.number().int().min(0).max(86400).default(0),
+  antiinviteEnabled: z.boolean().default(false),
+  antiinviteTimeoutSeconds: z.number().int().min(0).max(86400).default(60),
+  antimentionLimit: z.number().int().min(0).max(50).default(0),
+  antimentionTimeoutSeconds: z.number().int().min(0).max(86400).default(60),
+  accountAgeMinDays: z.number().int().min(0).max(3650).default(0),
+  quarantineRoleId: nullableSnowflakeSchema,
+  verificationEnabled: z.boolean().default(false),
+  verificationChannelId: nullableSnowflakeSchema,
+  verificationRoleId: nullableSnowflakeSchema,
+  verificationTitle: z.string().trim().min(1).max(100).default("Verifizierung"),
+  verificationText: z.string().trim().min(1).max(1500).default("Klicke auf den Button, um dich zu verifizieren."),
+  auditLogWatchEnabled: z.boolean().default(false),
+  antinukeEnabled: z.boolean().default(false),
+  antinukeLimit: z.number().int().min(1).max(20).default(3),
+  antinukeWindowSeconds: z.number().int().min(10).max(600).default(60),
+  antinukePunishment: z.enum(["log", "timeout", "kick", "ban", "quarantine"]).default("log"),
+  allowedDomains: z.array(domainSchema).max(100).default([]),
+  blockedDomains: z.array(domainSchema).max(100).default([])
+}).superRefine((value, context) => {
+  if (value.verificationEnabled && (!value.verificationChannelId || !value.verificationRoleId)) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["verificationEnabled"],
+      message: "Für die aktive Verifizierung werden ein Textkanal und eine Rolle benötigt."
+    });
+  }
+  if (value.antinukePunishment === "quarantine" && value.antinukeEnabled && !value.quarantineRoleId) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["quarantineRoleId"],
+      message: "Für die Anti-Nuke-Strafe Quarantäne muss eine Quarantäne-Rolle ausgewählt sein."
+    });
+  }
+  const allowed = new Set(value.allowedDomains);
+  value.blockedDomains.forEach((domain, index) => {
+    if (allowed.has(domain)) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["blockedDomains", index],
+        message: `${domain} kann nicht gleichzeitig erlaubt und blockiert sein.`
+      });
+    }
+  });
+});
+
+export const raidSettingsSchema = z.object({
+  profile: z.enum(["off", "light", "strict"]).default("off"),
+  panicEnabled: z.boolean().default(false),
+  panicSlowmodeSeconds: z.number().int().min(0).max(21600).default(10)
+});
+
+const ticketSelectCategorySchema = z.object({
+  label: z.string().trim().min(1).max(80),
+  description: z.string().trim().min(1).max(100),
+  emoji: z.string().trim().min(1).max(20).default("🎫"),
+  value: z.string().trim().toLowerCase().regex(/^[a-z0-9_-]{1,80}$/)
+});
+
+export const ticketSettingsSchema = z.object({
+  enabled: z.boolean().default(false),
+  ticketCategoryId: nullableSnowflakeSchema,
+  panelChannelId: nullableSnowflakeSchema,
+  logChannelId: nullableSnowflakeSchema,
+  supportRoleIds: z.array(snowflakeSchema).max(10).default([]),
+  notifyRoleId: nullableSnowflakeSchema,
+  panelTitle: z.string().trim().min(1).max(100).default("Ticketsystem"),
+  panelDescription: z.string().trim().min(1).max(1000).default("Wähle unten eine Kategorie aus, um ein Ticket zu erstellen."),
+  formTitle: z.string().trim().min(1).max(100).default("Ticket-Fragen"),
+  formQuestions: z.array(z.string().trim().min(1).max(250)).max(5).default([]),
+  selectCategories: z.array(ticketSelectCategorySchema).max(25).default([]),
+  ratingEnabled: z.boolean().default(false),
+  autoCloseHours: z.number().int().min(0).max(720).default(0),
+  reminderHours: z.number().int().min(0).max(720).default(0),
+  slaHours: z.number().int().min(0).max(720).default(0),
+  blacklistRoleIds: z.array(snowflakeSchema).max(25).default([]),
+  blacklistUserIds: z.array(snowflakeSchema).max(100).default([])
+}).superRefine((value, context) => {
+  if (value.enabled && !value.ticketCategoryId) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["ticketCategoryId"],
+      message: "Für ein aktives Ticketsystem muss eine Discord-Kategorie ausgewählt sein."
+    });
+  }
+  const labels = new Set<string>();
+  const values = new Set<string>();
+  value.selectCategories.forEach((category, index) => {
+    const label = category.label.toLocaleLowerCase("de-DE");
+    if (labels.has(label) || values.has(category.value)) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["selectCategories", index],
+        message: "Ticket-Kategorien benötigen eindeutige Namen und Werte."
+      });
+    }
+    labels.add(label);
+    values.add(category.value);
+  });
+});
+
+export const ticketPanelSchema = z.object({
+  channelId: snowflakeSchema
+});
+
+export const backupActionSchema = z.object({
+  action: z.enum(["create", "restore", "delete"]),
+  scope: z.enum(["roles", "channels", "full", "all"]),
+  confirm: z.boolean().default(false)
+}).superRefine((value, context) => {
+  if ((value.action === "restore" || value.action === "delete") && !value.confirm) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["confirm"],
+      message: "Wiederherstellen und Löschen müssen ausdrücklich bestätigt werden."
+    });
+  }
+  if (value.action === "restore" && !new Set(["roles", "channels"]).has(value.scope)) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["scope"],
+      message: "Wiederhergestellt werden können Rollen oder Kanäle."
+    });
+  }
+});
+
 export function assertSameGuild(routeGuildId: string, rowGuildId: string): void {
   if (routeGuildId !== rowGuildId) {
     throw new Error("Guild-Isolation verletzt: Ressource gehoert zu einer anderen Guild.");

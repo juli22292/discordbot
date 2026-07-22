@@ -2,16 +2,20 @@ import { describe, expect, it } from "vitest";
 import {
   assertSameGuild,
   autoroleSettingsSchema,
+  backupActionSchema,
   commandConfigSchema,
   countingResetSchema,
   countingSettingsSchema,
   customCommandSchema,
   levelSettingsSchema,
   nicknameSchema,
+  raidSettingsSchema,
   safeRedirectPath,
   snowflakeSchema,
+  securitySettingsSchema,
   tempVoicePanelSchema,
-  tempVoiceSettingsSchema
+  tempVoiceSettingsSchema,
+  ticketSettingsSchema
 } from "../server/validators";
 
 describe("guild-isolated validation", () => {
@@ -135,5 +139,39 @@ describe("guild-isolated validation", () => {
     expect(() => autoroleSettingsSchema.parse({
       humanRoleIds: ["123456789012345678", "123456789012345678"]
     })).toThrow(/nur einmal/);
+  });
+
+  it("validates complete security settings and rejects conflicting domains", () => {
+    const settings = securitySettingsSchema.parse({
+      antispamEnabled: true,
+      quarantineRoleId: "123456789012345678",
+      antinukeEnabled: true,
+      antinukePunishment: "quarantine",
+      allowedDomains: ["example.com"],
+      blockedDomains: ["evil.example"]
+    });
+    expect(settings.antispamMessageLimit).toBe(5);
+    expect(() => securitySettingsSchema.parse({
+      allowedDomains: ["example.com"],
+      blockedDomains: ["example.com"]
+    })).toThrow(/gleichzeitig/);
+  });
+
+  it("validates raid profiles and destructive backup confirmations", () => {
+    expect(raidSettingsSchema.parse({ profile: "strict", panicSlowmodeSeconds: 30 }).profile).toBe("strict");
+    expect(() => backupActionSchema.parse({ action: "delete", scope: "all", confirm: false })).toThrow(/bestätigt/);
+    expect(backupActionSchema.parse({ action: "restore", scope: "roles", confirm: true }).scope).toBe("roles");
+  });
+
+  it("validates ticket setup including unique panel categories", () => {
+    const settings = ticketSettingsSchema.parse({
+      enabled: true,
+      ticketCategoryId: "123456789012345678",
+      supportRoleIds: ["223456789012345678"],
+      formQuestions: ["Wobei brauchst du Hilfe?"],
+      selectCategories: [{ label: "Support", description: "Allgemeine Hilfe", emoji: "🎫", value: "support" }]
+    });
+    expect(settings.formQuestions).toHaveLength(1);
+    expect(() => ticketSettingsSchema.parse({ enabled: true })).toThrow(/Discord-Kategorie/);
   });
 });

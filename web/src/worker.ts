@@ -37,6 +37,7 @@ import {
   assertSameGuild,
   adminRoleUpdateSchema,
   autoroleSettingsSchema,
+  backupActionSchema,
   botAdminActionSchema,
   commandConfigSchema,
   countingResetSchema,
@@ -52,11 +53,15 @@ import {
   partialCustomCommandSchema,
   pterodactylPowerSchema,
   presenceSchema,
+  raidSettingsSchema,
   safeRedirectPath,
   settingsSchema,
   snowflakeSchema,
+  securitySettingsSchema,
   tempVoicePanelSchema,
   tempVoiceSettingsSchema,
+  ticketPanelSchema,
+  ticketSettingsSchema,
   validationError,
   welcomeSettingsSchema
 } from "./server/validators";
@@ -275,6 +280,24 @@ interface AutoroleSettingsResponse {
   waitForScreening: boolean;
   syncStatus: string;
   syncError: string | null;
+}
+
+type GuildControlModule = "security" | "raidmode" | "tickets" | "backups";
+
+interface GuildControlModuleRow {
+  guild_id: string;
+  module: GuildControlModule;
+  configuration: string;
+  runtime_state: string;
+  sync_status: string;
+  sync_error: string | null;
+  updated_at: string;
+}
+
+interface GuildControlModuleResponse extends Record<string, unknown> {
+  syncStatus: string;
+  syncError: string | null;
+  updatedAt: string | null;
 }
 
 interface BotRuntimeRow {
@@ -1288,6 +1311,181 @@ async function ensureAutoroleSettings(env: Env, guildId: string): Promise<Autoro
      VALUES (?, ?, ?)`
   ).bind(guildId, timestamp, timestamp).run();
   return { ...DEFAULT_AUTOROLE_SETTINGS, humanRoleIds: [], botRoleIds: [] };
+}
+
+const DEFAULT_SECURITY_CONFIGURATION = {
+  antispamEnabled: false,
+  antispamMessageLimit: 5,
+  antispamWindowSeconds: 8,
+  antispamTimeoutSeconds: 60,
+  antilinkEnabled: false,
+  antilinkTimeoutSeconds: 0,
+  antiinviteEnabled: false,
+  antiinviteTimeoutSeconds: 60,
+  antimentionLimit: 0,
+  antimentionTimeoutSeconds: 60,
+  accountAgeMinDays: 0,
+  quarantineRoleId: null,
+  verificationEnabled: false,
+  verificationChannelId: null,
+  verificationRoleId: null,
+  verificationTitle: "Verifizierung",
+  verificationText: "Klicke auf den Button, um dich zu verifizieren.",
+  auditLogWatchEnabled: false,
+  antinukeEnabled: false,
+  antinukeLimit: 3,
+  antinukeWindowSeconds: 60,
+  antinukePunishment: "log",
+  allowedDomains: [],
+  blockedDomains: []
+};
+
+const DEFAULT_RAID_CONFIGURATION = {
+  profile: "off",
+  panicEnabled: false,
+  panicSlowmodeSeconds: 10
+};
+
+const DEFAULT_TICKET_CONFIGURATION = {
+  enabled: false,
+  ticketCategoryId: null,
+  panelChannelId: null,
+  logChannelId: null,
+  supportRoleIds: [],
+  notifyRoleId: null,
+  panelTitle: "Ticketsystem",
+  panelDescription: "Wähle unten eine Kategorie aus, um ein Ticket zu erstellen.",
+  formTitle: "Ticket-Fragen",
+  formQuestions: [],
+  selectCategories: [
+    { label: "Support", description: "Allgemeine Hilfe und Fragen", emoji: "🎫", value: "support" },
+    { label: "Technik", description: "Technische Probleme melden", emoji: "🛠️", value: "technik" },
+    { label: "Sonstiges", description: "Andere Anliegen", emoji: "💬", value: "sonstiges" }
+  ],
+  ratingEnabled: false,
+  autoCloseHours: 0,
+  reminderHours: 0,
+  slaHours: 0,
+  blacklistRoleIds: [],
+  blacklistUserIds: []
+};
+
+const DEFAULT_CONTROL_CONFIGURATIONS: Record<GuildControlModule, Record<string, unknown>> = {
+  security: DEFAULT_SECURITY_CONFIGURATION,
+  raidmode: DEFAULT_RAID_CONFIGURATION,
+  tickets: DEFAULT_TICKET_CONFIGURATION,
+  backups: {}
+};
+
+const DEFAULT_CONTROL_RUNTIME: Record<GuildControlModule, Record<string, unknown>> = {
+  security: { healthScore: 0, activeProtections: 0, totalProtections: 8 },
+  raidmode: { raidmodeEnabled: false, panicEnabled: false },
+  tickets: { totalTickets: 0, openTickets: 0, closedTickets: 0, deletedTickets: 0, averageRating: null, panelMessageId: null },
+  backups: { items: [], lastSavedAt: null }
+};
+
+let guildControlStorageReady: Promise<void> | null = null;
+
+async function ensureGuildControlStorage(env: Env): Promise<void> {
+  if (!guildControlStorageReady) {
+    const db = requireDb(env);
+    guildControlStorageReady = (async () => {
+      await db.prepare(
+        `CREATE TABLE IF NOT EXISTS guild_control_modules (
+           guild_id TEXT NOT NULL REFERENCES guilds(id) ON DELETE CASCADE,
+           module TEXT NOT NULL,
+           configuration TEXT NOT NULL DEFAULT '{}',
+           runtime_state TEXT NOT NULL DEFAULT '{}',
+           sync_status TEXT NOT NULL DEFAULT 'idle',
+           sync_error TEXT,
+           created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+           updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+           PRIMARY KEY (guild_id, module)
+         )`
+      ).run();
+      await db.prepare(
+        "CREATE INDEX IF NOT EXISTS idx_guild_control_modules_sync ON guild_control_modules(module, sync_status, updated_at)"
+      ).run();
+    })().catch((error) => {
+      guildControlStorageReady = null;
+      throw error;
+    });
+  }
+  await guildControlStorageReady;
+}
+
+function recordValue(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
+}
+
+function normalizeGuildControlModule(row: GuildControlModuleRow | null | undefined, module: GuildControlModule): GuildControlModuleResponse {
+  const configuration = row ? recordValue(parseJson(row.configuration, {})) : {};
+  const runtime = row ? recordValue(parseJson(row.runtime_state, {})) : {};
+  return {
+    ...DEFAULT_CONTROL_CONFIGURATIONS[module],
+    ...configuration,
+    ...DEFAULT_CONTROL_RUNTIME[module],
+    ...runtime,
+    syncStatus: row?.sync_status || "idle",
+    syncError: row?.sync_error ?? null,
+    updatedAt: row?.updated_at ?? null
+  };
+}
+
+async function ensureGuildControlModule(env: Env, guildId: string, module: GuildControlModule): Promise<GuildControlModuleResponse> {
+  await ensureGuildControlStorage(env);
+  const db = requireDb(env);
+  const existing = await first<GuildControlModuleRow>(
+    db.prepare(
+      `SELECT guild_id, module, configuration, runtime_state, sync_status, sync_error, updated_at
+         FROM guild_control_modules
+        WHERE guild_id = ? AND module = ?`
+    ).bind(guildId, module)
+  );
+  if (existing) return normalizeGuildControlModule(existing, module);
+
+  const timestamp = nowIso();
+  await db.prepare(
+    `INSERT INTO guild_control_modules (
+       guild_id, module, configuration, runtime_state, sync_status, created_at, updated_at
+     ) VALUES (?, ?, ?, ?, 'idle', ?, ?)`
+  ).bind(
+    guildId,
+    module,
+    asJson(DEFAULT_CONTROL_CONFIGURATIONS[module]),
+    asJson(DEFAULT_CONTROL_RUNTIME[module]),
+    timestamp,
+    timestamp
+  ).run();
+  return normalizeGuildControlModule(null, module);
+}
+
+async function setGuildControlPending(
+  env: Env,
+  guildId: string,
+  module: GuildControlModule,
+  configuration: Record<string, unknown>,
+  runtimeState?: Record<string, unknown>
+): Promise<void> {
+  await ensureGuildControlStorage(env);
+  const timestamp = nowIso();
+  await env.DB.prepare(
+    `INSERT INTO guild_control_modules (
+       guild_id, module, configuration, runtime_state, sync_status, sync_error, created_at, updated_at
+     ) VALUES (?, ?, ?, ?, 'pending', NULL, ?, ?)
+     ON CONFLICT(guild_id, module) DO UPDATE SET
+       configuration = excluded.configuration,
+       runtime_state = CASE WHEN ? IS NULL THEN guild_control_modules.runtime_state ELSE excluded.runtime_state END,
+       sync_status = 'pending', sync_error = NULL, updated_at = excluded.updated_at`
+  ).bind(
+    guildId,
+    module,
+    asJson(configuration),
+    asJson(runtimeState ?? DEFAULT_CONTROL_RUNTIME[module]),
+    timestamp,
+    timestamp,
+    runtimeState ? "replace" : null
+  ).run();
 }
 
 function mediaPreviewUrl(discordGuildId: string, mediaKey: string): string {
@@ -2817,6 +3015,186 @@ app.put("/api/guilds/:guildId/autorole", async (c) => {
   return json(c, { ok: true, eventId, autorole: saved });
 });
 
+app.get("/api/guilds/:guildId/security", async (c) => {
+  const access = await requireGuildManagementAccess(c, c.req.param("guildId"));
+  return json(c, { security: await ensureGuildControlModule(c.env, access.guild.id, "security") });
+});
+
+app.put("/api/guilds/:guildId/security", async (c) => {
+  const access = await requireGuildManagementAccess(c, c.req.param("guildId"));
+  const data = securitySettingsSchema.parse(await readJsonBody(c));
+  const oldValue = await ensureGuildControlModule(c.env, access.guild.id, "security");
+  const selectedRoleIds = [data.quarantineRoleId, data.verificationRoleId].filter((value): value is string => Boolean(value));
+
+  if (selectedRoleIds.length) {
+    const roles = await all<{ id: string; managed: number; botCanManage: number }>(
+      c.env.DB.prepare(
+        `SELECT discord_role_id AS id, managed, bot_can_manage AS botCanManage
+           FROM guild_roles WHERE guild_id = ?`
+      ).bind(access.guild.id)
+    );
+    const roleMap = new Map(roles.map((role) => [role.id, role]));
+    for (const roleId of selectedRoleIds) {
+      const role = roleMap.get(roleId);
+      if (!role || role.managed || !role.botCanManage) {
+        throw new HttpError(400, "security_role_unmanageable", "Eine ausgewählte Sicherheitsrolle kann vom Bot nicht vergeben werden. Prüfe die Rollenhierarchie.");
+      }
+    }
+  }
+
+  if (data.verificationChannelId) {
+    const channel = await first<{ type: string; canSend: number }>(
+      c.env.DB.prepare(
+        `SELECT channel_type AS type, can_send AS canSend FROM guild_channels
+          WHERE guild_id = ? AND discord_channel_id = ?`
+      ).bind(access.guild.id, data.verificationChannelId)
+    );
+    if (!channel || !new Set(["text", "news", "announcement"]).has(String(channel.type).toLowerCase()) || !channel.canSend) {
+      throw new HttpError(400, "verification_channel_invalid", "Der Verifizierungskanal muss ein beschreibbarer Textkanal sein.");
+    }
+  }
+
+  await setGuildControlPending(c.env, access.guild.id, "security", { ...data });
+  const eventId = await enqueueSyncEvent(c.env, access.guild, "security.settings.upsert", {
+    discordGuildId: access.guild.discordGuildId,
+    settings: data
+  });
+  const saved = { ...oldValue, ...data, syncStatus: "pending", syncError: null };
+  await audit(c.env, access.guild.id, access.session.user.discordUserId, "security.update", "security", oldValue, saved);
+  return json(c, { ok: true, eventId, security: saved });
+});
+
+app.get("/api/guilds/:guildId/raidmode", async (c) => {
+  const access = await requireGuildManagementAccess(c, c.req.param("guildId"));
+  return json(c, { raidmode: await ensureGuildControlModule(c.env, access.guild.id, "raidmode") });
+});
+
+app.put("/api/guilds/:guildId/raidmode", async (c) => {
+  const access = await requireGuildManagementAccess(c, c.req.param("guildId"));
+  const data = raidSettingsSchema.parse(await readJsonBody(c));
+  const oldValue = await ensureGuildControlModule(c.env, access.guild.id, "raidmode");
+  await setGuildControlPending(c.env, access.guild.id, "raidmode", { ...data });
+  const eventId = await enqueueSyncEvent(c.env, access.guild, "raidmode.settings.upsert", {
+    discordGuildId: access.guild.discordGuildId,
+    settings: data
+  });
+  const saved = { ...oldValue, ...data, syncStatus: "pending", syncError: null };
+  await audit(c.env, access.guild.id, access.session.user.discordUserId, "raidmode.update", "raidmode", oldValue, saved);
+  return json(c, { ok: true, eventId, raidmode: saved });
+});
+
+app.get("/api/guilds/:guildId/tickets", async (c) => {
+  const access = await requireGuildManagementAccess(c, c.req.param("guildId"));
+  return json(c, { tickets: await ensureGuildControlModule(c.env, access.guild.id, "tickets") });
+});
+
+app.put("/api/guilds/:guildId/tickets", async (c) => {
+  const access = await requireGuildManagementAccess(c, c.req.param("guildId"));
+  const data = ticketSettingsSchema.parse(await readJsonBody(c));
+  const oldValue = await ensureGuildControlModule(c.env, access.guild.id, "tickets");
+  const channelIds = [data.ticketCategoryId, data.panelChannelId, data.logChannelId].filter((value): value is string => Boolean(value));
+  const channelRows = channelIds.length
+    ? await all<{ id: string; type: string; canSend: number }>(
+      c.env.DB.prepare(
+        `SELECT discord_channel_id AS id, channel_type AS type, can_send AS canSend
+           FROM guild_channels
+          WHERE guild_id = ? AND discord_channel_id IN (${channelIds.map(() => "?").join(", ")})`
+      ).bind(access.guild.id, ...channelIds)
+    )
+    : [];
+  const channelMap = new Map(channelRows.map((channel) => [channel.id, channel]));
+
+  if (data.ticketCategoryId && String(channelMap.get(data.ticketCategoryId)?.type ?? "").toLowerCase() !== "category") {
+    throw new HttpError(400, "ticket_category_invalid", "Die Ticket-Kategorie wurde nicht gefunden oder ist keine Discord-Kategorie.");
+  }
+  for (const channelId of [data.panelChannelId, data.logChannelId].filter((value): value is string => Boolean(value))) {
+    const channel = channelMap.get(channelId);
+    if (!channel || !new Set(["text", "news", "announcement"]).has(String(channel.type).toLowerCase()) || !channel.canSend) {
+      throw new HttpError(400, "ticket_channel_invalid", "Panel- und Logkanal müssen beschreibbare Textkanäle sein.");
+    }
+  }
+
+  const selectedRoleIds = Array.from(new Set([
+    ...data.supportRoleIds,
+    ...data.blacklistRoleIds,
+    ...(data.notifyRoleId ? [data.notifyRoleId] : [])
+  ]));
+  if (selectedRoleIds.length) {
+    const roles = await all<{ id: string; managed: number }>(
+      c.env.DB.prepare(
+        `SELECT discord_role_id AS id, managed FROM guild_roles
+          WHERE guild_id = ?`
+      ).bind(access.guild.id)
+    );
+    const roleMap = new Map(roles.map((role) => [role.id, role]));
+    for (const roleId of selectedRoleIds) {
+      if (!roleMap.has(roleId)) throw new HttpError(400, "ticket_role_invalid", `Die Ticket-Rolle ${roleId} wurde auf dieser Guild nicht gefunden.`);
+    }
+  }
+
+  await setGuildControlPending(c.env, access.guild.id, "tickets", { ...data });
+  const eventId = await enqueueSyncEvent(c.env, access.guild, "ticket.settings.upsert", {
+    discordGuildId: access.guild.discordGuildId,
+    settings: data
+  });
+  const saved = { ...oldValue, ...data, syncStatus: "pending", syncError: null };
+  await audit(c.env, access.guild.id, access.session.user.discordUserId, "ticket.update", "tickets", oldValue, saved);
+  return json(c, { ok: true, eventId, tickets: saved });
+});
+
+app.post("/api/guilds/:guildId/tickets/panel", async (c) => {
+  const access = await requireGuildManagementAccess(c, c.req.param("guildId"));
+  const data = ticketPanelSchema.parse(await readJsonBody(c));
+  const current = await ensureGuildControlModule(c.env, access.guild.id, "tickets");
+  const channel = await first<{ type: string; canSend: number }>(
+    c.env.DB.prepare(
+      `SELECT channel_type AS type, can_send AS canSend FROM guild_channels
+        WHERE guild_id = ? AND discord_channel_id = ?`
+    ).bind(access.guild.id, data.channelId)
+  );
+  if (!channel || !new Set(["text", "news", "announcement"]).has(String(channel.type).toLowerCase()) || !channel.canSend) {
+    throw new HttpError(400, "ticket_panel_channel_invalid", "Das Ticket-Panel braucht einen beschreibbaren Textkanal.");
+  }
+  const currentConfiguration = ticketSettingsSchema.parse(current);
+  await setGuildControlPending(c.env, access.guild.id, "tickets", {
+    ...currentConfiguration,
+    panelChannelId: data.channelId
+  });
+  const eventId = await enqueueSyncEvent(c.env, access.guild, "ticket.panel.send", {
+    discordGuildId: access.guild.discordGuildId,
+    channelId: data.channelId
+  });
+  await audit(c.env, access.guild.id, access.session.user.discordUserId, "ticket.panel.send", data.channelId, null, { eventId });
+  return json(c, { ok: true, eventId });
+});
+
+app.get("/api/guilds/:guildId/backups", async (c) => {
+  const access = await requireGuildManagementAccess(c, c.req.param("guildId"));
+  return json(c, { backups: await ensureGuildControlModule(c.env, access.guild.id, "backups") });
+});
+
+app.post("/api/guilds/:guildId/backups/actions", async (c) => {
+  const access = await requireGuildManagementAccess(c, c.req.param("guildId"));
+  const data = backupActionSchema.parse(await readJsonBody(c));
+  const current = await ensureGuildControlModule(c.env, access.guild.id, "backups");
+  await setGuildControlPending(c.env, access.guild.id, "backups", {}, {
+    items: Array.isArray(current.items) ? current.items : [],
+    lastSavedAt: current.lastSavedAt ?? null,
+    guildRoleCount: Number(current.guildRoleCount ?? 0),
+    guildChannelCount: Number(current.guildChannelCount ?? 0),
+    pendingAction: data.action,
+    pendingScope: data.scope
+  });
+  const eventId = await enqueueSyncEvent(c.env, access.guild, "backup.action", {
+    discordGuildId: access.guild.discordGuildId,
+    action: data.action,
+    scope: data.scope,
+    confirmed: data.confirm
+  });
+  await audit(c.env, access.guild.id, access.session.user.discordUserId, `backup.${data.action}`, data.scope, null, { eventId });
+  return json(c, { ok: true, eventId });
+});
+
 app.get("/api/guilds/:guildId/roles", async (c) => {
   const access = await requireGuildManagementAccess(c, c.req.param("guildId"));
   const roles = await all<Record<string, unknown>>(
@@ -3896,6 +4274,10 @@ app.post("/api/internal/bot/snapshot", async (c) => {
       counting?: Record<string, unknown>;
       levelSystem?: Record<string, unknown>;
       autorole?: Record<string, unknown>;
+      security?: Record<string, unknown>;
+      raidmode?: Record<string, unknown>;
+      tickets?: Record<string, unknown>;
+      backups?: Record<string, unknown>;
     }>;
     commands?: Array<{ name: string; description?: string; type?: string }>;
   };
@@ -3951,6 +4333,7 @@ app.post("/api/internal/bot/snapshot", async (c) => {
   const countingRows: Array<Record<string, unknown>> = [];
   const levelRows: Array<Record<string, unknown>> = [];
   const autoroleRows: Array<Record<string, unknown>> = [];
+  const controlRows: Array<Record<string, unknown>> = [];
 
   for (const guild of guilds) {
     const internalGuildId = internalGuildIds.get(guild.id)!;
@@ -4047,11 +4430,23 @@ app.post("/api/internal/bot/snapshot", async (c) => {
       waitForScreening: autorole.waitForScreening === false ? 0 : 1,
       timestamp
     });
+
+    for (const module of ["security", "raidmode", "tickets", "backups"] as GuildControlModule[]) {
+      const section = recordValue(guild[module]);
+      controlRows.push({
+        guildId: internalGuildId,
+        module,
+        configuration: recordValue(section.configuration),
+        runtimeState: recordValue(section.runtime),
+        timestamp
+      });
+    }
   }
 
   await ensureCountingStorage(c.env);
   await ensureLevelStorage(c.env);
   await ensureAutoroleStorage(c.env);
+  await ensureGuildControlStorage(c.env);
   await db.batch([
     db.prepare(
       `INSERT INTO bot_commands (id, command_name, description, command_type, updated_at)
@@ -4224,6 +4619,28 @@ app.post("/api/internal/bot/snapshot", async (c) => {
     ).bind(asJson(autoroleRows))
   ]);
 
+  await db.prepare(
+    `INSERT INTO guild_control_modules (
+       guild_id, module, configuration, runtime_state, sync_status, sync_error, created_at, updated_at
+     )
+     SELECT
+       json_extract(value, '$.guildId'),
+       json_extract(value, '$.module'),
+       json_extract(value, '$.configuration'),
+       json_extract(value, '$.runtimeState'),
+       'synced', NULL,
+       json_extract(value, '$.timestamp'),
+       json_extract(value, '$.timestamp')
+     FROM json_each(?)
+     WHERE true
+     ON CONFLICT(guild_id, module) DO UPDATE SET
+       configuration = CASE WHEN guild_control_modules.sync_status = 'pending' THEN guild_control_modules.configuration ELSE excluded.configuration END,
+       runtime_state = excluded.runtime_state,
+       sync_status = CASE WHEN guild_control_modules.sync_status = 'pending' THEN 'pending' ELSE 'synced' END,
+       sync_error = CASE WHEN guild_control_modules.sync_status = 'pending' THEN guild_control_modules.sync_error ELSE NULL END,
+       updated_at = excluded.updated_at`
+  ).bind(asJson(controlRows)).run();
+
   return json(c, {
     ok: true,
     stored: {
@@ -4233,7 +4650,8 @@ app.post("/api/internal/bot/snapshot", async (c) => {
       roles: roleRows.length,
       counting: countingRows.length,
       levelSettings: levelRows.length,
-      autoroleSettings: autoroleRows.length
+      autoroleSettings: autoroleRows.length,
+      controlModules: controlRows.length
     }
   });
 });
@@ -4498,6 +4916,39 @@ app.post("/api/internal/bot/sync-events/:eventId/complete", async (c) => {
     ).run();
   }
 
+  const controlModuleByAction: Partial<Record<string, GuildControlModule>> = {
+    "security.settings.upsert": "security",
+    "raidmode.settings.upsert": "raidmode",
+    "ticket.settings.upsert": "tickets",
+    "ticket.panel.send": "tickets",
+    "backup.action": "backups"
+  };
+  const controlModule = controlModuleByAction[row.action];
+  if (controlModule) {
+    await ensureGuildControlStorage(c.env);
+    const currentRow = await first<GuildControlModuleRow>(
+      c.env.DB.prepare(
+        `SELECT guild_id, module, configuration, runtime_state, sync_status, sync_error, updated_at
+           FROM guild_control_modules WHERE guild_id = ? AND module = ?`
+      ).bind(row.guild_id, controlModule)
+    );
+    const currentConfiguration = currentRow ? recordValue(parseJson(currentRow.configuration, {})) : DEFAULT_CONTROL_CONFIGURATIONS[controlModule];
+    const currentRuntime = currentRow ? recordValue(parseJson(currentRow.runtime_state, {})) : DEFAULT_CONTROL_RUNTIME[controlModule];
+    const result = recordValue(body.result);
+    const configuration = Object.keys(recordValue(result.configuration)).length
+      ? recordValue(result.configuration)
+      : currentConfiguration;
+    const runtime = Object.keys(recordValue(result.runtime)).length
+      ? recordValue(result.runtime)
+      : currentRuntime;
+
+    await c.env.DB.prepare(
+      `UPDATE guild_control_modules
+          SET configuration = ?, runtime_state = ?, sync_status = 'synced', sync_error = NULL, updated_at = ?
+        WHERE guild_id = ? AND module = ?`
+    ).bind(asJson(configuration), asJson(runtime), nowIso(), row.guild_id, controlModule).run();
+  }
+
   const currentMediaKey = row.action === "guild.member_avatar.update"
     ? String(eventPayload.mediaKey ?? "")
     : row.action === "welcome_settings.upsert"
@@ -4596,6 +5047,23 @@ app.post("/api/internal/bot/sync-events/:eventId/fail", async (c) => {
     )
       .bind(String(body.error ?? "Unbekannter Fehler").slice(0, 1000), nowIso(), row.guild_id)
       .run();
+  }
+
+  const failedControlModuleByAction: Partial<Record<string, GuildControlModule>> = {
+    "security.settings.upsert": "security",
+    "raidmode.settings.upsert": "raidmode",
+    "ticket.settings.upsert": "tickets",
+    "ticket.panel.send": "tickets",
+    "backup.action": "backups"
+  };
+  const failedControlModule = failedControlModuleByAction[row.action];
+  if (!retry && failedControlModule) {
+    await ensureGuildControlStorage(c.env);
+    await c.env.DB.prepare(
+      `UPDATE guild_control_modules
+          SET sync_status = 'failed', sync_error = ?, updated_at = ?
+        WHERE guild_id = ? AND module = ?`
+    ).bind(String(body.error ?? "Unbekannter Fehler").slice(0, 1000), nowIso(), row.guild_id, failedControlModule).run();
   }
 
   return json(c, { ok: true, retry });
