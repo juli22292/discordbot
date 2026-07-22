@@ -8,6 +8,7 @@ import {
   countingSettingsSchema,
   customCommandSchema,
   levelSettingsSchema,
+  musicSourceSchema,
   nicknameSchema,
   raidSettingsSchema,
   safeRedirectPath,
@@ -161,6 +162,12 @@ describe("guild-isolated validation", () => {
     expect(raidSettingsSchema.parse({ profile: "strict", panicSlowmodeSeconds: 30 }).profile).toBe("strict");
     expect(() => backupActionSchema.parse({ action: "delete", scope: "all", confirm: false })).toThrow(/bestätigt/);
     expect(backupActionSchema.parse({ action: "restore", scope: "roles", confirm: true }).scope).toBe("roles");
+  });
+
+  it("allows only supported Lavalink music sources", () => {
+    expect(musicSourceSchema.parse({ source: "youtube" }).source).toBe("youtube");
+    expect(musicSourceSchema.parse({ source: "spotify" }).source).toBe("spotify");
+    expect(() => musicSourceSchema.parse({ source: "soundcloud" })).toThrow();
   });
 
   it("validates ticket setup including unique panel categories", () => {

@@ -49,6 +49,7 @@ import {
   logCategories,
   loggingSettingsSchema,
   loggingTestSchema,
+  musicSourceSchema,
   nicknameSchema,
   partialCustomCommandSchema,
   pterodactylPowerSchema,
@@ -3872,6 +3873,18 @@ app.post("/api/admin/bot/actions", async (c) => {
   });
 
   return json(c, { ok: true, eventId, action: data.action });
+});
+
+app.post("/api/admin/bot/music-source", async (c) => {
+  const session = await requireAdminSession(c);
+  const data = musicSourceSchema.parse(await readJsonBody(c));
+  const eventId = await enqueueBotAdminEvent(c.env, "bot.admin.music.source.update", {
+    source: data.source,
+    actorDiscordUserId: session.user.discordUserId,
+    actorUsername: session.user.displayName || session.user.username
+  });
+
+  return json(c, { ok: true, eventId, source: data.source });
 });
 
 app.post("/api/admin/pterodactyl/power", async (c) => {

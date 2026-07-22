@@ -68,7 +68,8 @@ import {
   UserRound,
   UsersRound,
   Wifi,
-  X
+  X,
+  Youtube
 } from "lucide-react";
 import "./styles.css";
 
@@ -390,9 +391,13 @@ type AdminRuntime = {
       players?: number;
       activePlayers?: number;
       queueItems?: number;
+      playerSource?: "youtube" | "spotify";
     } | null;
     music?: {
       backend?: string;
+      playerSource?: "youtube" | "spotify";
+      searchSource?: string;
+      availableSources?: Array<"youtube" | "spotify">;
       defaultVolume?: number;
       activePlayers?: number;
       savedPlayers?: number;
@@ -2341,6 +2346,11 @@ function AdminPageModern() {
   const recentEvents = admin.data?.recentEvents ?? [];
   const lavalink = runtime?.details.lavalink ?? null;
   const music = runtime?.details.music ?? null;
+  const reportedMusicSource: "youtube" | "spotify" =
+    music?.playerSource === "youtube" || lavalink?.playerSource === "youtube" ||
+    (!music?.playerSource && !lavalink?.playerSource && String(music?.searchSource ?? lavalink?.searchSource ?? "").startsWith("yt"))
+      ? "youtube"
+      : "spotify";
   const recentBotLogs = ownerLogs.data?.logs ?? runtime?.details.logs ?? [];
 
   const [presence, setPresence] = useState({ status: "online", activityType: "none", text: "", url: "" });
@@ -2348,6 +2358,8 @@ function AdminPageModern() {
   const [saveStatus, setSaveStatus] = useState<string | null>(null);
   const [actionBusy, setActionBusy] = useState<string | null>(null);
   const [actionStatus, setActionStatus] = useState<string | null>(null);
+  const [musicSource, setMusicSource] = useState<"youtube" | "spotify">("spotify");
+  const [musicSourceStatus, setMusicSourceStatus] = useState<string | null>(null);
   const [exporting, setExporting] = useState(false);
   const [guildSearch, setGuildSearch] = useState("");
   const [guildSort, setGuildSort] = useState<"name" | "members" | "channels" | "roles">("name");
@@ -2364,6 +2376,11 @@ function AdminPageModern() {
       url: ""
     });
   }, [runtime?.updatedAt]);
+
+  useEffect(() => {
+    if (!runtime) return;
+    setMusicSource(reportedMusicSource);
+  }, [reportedMusicSource, runtime?.updatedAt]);
 
   useEffect(() => {
     if (!autoRefresh) return;
@@ -2515,6 +2532,27 @@ function AdminPageModern() {
       const message = error instanceof Error ? error.message : "Aktion konnte nicht gestartet werden.";
       setActionStatus(message);
       notify({ tone: "danger", title: "Aktion fehlgeschlagen", text: message });
+    } finally {
+      setActionBusy(null);
+    }
+  }
+
+  async function saveMusicSource() {
+    setActionBusy("music.source");
+    setMusicSourceStatus(null);
+    try {
+      await api("/api/admin/bot/music-source", {
+        method: "POST",
+        body: JSON.stringify({ source: musicSource })
+      });
+      const label = musicSource === "youtube" ? "YouTube" : "Spotify";
+      setMusicSourceStatus(`${label} wird vom Bot geprüft und anschließend aktiviert.`);
+      notify({ tone: "success", title: "Playerwechsel gesendet", text: `${label} wird über Lavalink geprüft.` });
+      window.setTimeout(() => void admin.reload(), 12000);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Die Musikquelle konnte nicht geändert werden.";
+      setMusicSourceStatus(message);
+      notify({ tone: "danger", title: "Playerwechsel fehlgeschlagen", text: message });
     } finally {
       setActionBusy(null);
     }
@@ -2676,11 +2714,59 @@ function AdminPageModern() {
                   </div>
                   <span className={`pill ${lavalinkTone}`}>{lavalink?.identifier || "main"}</span>
                 </div>
+                <div className="owner-source-control">
+                  <div className="owner-source-heading">
+                    <div>
+                      <small>Aktiver Player</small>
+                      <strong>{reportedMusicSource === "youtube" ? "YouTube" : "Spotify"}</strong>
+                    </div>
+                    <span className="pill neutral">{music?.searchSource || lavalink?.searchSource || "nicht gemeldet"}</span>
+                  </div>
+                  <div className="owner-source-options" role="radiogroup" aria-label="Musikquelle auswählen">
+                    <button
+                      type="button"
+                      className={musicSource === "youtube" ? "active youtube" : ""}
+                      onClick={() => setMusicSource("youtube")}
+                      role="radio"
+                      aria-checked={musicSource === "youtube"}
+                      disabled={actionBusy === "music.source"}
+                    >
+                      <span><Youtube size={19} /></span>
+                      <span><strong>YouTube</strong><small>ytsearch + ytmsearch</small></span>
+                      {reportedMusicSource === "youtube" && <Check size={16} />}
+                    </button>
+                    <button
+                      type="button"
+                      className={musicSource === "spotify" ? "active spotify" : ""}
+                      onClick={() => setMusicSource("spotify")}
+                      role="radio"
+                      aria-checked={musicSource === "spotify"}
+                      disabled={actionBusy === "music.source"}
+                    >
+                      <span><Music2 size={19} /></span>
+                      <span><strong>Spotify</strong><small>LavaSrc + spsearch</small></span>
+                      {reportedMusicSource === "spotify" && <Check size={16} />}
+                    </button>
+                  </div>
+                  <div className="owner-source-actions">
+                    <small>Queues bleiben erhalten. Aktive Player werden beim Wechsel getrennt.</small>
+                    <button
+                      type="button"
+                      className="primary-action inline"
+                      onClick={() => void saveMusicSource()}
+                      disabled={Boolean(actionBusy) || musicSource === reportedMusicSource}
+                    >
+                      {actionBusy === "music.source" ? <Loader2 className="spin" size={16} /> : <Save size={16} />}
+                      {actionBusy === "music.source" ? "Prüfen" : "Player übernehmen"}
+                    </button>
+                  </div>
+                  <ActionStatus status={musicSourceStatus} />
+                </div>
                 <div className="owner-music-stat-grid">
                   <div><dt>Player</dt><dd>{compactNumber(music?.activePlayers ?? lavalink?.activePlayers ?? 0)}</dd></div>
                   <div><dt>Queue</dt><dd>{compactNumber(queueItems)}</dd></div>
                   <div><dt>Backend</dt><dd>{music?.backend || lavalink?.backend || "-"}</dd></div>
-                  <div><dt>Suche</dt><dd>{lavalink?.searchSource || "-"}</dd></div>
+                  <div><dt>Suche</dt><dd>{music?.searchSource || lavalink?.searchSource || "-"}</dd></div>
                   <div><dt>Volume</dt><dd>{music?.defaultVolume ?? "-"}</dd></div>
                   <div><dt>Gespeichert</dt><dd>{compactNumber(music?.savedPlayers ?? 0)}</dd></div>
                 </div>

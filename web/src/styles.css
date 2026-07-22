@@ -2876,6 +2876,138 @@ textarea {
   white-space: nowrap;
 }
 
+.owner-source-control {
+  display: grid;
+  gap: 10px;
+  margin-bottom: 12px;
+  padding: 12px;
+  border: 1px solid var(--border-soft);
+  border-radius: 8px;
+  background: rgba(9, 11, 16, 0.38);
+}
+
+.owner-source-heading,
+.owner-source-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.owner-source-heading small,
+.owner-source-heading strong {
+  display: block;
+}
+
+.owner-source-heading small,
+.owner-source-actions small {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.owner-source-heading strong {
+  margin-top: 2px;
+  color: var(--text);
+  font-size: 17px;
+}
+
+.owner-source-options {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.owner-source-options button {
+  width: 100%;
+  min-width: 0;
+  min-height: 62px;
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr) 18px;
+  align-items: center;
+  gap: 9px;
+  padding: 9px 10px;
+  border: 1px solid var(--border-soft);
+  border-radius: 8px;
+  color: var(--muted-strong);
+  text-align: left;
+  background: var(--field-bg);
+  cursor: pointer;
+  transition: border-color 160ms ease, background 160ms ease, color 160ms ease;
+}
+
+.owner-source-options button > span:first-child {
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  border-radius: 7px;
+  background: rgba(119, 183, 255, 0.09);
+}
+
+.owner-source-options button > span:nth-child(2),
+.owner-source-options button strong,
+.owner-source-options button small {
+  min-width: 0;
+  display: block;
+}
+
+.owner-source-options button strong {
+  color: var(--text);
+  font-size: 14px;
+}
+
+.owner-source-options button small {
+  margin-top: 2px;
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.owner-source-options button:hover,
+.owner-source-options button:focus-visible {
+  border-color: rgba(119, 183, 255, 0.44);
+  outline: none;
+}
+
+.owner-source-options button.active.youtube {
+  border-color: rgba(255, 92, 92, 0.58);
+  color: #ff7272;
+  background: rgba(255, 77, 77, 0.08);
+}
+
+.owner-source-options button.active.spotify {
+  border-color: rgba(47, 191, 122, 0.58);
+  color: var(--green);
+  background: rgba(47, 191, 122, 0.08);
+}
+
+.owner-source-options button.active.youtube > span:first-child {
+  color: #ff7272;
+  background: rgba(255, 77, 77, 0.12);
+}
+
+.owner-source-options button.active.spotify > span:first-child {
+  color: var(--green);
+  background: rgba(47, 191, 122, 0.12);
+}
+
+.owner-source-options button:disabled {
+  cursor: wait;
+  opacity: 0.68;
+}
+
+.owner-source-actions small {
+  max-width: 310px;
+  line-height: 1.45;
+}
+
+.owner-source-actions .primary-action {
+  flex: 0 0 auto;
+  min-width: 156px;
+}
+
 .owner-music-stat-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -5544,6 +5676,8 @@ textarea {
 :root[data-theme="light"] .owner-guild-row,
 :root[data-theme="light"] .owner-event-row,
 :root[data-theme="light"] .owner-action-card,
+:root[data-theme="light"] .owner-source-control,
+:root[data-theme="light"] .owner-source-options button,
 :root[data-theme="light"] .owner-log-row,
 :root[data-theme="light"] .owner-timeline-item > div,
 :root[data-theme="light"] .owner-security-banner,
@@ -6036,11 +6170,21 @@ textarea {
   .owner-runtime-mini,
   .owner-action-grid,
   .owner-music-stat-grid,
+  .owner-source-options,
   .owner-panel-toolbar,
   .owner-segmented,
   .guild-card,
   .planned-hero {
     grid-template-columns: 1fr;
+  }
+
+  .owner-source-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .owner-source-actions .primary-action {
+    width: 100%;
   }
 
   .guild-card {
