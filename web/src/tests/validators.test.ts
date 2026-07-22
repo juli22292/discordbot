@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   assertSameGuild,
+  autoroleSettingsSchema,
   commandConfigSchema,
   countingResetSchema,
   countingSettingsSchema,
@@ -117,5 +118,22 @@ describe("guild-isolated validation", () => {
         { level: 5, roleId: "323456789012345678" }
       ]
     })).toThrow(/Level 5/);
+  });
+
+  it("validates multiple Autoroles and requires a role when enabled", () => {
+    const settings = autoroleSettingsSchema.parse({
+      enabled: true,
+      humanRoleIds: ["123456789012345678", "223456789012345678"],
+      botRoleIds: ["323456789012345678"],
+      delaySeconds: 15,
+      waitForScreening: true
+    });
+
+    expect(settings.humanRoleIds).toHaveLength(2);
+    expect(settings.delaySeconds).toBe(15);
+    expect(() => autoroleSettingsSchema.parse({ enabled: true })).toThrow(/mindestens eine Rolle/);
+    expect(() => autoroleSettingsSchema.parse({
+      humanRoleIds: ["123456789012345678", "123456789012345678"]
+    })).toThrow(/nur einmal/);
   });
 });

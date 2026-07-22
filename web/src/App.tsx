@@ -236,6 +236,16 @@ type LevelSettings = {
   syncError: string | null;
 };
 
+type AutoroleSettings = {
+  enabled: boolean;
+  humanRoleIds: string[];
+  botRoleIds: string[];
+  delaySeconds: number;
+  waitForScreening: boolean;
+  syncStatus: string;
+  syncError: string | null;
+};
+
 type AdminRuntime = {
   id: string;
   status: string | null;
@@ -422,6 +432,7 @@ type AdminGuildDetail = {
     tempVoice: boolean;
     counting: boolean;
     levelSystem: boolean;
+    autorole: boolean;
     spotifyMusic: boolean;
     games: boolean;
     moderation: boolean;
@@ -559,6 +570,17 @@ const plannedSections = [
     ]
   },
   {
+    section: "autorole",
+    label: "Autorole",
+    headline: "Autorole",
+    description: "Mehrere Startrollen für neue Mitglieder und Bots sicher und getrennt verwalten.",
+    items: [
+      { kicker: "Mitglieder", title: "Mehrfachrollen", text: "Beliebig kombinierbare Rollen für neue menschliche Mitglieder." },
+      { kicker: "Bots", title: "Eigene Botrollen", text: "Automatische Rollen für neu hinzugefügte Discord-Bots getrennt festlegen." },
+      { kicker: "Sicherheit", title: "Screening & Hierarchie", text: "Membership-Screening abwarten und nur verwaltbare Rollen zulassen." }
+    ]
+  },
+  {
     section: "spotify-music",
     label: "Spotify Music",
     headline: "Spotify Music",
@@ -600,6 +622,8 @@ function plannedIcon(section: string, size = 17) {
       return <ListOrdered size={size} />;
     case "level-system":
       return <BarChart3 size={size} />;
+    case "autorole":
+      return <UserPlus size={size} />;
     case "spotify-music":
       return <Music2 size={size} />;
     case "games":
@@ -657,6 +681,7 @@ const guildModuleLabels = [
   { key: "tempVoice", label: "Temp-Voice", text: "Join-to-create und temporäre Sprachräume.", icon: Mic2 },
   { key: "counting", label: "Counting", text: "Gemeinsame Zahlenkette mit Rekord und Rangliste.", icon: ListOrdered },
   { key: "levelSystem", label: "Level-System", text: "Nachrichten-XP, Aufstiege und automatische Levelrollen.", icon: BarChart3 },
+  { key: "autorole", label: "Autorole", text: "Mehrere Startrollen für Mitglieder und Bots.", icon: UserPlus },
   { key: "spotifyMusic", label: "Spotify Music", text: "Musik, Lavalink und DJ-Regeln.", icon: Music2 },
   { key: "games", label: "Games", text: "Fun- und Mini-Game-Kommandos.", icon: Gamepad2 },
   { key: "moderation", label: "Moderation", text: "Warns, Timeouts und Schutzmodule.", icon: Shield }
@@ -3520,7 +3545,7 @@ function Dashboard({ path }: { path: string }) {
               section={item.section}
               current={section}
               guildId={guildId}
-              badge={item.section === "temp-voice" || item.section === "counting" || item.section === "level-system" ? undefined : "geplant"}
+              badge={item.section === "temp-voice" || item.section === "counting" || item.section === "level-system" || item.section === "autorole" ? undefined : "geplant"}
               key={item.section}
             />
           ))}
@@ -3555,7 +3580,8 @@ function Dashboard({ path }: { path: string }) {
               {section === "temp-voice" && <TempVoicePage guildId={guildId} />}
               {section === "counting" && <CountingPage guildId={guildId} />}
               {section === "level-system" && <LevelSystemPage guildId={guildId} />}
-              {plannedSection && section !== "welcome" && section !== "logging" && section !== "temp-voice" && section !== "counting" && section !== "level-system" && <PlannedPage section={plannedSection} />}
+              {section === "autorole" && <AutorolePage guildId={guildId} />}
+              {plannedSection && section !== "welcome" && section !== "logging" && section !== "temp-voice" && section !== "counting" && section !== "level-system" && section !== "autorole" && <PlannedPage section={plannedSection} />}
             </>
           )}
         </main>
@@ -3960,6 +3986,284 @@ const DEFAULT_LEVEL_DRAFT: LevelSettings = {
   syncStatus: "idle",
   syncError: null
 };
+
+const DEFAULT_AUTOROLE_DRAFT: AutoroleSettings = {
+  enabled: false,
+  humanRoleIds: [],
+  botRoleIds: [],
+  delaySeconds: 0,
+  waitForScreening: true,
+  syncStatus: "idle",
+  syncError: null
+};
+
+function AutorolePage({ guildId }: { guildId: string }) {
+  const settings = useApi<{ autorole: AutoroleSettings }>(`/api/guilds/${guildId}/autorole`, [guildId]);
+  const roles = useApi<{ roles: RoleOption[] }>(`/api/guilds/${guildId}/roles`, [guildId]);
+  const [draft, setDraft] = useState<AutoroleSettings>(DEFAULT_AUTOROLE_DRAFT);
+  const [target, setTarget] = useState<"human" | "bot">("human");
+  const [query, setQuery] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [status, setStatus] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (settings.data?.autorole) setDraft(settings.data.autorole);
+  }, [settings.data]);
+
+  const manageableRoles = useMemo(
+    () => (roles.data?.roles ?? []).filter((role) => Boolean(role.botCanManage) && !Boolean(role.managed)),
+    [roles.data]
+  );
+  const selectedIds = target === "human" ? draft.humanRoleIds : draft.botRoleIds;
+  const filteredRoles = useMemo(() => {
+    const needle = query.trim().toLocaleLowerCase("de-DE");
+    if (!needle) return manageableRoles;
+    return manageableRoles.filter((role) => role.name.toLocaleLowerCase("de-DE").includes(needle) || role.id.includes(needle));
+  }, [manageableRoles, query]);
+  const loading = (settings.loading && !settings.data) || (roles.loading && !roles.data);
+  const loadError = settings.error || roles.error;
+  const hasRoles = draft.humanRoleIds.length + draft.botRoleIds.length > 0;
+
+  async function persist(nextDraft: AutoroleSettings = draft): Promise<boolean> {
+    if (nextDraft.enabled && nextDraft.humanRoleIds.length === 0 && nextDraft.botRoleIds.length === 0) {
+      setStatus("Wähle mindestens eine Mitglieder- oder Botrolle aus.");
+      return false;
+    }
+
+    setSaving(true);
+    setStatus(null);
+    try {
+      const response = await api<{ autorole: AutoroleSettings }>(`/api/guilds/${guildId}/autorole`, {
+        method: "PUT",
+        body: JSON.stringify({
+          enabled: nextDraft.enabled,
+          humanRoleIds: nextDraft.humanRoleIds,
+          botRoleIds: nextDraft.botRoleIds,
+          delaySeconds: nextDraft.delaySeconds,
+          waitForScreening: nextDraft.waitForScreening
+        })
+      });
+      setDraft(response.autorole);
+      setStatus("Autorole gespeichert. Der Bot übernimmt die Regeln jetzt.");
+      await settings.reload();
+      return true;
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : "Autorole konnte nicht gespeichert werden.");
+      return false;
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function updateEnabled(enabled: boolean) {
+    const previousDraft = draft;
+    const nextDraft = { ...draft, enabled };
+    setDraft(nextDraft);
+
+    if (enabled && !hasRoles) {
+      setStatus("Autorole ist vorbereitet. Wähle jetzt mindestens eine Rolle und speichere die Einstellungen.");
+      return;
+    }
+
+    const saved = await persist(nextDraft);
+    if (!saved) setDraft(previousDraft);
+  }
+
+  function toggleRole(roleId: string) {
+    const key = target === "human" ? "humanRoleIds" : "botRoleIds";
+    const current = draft[key];
+    if (!current.includes(roleId) && current.length >= 25) {
+      setStatus(`Für ${target === "human" ? "Mitglieder" : "Bots"} können höchstens 25 Rollen ausgewählt werden.`);
+      return;
+    }
+    setDraft({
+      ...draft,
+      [key]: current.includes(roleId) ? current.filter((id) => id !== roleId) : [...current, roleId]
+    });
+    setStatus("Auswahl geändert. Speichere die Einstellungen, um sie an den Bot zu senden.");
+  }
+
+  function selectedRoles(ids: string[]) {
+    return ids.map((id) => manageableRoles.find((role) => role.id === id)).filter((role): role is RoleOption => Boolean(role));
+  }
+
+  const humanRoles = selectedRoles(draft.humanRoleIds);
+  const botRoles = selectedRoles(draft.botRoleIds);
+
+  return (
+    <section className="autorole-page">
+      <div className="autorole-hero">
+        <div>
+          <p className="eyebrow"><UserPlus size={15} /> Member Onboarding</p>
+          <h2>Autorole</h2>
+          <p>Vergib mehrere Rollen automatisch, mit eigenen Regeln für Mitglieder und neu hinzugefügte Bots.</p>
+        </div>
+        <div className="autorole-hero-actions">
+          <span className={`pill ${draft.syncStatus === "failed" ? "danger" : draft.syncStatus === "synced" ? "ok" : "neutral"}`}>
+            {draft.syncStatus === "failed" ? "Sync fehlgeschlagen" : draft.syncStatus === "pending" ? "Wird synchronisiert" : draft.syncStatus === "synced" ? "Synchronisiert" : "Bereit"}
+          </span>
+          <label className="welcome-switch">
+            <input type="checkbox" checked={draft.enabled} disabled={saving} onChange={(event) => void updateEnabled(event.target.checked)} />
+            <span>{draft.enabled ? "Aktiv" : "Inaktiv"}</span>
+          </label>
+        </div>
+      </div>
+
+      {loading && <LoadingBlock />}
+      {loadError && <Notice tone="danger" text={loadError} />}
+      {draft.syncError && <Notice tone="danger" text={draft.syncError} />}
+      <ActionStatus status={status} />
+
+      {!loading && !loadError && !draft.enabled && (
+        <div className="autorole-inactive">
+          <div className="autorole-inactive-icon"><ShieldCheck size={22} /></div>
+          <div>
+            <strong>Autorole ist ausgeschaltet</strong>
+            <p>Aktiviere das Modul oben. Bestehende Rollenauswahlen bleiben beim Deaktivieren erhalten.</p>
+          </div>
+        </div>
+      )}
+
+      {!loading && !loadError && draft.enabled && (
+        <>
+          <section className="autorole-summary-grid">
+            <StatusTile icon={<UsersRound size={19} />} label="Mitgliederrollen" value={String(draft.humanRoleIds.length)} tone={draft.humanRoleIds.length ? "ok" : undefined} />
+            <StatusTile icon={<Bot size={19} />} label="Botrollen" value={String(draft.botRoleIds.length)} tone={draft.botRoleIds.length ? "ok" : undefined} />
+            <StatusTile icon={<Clock3 size={19} />} label="Verzögerung" value={draft.delaySeconds ? `${draft.delaySeconds} Sek.` : "Sofort"} />
+            <StatusTile icon={<ShieldCheck size={19} />} label="Screening" value={draft.waitForScreening ? "Abwarten" : "Direkt"} tone={draft.waitForScreening ? "ok" : undefined} />
+          </section>
+
+          <div className="autorole-layout">
+            <div className="autorole-editor">
+              <section className="panel autorole-role-panel">
+                <div className="panel-title autorole-panel-title">
+                  <div>
+                    <h2>Automatische Rollen</h2>
+                    <p className="muted">Nur Rollen unterhalb der höchsten Bot-Rolle stehen zur Auswahl.</p>
+                  </div>
+                  <RefreshButton
+                    loading={(settings.loading && Boolean(settings.data)) || (roles.loading && Boolean(roles.data))}
+                    onClick={async () => { await Promise.all([settings.reload(), roles.reload()]); }}
+                    label="Neu laden"
+                  />
+                </div>
+
+                <div className="autorole-target-tabs" aria-label="Autorole-Ziel auswählen">
+                  <button className={target === "human" ? "active" : ""} onClick={() => setTarget("human")}>
+                    <UsersRound size={16} /> Mitglieder <span>{draft.humanRoleIds.length}</span>
+                  </button>
+                  <button className={target === "bot" ? "active" : ""} onClick={() => setTarget("bot")}>
+                    <Bot size={16} /> Bots <span>{draft.botRoleIds.length}</span>
+                  </button>
+                </div>
+
+                {selectedIds.length > 0 && (
+                  <div className="autorole-selected-list">
+                    <span>Ausgewählt</span>
+                    <div>
+                      {selectedIds.map((roleId) => {
+                        const role = manageableRoles.find((entry) => entry.id === roleId);
+                        return (
+                          <button type="button" onClick={() => toggleRole(roleId)} key={roleId} title="Rolle entfernen">
+                            <i style={{ background: role ? roleColor(role) : "#7b8494" }} />
+                            {role?.name ?? `Nicht verfügbare Rolle (${roleId})`}
+                            <X size={14} />
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                <label className="autorole-search">
+                  <Search size={17} />
+                  <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Rolle suchen" />
+                </label>
+
+                <div className="autorole-role-list">
+                  {filteredRoles.length === 0 && (
+                    <div className="autorole-empty"><Search size={20} /><span>Keine verwaltbare Rolle gefunden.</span></div>
+                  )}
+                  {filteredRoles.map((role) => {
+                    const selected = selectedIds.includes(role.id);
+                    return (
+                      <button type="button" className={selected ? "selected" : ""} onClick={() => toggleRole(role.id)} key={role.id}>
+                        <i style={{ background: roleColor(role) }} />
+                        <span><strong>{role.name}</strong><small>{role.id}</small></span>
+                        <span className="autorole-check">{selected ? <Check size={16} /> : <Plus size={16} />}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </section>
+
+              <section className="panel autorole-rules-panel">
+                <div className="panel-title compact">
+                  <div><h2>Vergaberegeln</h2><p className="muted">Timing und Discord-Onboarding zentral festlegen.</p></div>
+                </div>
+                <label>
+                  Verzögerung nach Beitritt
+                  <div className="autorole-delay-input">
+                    <input
+                      type="number"
+                      min={0}
+                      max={3600}
+                      value={draft.delaySeconds}
+                      onChange={(event) => setDraft({ ...draft, delaySeconds: Math.max(0, Math.min(3600, Number(event.target.value) || 0)) })}
+                    />
+                    <span>Sekunden</span>
+                  </div>
+                  <small>0 vergibt die Rollen sofort. Möglich sind bis zu 60 Minuten.</small>
+                </label>
+                <label className="autorole-rule-toggle">
+                  <span><strong>Membership-Screening abwarten</strong><small>Der Bot vergibt Rollen erst, nachdem das neue Mitglied die Serverregeln akzeptiert hat.</small></span>
+                  <input type="checkbox" checked={draft.waitForScreening} onChange={(event) => setDraft({ ...draft, waitForScreening: event.target.checked })} />
+                </label>
+              </section>
+
+              <section className="panel autorole-save-panel">
+                <div><strong>{draft.humanRoleIds.length + draft.botRoleIds.length} Rollen ausgewählt</strong><small>Die sichere Sync-Queue überträgt alle Regeln an den laufenden Bot.</small></div>
+                <button className="primary-action inline" onClick={() => void persist()} disabled={saving || !hasRoles}>
+                  {saving ? <Loader2 className="spin" size={16} /> : <Save size={16} />}
+                  Einstellungen speichern
+                </button>
+              </section>
+            </div>
+
+            <aside className="autorole-preview">
+              <div className="autorole-preview-heading">
+                <div><span>Vergabe-Vorschau</span><h2>Neue Mitglieder</h2></div>
+                <span className="pill ok">Automatisch</span>
+              </div>
+              <div className="autorole-preview-person">
+                <div className="autorole-preview-avatar"><UserRound size={22} /></div>
+                <div><strong>Neues Mitglied</strong><small>gerade beigetreten</small></div>
+                <BadgeCheck size={18} />
+              </div>
+              <div className="autorole-preview-group">
+                <span>Mitglieder erhalten</span>
+                <div className="autorole-role-chips">
+                  {humanRoles.length ? humanRoles.map((role) => <span key={role.id}><i style={{ background: roleColor(role) }} />{role.name}</span>) : <small>Keine Mitgliederrollen ausgewählt</small>}
+                </div>
+              </div>
+              <div className="autorole-preview-group">
+                <span>Bots erhalten</span>
+                <div className="autorole-role-chips">
+                  {botRoles.length ? botRoles.map((role) => <span key={role.id}><i style={{ background: roleColor(role) }} />{role.name}</span>) : <small>Keine Botrollen ausgewählt</small>}
+                </div>
+              </div>
+              <div className="autorole-safety-list">
+                <span><ShieldCheck size={15} /> Rollenhierarchie vorab geprüft</span>
+                <span><Clock3 size={15} /> {draft.delaySeconds ? `${draft.delaySeconds} Sekunden Wartezeit` : "Sofortige Vergabe"}</span>
+                <span><BadgeCheck size={15} /> {draft.waitForScreening ? "Screening wird abgewartet" : "Vergabe vor Screening möglich"}</span>
+              </div>
+            </aside>
+          </div>
+        </>
+      )}
+    </section>
+  );
+}
 
 function LevelSystemPage({ guildId }: { guildId: string }) {
   const settings = useApi<{ levelSystem: LevelSettings }>(`/api/guilds/${guildId}/level-system`, [guildId]);

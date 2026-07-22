@@ -151,6 +151,7 @@ export const guildModuleSettingsSchema = z.object({
     tempVoice: z.boolean().default(false),
     counting: z.boolean().default(false),
     levelSystem: z.boolean().default(false),
+    autorole: z.boolean().default(false),
     spotifyMusic: z.boolean().default(false),
     games: z.boolean().default(false),
     moderation: z.boolean().default(false)
@@ -237,6 +238,36 @@ export const levelSettingsSchema = z.object({
     levels.add(reward.level);
     roles.add(reward.roleId);
   });
+});
+
+export const autoroleSettingsSchema = z.object({
+  enabled: z.boolean().default(false),
+  humanRoleIds: z.array(snowflakeSchema).max(25, "Es sind maximal 25 Mitgliederrollen möglich.").default([]),
+  botRoleIds: z.array(snowflakeSchema).max(25, "Es sind maximal 25 Botrollen möglich.").default([]),
+  delaySeconds: z.number().int().min(0).max(3600).default(0),
+  waitForScreening: z.boolean().default(true)
+}).superRefine((value, context) => {
+  (["humanRoleIds", "botRoleIds"] as const).forEach((key) => {
+    const seen = new Set<string>();
+    value[key].forEach((roleId, index) => {
+      if (seen.has(roleId)) {
+        context.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: [key, index],
+          message: "Jede Discord-Rolle darf pro Bereich nur einmal ausgewählt werden."
+        });
+      }
+      seen.add(roleId);
+    });
+  });
+
+  if (value.enabled && value.humanRoleIds.length === 0 && value.botRoleIds.length === 0) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["enabled"],
+      message: "Für ein aktives Autorole-Modul wird mindestens eine Rolle benötigt."
+    });
+  }
 });
 
 export function assertSameGuild(routeGuildId: string, rowGuildId: string): void {

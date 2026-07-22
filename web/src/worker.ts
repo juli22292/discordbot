@@ -36,6 +36,7 @@ import type { ActiveSession, DiscordGuild, Env, GuildAccess, SessionUser, TokenD
 import {
   assertSameGuild,
   adminRoleUpdateSchema,
+  autoroleSettingsSchema,
   botAdminActionSchema,
   commandConfigSchema,
   countingResetSchema,
@@ -255,6 +256,27 @@ interface LevelSettingsResponse {
   syncError: string | null;
 }
 
+interface AutoroleSettingsRow {
+  guild_id: string;
+  enabled: number;
+  human_role_ids: string;
+  bot_role_ids: string;
+  delay_seconds: number;
+  wait_for_screening: number;
+  sync_status: string;
+  sync_error: string | null;
+}
+
+interface AutoroleSettingsResponse {
+  enabled: boolean;
+  humanRoleIds: string[];
+  botRoleIds: string[];
+  delaySeconds: number;
+  waitForScreening: boolean;
+  syncStatus: string;
+  syncError: string | null;
+}
+
 interface BotRuntimeRow {
   id: string;
   status: string | null;
@@ -315,6 +337,7 @@ interface AdminGuildModules {
   tempVoice: boolean;
   counting: boolean;
   levelSystem: boolean;
+  autorole: boolean;
   spotifyMusic: boolean;
   games: boolean;
   moderation: boolean;
@@ -1184,6 +1207,89 @@ async function ensureLevelSettings(env: Env, guildId: string): Promise<LevelSett
   return { ...DEFAULT_LEVEL_SETTINGS, roleRewards: [] };
 }
 
+const DEFAULT_AUTOROLE_SETTINGS: AutoroleSettingsResponse = {
+  enabled: false,
+  humanRoleIds: [],
+  botRoleIds: [],
+  delaySeconds: 0,
+  waitForScreening: true,
+  syncStatus: "idle",
+  syncError: null
+};
+
+let autoroleStorageReady: Promise<void> | null = null;
+
+async function ensureAutoroleStorage(env: Env): Promise<void> {
+  if (!autoroleStorageReady) {
+    const db = requireDb(env);
+    autoroleStorageReady = (async () => {
+      await db.prepare(
+        `CREATE TABLE IF NOT EXISTS autorole_settings (
+           guild_id TEXT PRIMARY KEY REFERENCES guilds(id) ON DELETE CASCADE,
+           enabled INTEGER NOT NULL DEFAULT 0,
+           human_role_ids TEXT NOT NULL DEFAULT '[]',
+           bot_role_ids TEXT NOT NULL DEFAULT '[]',
+           delay_seconds INTEGER NOT NULL DEFAULT 0,
+           wait_for_screening INTEGER NOT NULL DEFAULT 1,
+           sync_status TEXT NOT NULL DEFAULT 'idle',
+           sync_error TEXT,
+           created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+           updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+         )`
+      ).run();
+      await db.prepare(
+        "CREATE INDEX IF NOT EXISTS idx_autorole_settings_sync ON autorole_settings(sync_status, updated_at)"
+      ).run();
+    })().catch((error) => {
+      autoroleStorageReady = null;
+      throw error;
+    });
+  }
+
+  await autoroleStorageReady;
+}
+
+function normalizeRoleIds(value: unknown): string[] {
+  const raw = typeof value === "string" ? parseJson<unknown>(value, []) : value;
+  if (!Array.isArray(raw)) return [];
+  return Array.from(new Set(raw.map(String).filter((roleId) => /^\d{17,20}$/.test(roleId)))).slice(0, 25);
+}
+
+function normalizeAutoroleSettings(row: AutoroleSettingsRow | null | undefined): AutoroleSettingsResponse {
+  if (!row) return { ...DEFAULT_AUTOROLE_SETTINGS, humanRoleIds: [], botRoleIds: [] };
+  return {
+    enabled: Boolean(row.enabled),
+    humanRoleIds: normalizeRoleIds(row.human_role_ids),
+    botRoleIds: normalizeRoleIds(row.bot_role_ids),
+    delaySeconds: Math.max(0, Math.min(3600, Number(row.delay_seconds) || 0)),
+    waitForScreening: Boolean(row.wait_for_screening),
+    syncStatus: row.sync_status || "idle",
+    syncError: row.sync_error
+  };
+}
+
+async function ensureAutoroleSettings(env: Env, guildId: string): Promise<AutoroleSettingsResponse> {
+  await ensureAutoroleStorage(env);
+  const db = requireDb(env);
+  const existing = await first<AutoroleSettingsRow>(
+    db.prepare(
+      `SELECT guild_id, enabled, human_role_ids, bot_role_ids, delay_seconds,
+              wait_for_screening, sync_status, sync_error
+         FROM autorole_settings
+        WHERE guild_id = ?`
+    ).bind(guildId)
+  );
+
+  if (existing) return normalizeAutoroleSettings(existing);
+
+  const timestamp = nowIso();
+  await db.prepare(
+    `INSERT INTO autorole_settings (guild_id, created_at, updated_at)
+     VALUES (?, ?, ?)`
+  ).bind(guildId, timestamp, timestamp).run();
+  return { ...DEFAULT_AUTOROLE_SETTINGS, humanRoleIds: [], botRoleIds: [] };
+}
+
 function mediaPreviewUrl(discordGuildId: string, mediaKey: string): string {
   return `/api/guilds/${discordGuildId}/media?key=${encodeURIComponent(mediaKey)}`;
 }
@@ -1662,6 +1768,7 @@ function normalizeGuildModules(value: unknown): AdminGuildModules {
     tempVoice: Boolean(raw.tempVoice ?? raw.temp_voice),
     counting: Boolean(raw.counting),
     levelSystem: Boolean(raw.levelSystem ?? raw.level_system),
+    autorole: Boolean(raw.autorole),
     spotifyMusic: Boolean(raw.spotifyMusic ?? raw.spotify_music),
     games: Boolean(raw.games),
     moderation: Boolean(raw.moderation)
@@ -2633,6 +2740,81 @@ app.put("/api/guilds/:guildId/level-system", async (c) => {
 
   await audit(c.env, access.guild.id, access.session.user.discordUserId, "level.update", "level_settings", oldValue, saved);
   return json(c, { ok: true, eventId, levelSystem: saved });
+});
+
+app.get("/api/guilds/:guildId/autorole", async (c) => {
+  const access = await requireGuildManagementAccess(c, c.req.param("guildId"));
+  const autorole = await ensureAutoroleSettings(c.env, access.guild.id);
+  return json(c, { autorole });
+});
+
+app.put("/api/guilds/:guildId/autorole", async (c) => {
+  const access = await requireGuildManagementAccess(c, c.req.param("guildId"));
+  const data = autoroleSettingsSchema.parse(await readJsonBody(c));
+  const oldValue = await ensureAutoroleSettings(c.env, access.guild.id);
+  const selectedRoleIds = Array.from(new Set([...data.humanRoleIds, ...data.botRoleIds]));
+
+  if (selectedRoleIds.length) {
+    const roleRows = await all<{ id: string; name: string; managed: number; botCanManage: number }>(
+      c.env.DB.prepare(
+        `SELECT discord_role_id AS id, name, managed, bot_can_manage AS botCanManage
+           FROM guild_roles
+          WHERE guild_id = ?`
+      ).bind(access.guild.id)
+    );
+    const availableRoles = new Map(roleRows.map((role) => [role.id, role]));
+
+    for (const roleId of selectedRoleIds) {
+      const role = availableRoles.get(roleId);
+      if (!role || role.managed || !role.botCanManage) {
+        throw new HttpError(
+          400,
+          "autorole_role_unmanageable",
+          `Die Rolle ${role?.name ?? roleId} kann vom Bot nicht vergeben werden. Prüfe die Rollenhierarchie.`
+        );
+      }
+    }
+  }
+
+  const timestamp = nowIso();
+  await ensureAutoroleStorage(c.env);
+  await c.env.DB.prepare(
+    `INSERT INTO autorole_settings (
+       guild_id, enabled, human_role_ids, bot_role_ids, delay_seconds,
+       wait_for_screening, sync_status, sync_error, created_at, updated_at
+     ) VALUES (?, ?, ?, ?, ?, ?, 'pending', NULL, ?, ?)
+     ON CONFLICT(guild_id) DO UPDATE SET
+       enabled = excluded.enabled,
+       human_role_ids = excluded.human_role_ids,
+       bot_role_ids = excluded.bot_role_ids,
+       delay_seconds = excluded.delay_seconds,
+       wait_for_screening = excluded.wait_for_screening,
+       sync_status = 'pending',
+       sync_error = NULL,
+       updated_at = excluded.updated_at`
+  ).bind(
+    access.guild.id,
+    data.enabled ? 1 : 0,
+    asJson(data.humanRoleIds),
+    asJson(data.botRoleIds),
+    data.delaySeconds,
+    data.waitForScreening ? 1 : 0,
+    timestamp,
+    timestamp
+  ).run();
+
+  const saved: AutoroleSettingsResponse = {
+    ...data,
+    syncStatus: "pending",
+    syncError: null
+  };
+  const eventId = await enqueueSyncEvent(c.env, access.guild, "autorole.settings.upsert", {
+    discordGuildId: access.guild.discordGuildId,
+    settings: saved
+  });
+
+  await audit(c.env, access.guild.id, access.session.user.discordUserId, "autorole.update", "autorole_settings", oldValue, saved);
+  return json(c, { ok: true, eventId, autorole: saved });
 });
 
 app.get("/api/guilds/:guildId/roles", async (c) => {
@@ -3713,6 +3895,7 @@ app.post("/api/internal/bot/snapshot", async (c) => {
       roles?: Array<Record<string, unknown>>;
       counting?: Record<string, unknown>;
       levelSystem?: Record<string, unknown>;
+      autorole?: Record<string, unknown>;
     }>;
     commands?: Array<{ name: string; description?: string; type?: string }>;
   };
@@ -3767,6 +3950,7 @@ app.post("/api/internal/bot/snapshot", async (c) => {
   const roleRows: Array<Record<string, unknown>> = [];
   const countingRows: Array<Record<string, unknown>> = [];
   const levelRows: Array<Record<string, unknown>> = [];
+  const autoroleRows: Array<Record<string, unknown>> = [];
 
   for (const guild of guilds) {
     const internalGuildId = internalGuildIds.get(guild.id)!;
@@ -3852,10 +4036,22 @@ app.post("/api/internal/bot/snapshot", async (c) => {
       roleRewards: roleRewards.sort((a, b) => a.level - b.level),
       timestamp
     });
+
+    const autorole = guild.autorole && typeof guild.autorole === "object" ? guild.autorole : {};
+    autoroleRows.push({
+      guildId: internalGuildId,
+      enabled: autorole.enabled ? 1 : 0,
+      humanRoleIds: normalizeRoleIds(autorole.humanRoleIds),
+      botRoleIds: normalizeRoleIds(autorole.botRoleIds),
+      delaySeconds: Math.min(3600, safeInteger(autorole.delaySeconds)),
+      waitForScreening: autorole.waitForScreening === false ? 0 : 1,
+      timestamp
+    });
   }
 
   await ensureCountingStorage(c.env);
   await ensureLevelStorage(c.env);
+  await ensureAutoroleStorage(c.env);
   await db.batch([
     db.prepare(
       `INSERT INTO bot_commands (id, command_name, description, command_type, updated_at)
@@ -3998,7 +4194,34 @@ app.post("/api/internal/bot/snapshot", async (c) => {
          sync_status = CASE WHEN level_settings.sync_status = 'pending' THEN 'pending' ELSE 'synced' END,
          sync_error = CASE WHEN level_settings.sync_status = 'pending' THEN level_settings.sync_error ELSE NULL END,
          updated_at = excluded.updated_at`
-    ).bind(asJson(levelRows))
+    ).bind(asJson(levelRows)),
+    db.prepare(
+      `INSERT INTO autorole_settings (
+         guild_id, enabled, human_role_ids, bot_role_ids, delay_seconds,
+         wait_for_screening, sync_status, sync_error, created_at, updated_at
+       )
+       SELECT
+         json_extract(value, '$.guildId'),
+         json_extract(value, '$.enabled'),
+         json_extract(value, '$.humanRoleIds'),
+         json_extract(value, '$.botRoleIds'),
+         json_extract(value, '$.delaySeconds'),
+         json_extract(value, '$.waitForScreening'),
+         'synced', NULL,
+         json_extract(value, '$.timestamp'),
+         json_extract(value, '$.timestamp')
+       FROM json_each(?)
+       WHERE true
+       ON CONFLICT(guild_id) DO UPDATE SET
+         enabled = CASE WHEN autorole_settings.sync_status = 'pending' THEN autorole_settings.enabled ELSE excluded.enabled END,
+         human_role_ids = CASE WHEN autorole_settings.sync_status = 'pending' THEN autorole_settings.human_role_ids ELSE excluded.human_role_ids END,
+         bot_role_ids = CASE WHEN autorole_settings.sync_status = 'pending' THEN autorole_settings.bot_role_ids ELSE excluded.bot_role_ids END,
+         delay_seconds = CASE WHEN autorole_settings.sync_status = 'pending' THEN autorole_settings.delay_seconds ELSE excluded.delay_seconds END,
+         wait_for_screening = CASE WHEN autorole_settings.sync_status = 'pending' THEN autorole_settings.wait_for_screening ELSE excluded.wait_for_screening END,
+         sync_status = CASE WHEN autorole_settings.sync_status = 'pending' THEN 'pending' ELSE 'synced' END,
+         sync_error = CASE WHEN autorole_settings.sync_status = 'pending' THEN autorole_settings.sync_error ELSE NULL END,
+         updated_at = excluded.updated_at`
+    ).bind(asJson(autoroleRows))
   ]);
 
   return json(c, {
@@ -4009,7 +4232,8 @@ app.post("/api/internal/bot/snapshot", async (c) => {
       channels: channelRows.length,
       roles: roleRows.length,
       counting: countingRows.length,
-      levelSettings: levelRows.length
+      levelSettings: levelRows.length,
+      autoroleSettings: autoroleRows.length
     }
   });
 });
@@ -4238,6 +4462,42 @@ app.post("/api/internal/bot/sync-events/:eventId/complete", async (c) => {
     ).run();
   }
 
+  if (row.action === "autorole.settings.upsert") {
+    await ensureAutoroleStorage(c.env);
+    const current = await ensureAutoroleSettings(c.env, row.guild_id);
+    const result = body.result && typeof body.result === "object"
+      ? body.result as Record<string, unknown>
+      : {};
+    const humanRoleIds = Object.prototype.hasOwnProperty.call(result, "humanRoleIds")
+      ? normalizeRoleIds(result.humanRoleIds)
+      : current.humanRoleIds;
+    const botRoleIds = Object.prototype.hasOwnProperty.call(result, "botRoleIds")
+      ? normalizeRoleIds(result.botRoleIds)
+      : current.botRoleIds;
+    const parsedDelay = Number(result.delaySeconds);
+    const delaySeconds = Number.isSafeInteger(parsedDelay)
+      ? Math.max(0, Math.min(3600, parsedDelay))
+      : current.delaySeconds;
+
+    await c.env.DB.prepare(
+      `UPDATE autorole_settings
+          SET enabled = ?, human_role_ids = ?, bot_role_ids = ?, delay_seconds = ?,
+              wait_for_screening = ?, sync_status = 'synced', sync_error = NULL,
+              updated_at = ?
+        WHERE guild_id = ?`
+    ).bind(
+      typeof result.enabled === "boolean" ? (result.enabled ? 1 : 0) : (current.enabled ? 1 : 0),
+      asJson(humanRoleIds),
+      asJson(botRoleIds),
+      delaySeconds,
+      typeof result.waitForScreening === "boolean"
+        ? (result.waitForScreening ? 1 : 0)
+        : (current.waitForScreening ? 1 : 0),
+      nowIso(),
+      row.guild_id
+    ).run();
+  }
+
   const currentMediaKey = row.action === "guild.member_avatar.update"
     ? String(eventPayload.mediaKey ?? "")
     : row.action === "welcome_settings.upsert"
@@ -4324,6 +4584,15 @@ app.post("/api/internal/bot/sync-events/:eventId/fail", async (c) => {
     await ensureLevelStorage(c.env);
     await c.env.DB.prepare(
       "UPDATE level_settings SET sync_status = 'failed', sync_error = ?, updated_at = ? WHERE guild_id = ?"
+    )
+      .bind(String(body.error ?? "Unbekannter Fehler").slice(0, 1000), nowIso(), row.guild_id)
+      .run();
+  }
+
+  if (!retry && row.action === "autorole.settings.upsert") {
+    await ensureAutoroleStorage(c.env);
+    await c.env.DB.prepare(
+      "UPDATE autorole_settings SET sync_status = 'failed', sync_error = ?, updated_at = ? WHERE guild_id = ?"
     )
       .bind(String(body.error ?? "Unbekannter Fehler").slice(0, 1000), nowIso(), row.guild_id)
       .run();
