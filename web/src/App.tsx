@@ -3529,26 +3529,44 @@ function Dashboard({ path }: { path: string }) {
       <TopNav user={me.data?.user} />
       <div className="dashboard-layout">
         <aside className="sidebar">
-          <GuildSwitcher currentGuild={detail.data?.guild ?? null} currentGuildId={guildId} />
-          <SideLink icon={<Server size={17} />} label="Übersicht" section="overview" current={section} guildId={guildId} />
-          <SideLink icon={<Bot size={17} />} label="Bot-Profil" section="profile" current={section} guildId={guildId} />
-          <SideLink icon={<Command size={17} />} label="Slash-Befehle" section="commands" current={section} guildId={guildId} />
-          <SideLink icon={<ClipboardList size={17} />} label="Custom Commands" section="custom-commands" current={section} guildId={guildId} />
-          <SideLink icon={<ListFilter size={17} />} label="Logging" section="logging" current={section} guildId={guildId} />
-          <SideLink icon={<Shield size={17} />} label="Audit-Log" section="audit-log" current={section} guildId={guildId} />
-          <SideLink icon={<Sparkles size={17} />} label="Begrüßung" section="welcome" current={section} guildId={guildId} />
-          <div className="sidebar-group-title">Module</div>
-          {plannedSections.filter((item) => item.section !== "welcome" && item.section !== "logging").map((item) => (
-            <SideLink
-              icon={plannedIcon(item.section)}
-              label={item.label}
-              section={item.section}
-              current={section}
-              guildId={guildId}
-              badge={item.section === "temp-voice" || item.section === "counting" || item.section === "level-system" || item.section === "autorole" ? undefined : "geplant"}
-              key={item.section}
-            />
-          ))}
+          <div className="sidebar-head">
+            <div className="sidebar-product"><SlidersHorizontal size={17} /><span>Serververwaltung</span></div>
+            <GuildSwitcher currentGuild={detail.data?.guild ?? null} currentGuildId={guildId} />
+          </div>
+          <nav className="sidebar-navigation" aria-label="Guild-Kategorien">
+            <SidebarGroup label="Start" tone="blue">
+              <SideLink icon={<LayoutDashboard size={17} />} label="Übersicht" section="overview" current={section} guildId={guildId} />
+              <SideLink icon={<Bot size={17} />} label="Bot-Profil" section="profile" current={section} guildId={guildId} />
+            </SidebarGroup>
+            <SidebarGroup label="Community" tone="green">
+              <SideLink icon={<Sparkles size={17} />} label="Begrüßung" section="welcome" current={section} guildId={guildId} />
+              <SideLink icon={<UserPlus size={17} />} label="Autorole" section="autorole" current={section} guildId={guildId} />
+              <SideLink icon={<BarChart3 size={17} />} label="Level-System" section="level-system" current={section} guildId={guildId} />
+              <SideLink icon={<ListOrdered size={17} />} label="Counting" section="counting" current={section} guildId={guildId} />
+            </SidebarGroup>
+            <SidebarGroup label="Automatisierung" tone="violet">
+              <SideLink icon={<Command size={17} />} label="Slash-Befehle" section="commands" current={section} guildId={guildId} />
+              <SideLink icon={<ClipboardList size={17} />} label="Custom Commands" section="custom-commands" current={section} guildId={guildId} />
+              <SideLink icon={<ListFilter size={17} />} label="Logging" section="logging" current={section} guildId={guildId} />
+              <SideLink icon={<ShieldCheck size={17} />} label="Audit-Log" section="audit-log" current={section} guildId={guildId} />
+            </SidebarGroup>
+            <SidebarGroup label="Voice & Unterhaltung" tone="amber">
+              <SideLink icon={<Mic2 size={17} />} label="Temp-Voice" section="temp-voice" current={section} guildId={guildId} />
+              <SideLink icon={<Music2 size={17} />} label="Spotify Music" section="spotify-music" current={section} guildId={guildId} badge="geplant" />
+              <SideLink icon={<Gamepad2 size={17} />} label="Games" section="games" current={section} guildId={guildId} badge="geplant" />
+            </SidebarGroup>
+            <SidebarGroup label="Sicherheit" tone="red">
+              <SideLink icon={<Shield size={17} />} label="Moderation" section="moderation" current={section} guildId={guildId} badge="geplant" />
+              <SideLink icon={<AlertTriangle size={17} />} label="Gefahrenbereich" section="danger-zone" current={section} guildId={guildId} badge="geplant" />
+            </SidebarGroup>
+          </nav>
+          <button className="sidebar-account" onClick={() => navigate("/panel")} title="Zur Serverauswahl">
+            <span className="sidebar-account-avatar">
+              {me.data?.user.avatar ? <img src={me.data.user.avatar} alt="" /> : <UserRound size={17} />}
+            </span>
+            <span><strong>{me.data?.user.displayName || me.data?.user.username || "Account"}</strong><small>Server wechseln</small></span>
+            <ChevronRight size={16} />
+          </button>
         </aside>
         <main className="dashboard-main">
           {detail.loading && !detail.data && <LoadingBlock />}
@@ -3593,12 +3611,33 @@ function Dashboard({ path }: { path: string }) {
 function GuildSwitcher({ currentGuild, currentGuildId }: { currentGuild: GuildDetail | null; currentGuildId: string }) {
   return (
     <div className="guild-switcher">
-      <span>Guild</span>
+      <span>Aktiver Server</span>
       <button className="guild-switcher-button" onClick={() => navigate("/panel")}>
-        <span>{currentGuild?.name ?? currentGuildId}</span>
+        <GuildIcon guild={{ name: currentGuild?.name ?? "Guild", icon: currentGuild?.icon ?? null }} />
+        <span className="guild-switcher-copy">
+          <strong>{currentGuild?.name ?? currentGuildId}</strong>
+          <small>{currentGuild ? currentGuildId : "Serverdaten werden geladen"}</small>
+        </span>
         <ChevronRight size={16} />
       </button>
     </div>
+  );
+}
+
+function SidebarGroup({
+  label,
+  tone,
+  children
+}: {
+  label: string;
+  tone: "blue" | "green" | "violet" | "amber" | "red";
+  children: React.ReactNode;
+}) {
+  return (
+    <section className={`sidebar-section ${tone}`}>
+      <div className="sidebar-group-title"><span />{label}</div>
+      <div className="sidebar-section-links">{children}</div>
+    </section>
   );
 }
 
