@@ -35,6 +35,7 @@ import { PANEL_OWNER_DISCORD_USER_ID, canManageGuild, canUseOwnerAdmin, permissi
 import type { ActiveSession, DiscordGuild, Env, GuildAccess, SessionUser, TokenData } from "./server/types";
 import {
   assertSameGuild,
+  adminMemberModerationSchema,
   adminRoleUpdateSchema,
   autoroleSettingsSchema,
   backupActionSchema,
@@ -2051,8 +2052,32 @@ function normalizeAdminMember(member: Record<string, unknown>) {
     bot: Boolean(user.bot),
     roles: Array.isArray(member.roles) ? member.roles.map((role) => String(role)) : [],
     joinedAt: member.joined_at ? String(member.joined_at) : null,
-    premiumSince: member.premium_since ? String(member.premium_since) : null
+    premiumSince: member.premium_since ? String(member.premium_since) : null,
+    communicationDisabledUntil: member.communication_disabled_until ? String(member.communication_disabled_until) : null
   };
+}
+
+function adminMemberManageability(
+  member: ReturnType<typeof normalizeAdminMember>,
+  guildOwnerId: string | null,
+  botUserId: string | null,
+  botMember: Record<string, unknown> | null,
+  roles: Array<ReturnType<typeof normalizeAdminRole>>
+) {
+  if (!botMember) return { manageable: false, manageBlockReason: "Bot-Mitglied konnte nicht geladen werden." };
+  if (member.id === guildOwnerId) return { manageable: false, manageBlockReason: "Der Serverbesitzer ist geschützt." };
+  if (member.id === botUserId) return { manageable: false, manageBlockReason: "Der Bot kann sich nicht selbst moderieren." };
+
+  const positions = new Map(roles.map((role) => [role.id, role.position]));
+  const botRoleIds = Array.isArray(botMember.roles) ? botMember.roles.map((roleId) => String(roleId)) : [];
+  const botTopPosition = Math.max(0, ...botRoleIds.map((roleId) => positions.get(roleId) ?? 0));
+  const memberTopPosition = Math.max(0, ...member.roles.map((roleId) => positions.get(roleId) ?? 0));
+
+  if (memberTopPosition >= botTopPosition) {
+    return { manageable: false, manageBlockReason: "Die höchste Rolle liegt gleich hoch oder höher als die Bot-Rolle." };
+  }
+
+  return { manageable: true, manageBlockReason: null };
 }
 
 function inviteCodeFromInput(value: string): string {
@@ -3992,7 +4017,16 @@ app.get("/api/admin/discordguilds/:guildId", async (c) => {
 
   const roles = (liveRoles.length ? liveRoles : dbRoles).map(normalizeAdminRole).filter((role) => role.id);
   const channels = (liveChannels.length ? liveChannels : dbChannels).map(normalizeAdminChannel).filter((channel) => channel.id);
-  const members = liveMembers.map(normalizeAdminMember).filter((member) => member.id);
+  const guildOwnerValue = liveGuild?.owner_id ?? runtimeGuild?.ownerId ?? null;
+  const guildOwnerId = guildOwnerValue ? String(guildOwnerValue) : null;
+  const botUserId = c.env.DISCORD_CLIENT_ID?.trim() || null;
+  const members = liveMembers
+    .map(normalizeAdminMember)
+    .filter((member) => member.id)
+    .map((member) => ({
+      ...member,
+      ...adminMemberManageability(member, guildOwnerId, botUserId, botMember, roles)
+    }));
   const moduleSettings = normalizeGuildModules(runtimeGuild?.modules);
   const permissionChecks = buildPermissionChecks(guildId, liveRoles.length ? liveRoles : dbRoles, botMember);
   const memberCount = finiteNumber(liveGuild?.member_count)
@@ -4006,7 +4040,7 @@ app.get("/api/admin/discordguilds/:guildId", async (c) => {
       id: guild.discord_guild_id,
       name: liveGuild?.name ?? guild.name,
       icon: liveGuild?.icon ? discordGuildIconUrl({ id: guild.discord_guild_id, icon: liveGuild.icon }) : guild.icon,
-      ownerId: liveGuild?.owner_id ?? runtimeGuild?.ownerId ?? null,
+      ownerId: guildOwnerId,
       ownerName: runtimeGuild?.ownerName ?? null,
       memberCount,
       presenceCount: finiteNumber(liveGuild?.approximate_presence_count),
@@ -4032,6 +4066,45 @@ app.get("/api/admin/discordguilds/:guildId", async (c) => {
     },
     warnings
   });
+});
+
+app.post("/api/admin/discordguilds/:guildId/members/:memberId/moderation", async (c) => {
+  const session = await requireAdminSession(c);
+  const guildId = snowflakeSchema.parse(c.req.param("guildId"));
+  const memberId = snowflakeSchema.parse(c.req.param("memberId"));
+  const guild = await requireAdminGuild(c.env, guildId);
+  const data = adminMemberModerationSchema.parse(await readJsonBody(c));
+  const member = await fetchDiscordBotGuildMember(c.env, guildId, memberId);
+
+  if (!member) {
+    throw new HttpError(404, "member_not_found", "Dieses Mitglied wurde auf der Guild nicht gefunden.");
+  }
+
+  const eventId = await enqueueSyncEvent(c.env, {
+    id: guild.id,
+    discordGuildId: guild.discord_guild_id,
+    name: guild.name,
+    icon: guild.icon,
+    botJoinedAt: guild.bot_joined_at
+  }, "guild.member.moderate", {
+    discordGuildId: guild.discord_guild_id,
+    memberId,
+    moderationAction: data.action,
+    reason: data.reason || "Kein Grund angegeben",
+    durationSeconds: data.durationSeconds,
+    deleteMessageSeconds: data.deleteMessageSeconds,
+    actorDiscordUserId: session.user.discordUserId,
+    actorUsername: session.user.displayName || session.user.username
+  });
+
+  await audit(c.env, guild.id, session.user.discordUserId, `owner.guild.member.${data.action}`, memberId, null, {
+    eventId,
+    reason: data.reason || "Kein Grund angegeben",
+    durationSeconds: data.durationSeconds,
+    deleteMessageSeconds: data.deleteMessageSeconds
+  });
+
+  return json(c, { ok: true, eventId, memberId, action: data.action });
 });
 
 app.get("/api/admin/discordguilds/:guildId/invites", async (c) => {

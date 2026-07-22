@@ -3830,6 +3830,10 @@ textarea {
 }
 
 .mini-text-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
   min-height: 28px;
   padding: 5px 9px;
   border: 1px solid rgba(119, 183, 255, 0.2);
@@ -3861,6 +3865,168 @@ textarea {
   margin: 0;
   color: var(--text);
   font-size: 18px;
+}
+
+.owner-member-editor {
+  display: grid;
+  gap: 14px;
+  padding: 16px;
+  border: 1px solid rgba(119, 183, 255, 0.26);
+  border-radius: 8px;
+  background:
+    linear-gradient(135deg, rgba(119, 183, 255, 0.075), transparent 42%),
+    rgba(9, 11, 16, 0.68);
+}
+
+.owner-member-editor-head,
+.owner-member-identity,
+.owner-member-state {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.owner-member-editor-head {
+  justify-content: space-between;
+}
+
+.owner-member-identity {
+  min-width: 0;
+}
+
+.owner-member-identity > div:last-child {
+  min-width: 0;
+}
+
+.owner-member-identity h3 {
+  margin: 0;
+  color: var(--text);
+  font-size: 18px;
+}
+
+.owner-member-identity p {
+  margin: 3px 0 0;
+  overflow-wrap: anywhere;
+}
+
+.owner-member-state {
+  justify-content: flex-end;
+  flex-wrap: wrap;
+}
+
+.owner-member-action-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.owner-member-action-grid button {
+  min-width: 0;
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 9px 10px;
+  border: 1px solid var(--border-soft);
+  border-radius: 8px;
+  color: var(--muted-strong);
+  background: var(--control-bg);
+  cursor: pointer;
+}
+
+.owner-member-action-grid button:hover,
+.owner-member-action-grid button:focus-visible,
+.owner-member-action-grid button.active {
+  color: var(--blue);
+  border-color: rgba(119, 183, 255, 0.4);
+  background: rgba(119, 183, 255, 0.1);
+  outline: none;
+}
+
+.owner-member-action-grid button.danger:hover,
+.owner-member-action-grid button.danger:focus-visible,
+.owner-member-action-grid button.danger.active {
+  color: var(--red);
+  border-color: rgba(255, 116, 116, 0.38);
+  background: rgba(255, 116, 116, 0.09);
+}
+
+.owner-member-action-grid button:disabled {
+  cursor: not-allowed;
+  opacity: 0.42;
+}
+
+.owner-member-form {
+  align-items: end;
+}
+
+.owner-member-reason {
+  grid-column: span 2;
+}
+
+.owner-member-reason textarea {
+  min-height: 86px;
+  resize: vertical;
+}
+
+.owner-member-reason small {
+  justify-self: end;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.owner-member-role-preview {
+  display: grid;
+  gap: 8px;
+}
+
+.owner-member-role-preview > span {
+  color: var(--muted-strong);
+  font-size: 13px;
+}
+
+.owner-member-role-preview > div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.owner-member-role-preview > div span {
+  padding: 5px 8px;
+  border: 1px solid rgba(119, 183, 255, 0.14);
+  border-radius: 999px;
+  color: var(--muted-strong);
+  background: rgba(119, 183, 255, 0.055);
+  font-size: 12px;
+}
+
+.owner-member-role-preview small {
+  color: var(--muted);
+}
+
+.owner-member-confirm {
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid rgba(255, 116, 116, 0.24);
+  border-radius: 8px;
+  color: var(--muted-strong);
+  background: rgba(255, 116, 116, 0.055);
+}
+
+.owner-member-confirm input {
+  width: 17px;
+  height: 17px;
+  accent-color: var(--red);
+}
+
+.owner-detail-tags .member-timeout-tag {
+  color: var(--amber);
+  border-color: rgba(244, 189, 99, 0.28);
+  background: rgba(244, 189, 99, 0.07);
 }
 
 .role-dot {
@@ -5748,6 +5914,7 @@ textarea {
 :root[data-theme="light"] .owner-invite-row,
 :root[data-theme="light"] .owner-detail-row,
 :root[data-theme="light"] .owner-role-editor,
+:root[data-theme="light"] .owner-member-editor,
 :root[data-theme="light"] .owner-permission-card,
 :root[data-theme="light"] .owner-module-card,
 :root[data-theme="light"] .welcome-preview,
@@ -6418,6 +6585,23 @@ textarea {
 
   .owner-guild-facts {
     grid-template-columns: 1fr;
+  }
+
+  .owner-member-editor-head {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .owner-member-state {
+    justify-content: flex-start;
+  }
+
+  .owner-member-action-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .owner-member-reason {
+    grid-column: span 1;
   }
 }
 

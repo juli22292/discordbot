@@ -34,6 +34,7 @@ export interface DiscordBotMember {
   roles?: string[];
   joined_at?: string | null;
   premium_since?: string | null;
+  communication_disabled_until?: string | null;
   pending?: boolean;
 }
 

@@ -532,6 +532,9 @@ type AdminGuildDetail = {
     roles: string[];
     joinedAt: string | null;
     premiumSince: string | null;
+    communicationDisabledUntil: string | null;
+    manageable: boolean;
+    manageBlockReason: string | null;
   }>;
   modules: {
     logging: boolean;
@@ -557,6 +560,8 @@ type AdminGuildDetail = {
   };
   warnings: string[];
 };
+
+type AdminMemberAction = "timeout" | "timeout_remove" | "kick" | "ban";
 
 type AdminGuildInvite = {
   code: string;
@@ -3090,6 +3095,14 @@ function AdminGuildViewPage({ path }: { path: string }) {
   const [roleDraft, setRoleDraft] = useState({ name: "", color: "#5865F2", hoist: false, mentionable: false });
   const [roleSaving, setRoleSaving] = useState(false);
   const [roleStatus, setRoleStatus] = useState<string | null>(null);
+  const [memberEditor, setMemberEditor] = useState<AdminGuildDetail["members"][number] | null>(null);
+  const [memberAction, setMemberAction] = useState<AdminMemberAction>("timeout");
+  const [memberReason, setMemberReason] = useState("");
+  const [memberTimeoutSeconds, setMemberTimeoutSeconds] = useState("3600");
+  const [memberDeleteMessageSeconds, setMemberDeleteMessageSeconds] = useState("0");
+  const [memberConfirmed, setMemberConfirmed] = useState(false);
+  const [memberActionBusy, setMemberActionBusy] = useState(false);
+  const [memberActionStatus, setMemberActionStatus] = useState<string | null>(null);
   const [exportingGuild, setExportingGuild] = useState(false);
 
   useEffect(() => {
@@ -3108,9 +3121,28 @@ function AdminGuildViewPage({ path }: { path: string }) {
     });
   }, [roleEditor?.id]);
 
+  useEffect(() => {
+    if (!memberEditor) return;
+    const timedOut = Boolean(
+      memberEditor.communicationDisabledUntil
+      && new Date(memberEditor.communicationDisabledUntil).getTime() > Date.now()
+    );
+    setMemberAction(timedOut ? "timeout_remove" : "timeout");
+    setMemberReason("");
+    setMemberTimeoutSeconds("3600");
+    setMemberDeleteMessageSeconds("0");
+    setMemberConfirmed(false);
+    setMemberActionStatus(null);
+  }, [memberEditor?.id]);
+
   const roleNameById = useMemo(() => {
     return new Map((data?.roles ?? []).map((role) => [role.id, role.name]));
   }, [data?.roles]);
+
+  const memberActionPermission = (action: AdminMemberAction) => {
+    const permissionKey = action === "kick" ? "kickMembers" : action === "ban" ? "banMembers" : "moderateMembers";
+    return data?.permissionChecks.find((check) => check.key === permissionKey)?.ok ?? null;
+  };
 
   const inviteChannels = useMemo(() => {
     return (data?.channels ?? []).filter((channel) => {
@@ -3252,6 +3284,51 @@ function AdminGuildViewPage({ path }: { path: string }) {
     }
   }
 
+  async function moderateMember() {
+    if (!validGuildId || !memberEditor) return;
+    const dangerousAction = memberAction === "kick" || memberAction === "ban";
+
+    if (!memberEditor.manageable) {
+      setMemberActionStatus(memberEditor.manageBlockReason || "Dieses Mitglied kann vom Bot nicht moderiert werden.");
+      return;
+    }
+    if (memberActionPermission(memberAction) === false) {
+      setMemberActionStatus("Dem Bot fehlt die für diese Aktion benötigte Discord-Berechtigung.");
+      return;
+    }
+    if (dangerousAction && !memberConfirmed) {
+      setMemberActionStatus("Bestätige die endgültige Aktion zuerst.");
+      return;
+    }
+
+    setMemberActionBusy(true);
+    setMemberActionStatus(null);
+    try {
+      await api(`/api/admin/discordguilds/${guildId}/members/${memberEditor.id}/moderation`, {
+        method: "POST",
+        body: JSON.stringify({
+          action: memberAction,
+          reason: memberReason.trim() || "Kein Grund angegeben",
+          durationSeconds: memberAction === "timeout" ? Number(memberTimeoutSeconds) : undefined,
+          deleteMessageSeconds: memberAction === "ban" ? Number(memberDeleteMessageSeconds) : 0
+        })
+      });
+      const labels: Record<AdminMemberAction, string> = {
+        timeout: "Timeout",
+        timeout_remove: "Timeout-Entfernung",
+        kick: "Kick",
+        ban: "Bann"
+      };
+      setMemberActionStatus(`${labels[memberAction]} wurde sicher an den Bot gesendet.`);
+      setMemberConfirmed(false);
+      window.setTimeout(() => void detail.reload(), 5000);
+    } catch (error) {
+      setMemberActionStatus(error instanceof Error ? error.message : "Die Moderationsaktion konnte nicht gesendet werden.");
+    } finally {
+      setMemberActionBusy(false);
+    }
+  }
+
   async function exportGuildConfig() {
     if (!validGuildId) return;
     setExportingGuild(true);
@@ -3269,6 +3346,16 @@ function AdminGuildViewPage({ path }: { path: string }) {
   const displayedGuildName = guild?.name || routeGuildName;
   const currentRows = activeTab === "roles" ? visibleRoles.length : activeTab === "members" ? visibleMembers.length : visibleChannels.length;
   const inviteList = invites.data?.invites ?? [];
+  const selectedMemberTimedOut = Boolean(
+    memberEditor?.communicationDisabledUntil
+    && new Date(memberEditor.communicationDisabledUntil).getTime() > Date.now()
+  );
+  const selectedMemberActionLabel: Record<AdminMemberAction, string> = {
+    timeout: "Timeout setzen",
+    timeout_remove: "Timeout entfernen",
+    kick: "Mitglied kicken",
+    ban: "Mitglied bannen"
+  };
   const missingPermissions = data?.permissionChecks.filter((check) => check.ok === false).length ?? 0;
 
   return (
@@ -3610,6 +3697,109 @@ function AdminGuildViewPage({ path }: { path: string }) {
 
               {activeTab === "members" && (
                 <div className="owner-detail-list">
+                  {memberEditor && (
+                    <article className="owner-member-editor">
+                      <div className="owner-member-editor-head">
+                        <div className="owner-member-identity">
+                          {memberEditor.avatar ? <img className="member-avatar" src={memberEditor.avatar} alt="" /> : <div className="member-avatar fallback">{memberEditor.displayName.slice(0, 2).toUpperCase()}</div>}
+                          <div>
+                            <h3>{memberEditor.displayName}</h3>
+                            <p className="muted">{memberEditor.username} · {memberEditor.id}</p>
+                          </div>
+                        </div>
+                        <div className="owner-member-state">
+                          {selectedMemberTimedOut && <span className="pill warn">Timeout bis {formatDateTime(memberEditor.communicationDisabledUntil!)}</span>}
+                          <span className={memberEditor.manageable ? "pill ok" : "pill danger"}>{memberEditor.manageable ? "Bot kann moderieren" : "Geschützt"}</span>
+                        </div>
+                      </div>
+
+                      {!memberEditor.manageable && <Notice tone="warning" text={memberEditor.manageBlockReason || "Dieses Mitglied ist durch Discords Rollen-Hierarchie geschützt."} />}
+
+                      <div className="owner-member-action-grid" role="group" aria-label="Moderationsaktion">
+                        <button type="button" className={memberAction === "timeout" ? "active" : ""} onClick={() => { setMemberAction("timeout"); setMemberConfirmed(false); setMemberActionStatus(null); }} disabled={memberActionPermission("timeout") === false}>
+                          <Clock3 size={17} /><span>Timeout</span>
+                        </button>
+                        <button type="button" className={memberAction === "timeout_remove" ? "active" : ""} onClick={() => { setMemberAction("timeout_remove"); setMemberConfirmed(false); setMemberActionStatus(null); }} disabled={memberActionPermission("timeout_remove") === false}>
+                          <RotateCcw size={17} /><span>Freigeben</span>
+                        </button>
+                        <button type="button" className={memberAction === "kick" ? "active danger" : "danger"} onClick={() => { setMemberAction("kick"); setMemberConfirmed(false); setMemberActionStatus(null); }} disabled={memberActionPermission("kick") === false}>
+                          <UserMinus size={17} /><span>Kicken</span>
+                        </button>
+                        <button type="button" className={memberAction === "ban" ? "active danger" : "danger"} onClick={() => { setMemberAction("ban"); setMemberConfirmed(false); setMemberActionStatus(null); }} disabled={memberActionPermission("ban") === false}>
+                          <Ban size={17} /><span>Bannen</span>
+                        </button>
+                      </div>
+
+                      <div className="form-grid owner-member-form">
+                        <label className="owner-member-reason">
+                          Moderationsgrund
+                          <textarea value={memberReason} maxLength={500} rows={3} placeholder="Warum wird diese Aktion ausgeführt?" onChange={(event) => setMemberReason(event.target.value)} />
+                          <small>{memberReason.length}/500 Zeichen</small>
+                        </label>
+                        {memberAction === "timeout" && (
+                          <label>
+                            Timeout-Dauer
+                            <select value={memberTimeoutSeconds} onChange={(event) => setMemberTimeoutSeconds(event.target.value)}>
+                              <option value="300">5 Minuten</option>
+                              <option value="600">10 Minuten</option>
+                              <option value="3600">1 Stunde</option>
+                              <option value="21600">6 Stunden</option>
+                              <option value="86400">1 Tag</option>
+                              <option value="259200">3 Tage</option>
+                              <option value="604800">7 Tage</option>
+                              <option value="2419200">28 Tage</option>
+                            </select>
+                          </label>
+                        )}
+                        {memberAction === "ban" && (
+                          <label>
+                            Nachrichten löschen
+                            <select value={memberDeleteMessageSeconds} onChange={(event) => setMemberDeleteMessageSeconds(event.target.value)}>
+                              <option value="0">Keine</option>
+                              <option value="3600">Letzte Stunde</option>
+                              <option value="21600">Letzte 6 Stunden</option>
+                              <option value="86400">Letzter Tag</option>
+                              <option value="259200">Letzte 3 Tage</option>
+                              <option value="604800">Letzte 7 Tage</option>
+                            </select>
+                          </label>
+                        )}
+                      </div>
+
+                      <div className="owner-member-role-preview">
+                        <span>Rollen</span>
+                        <div>
+                          {memberEditor.roles.slice(0, 8).map((roleId) => <span key={roleId}>{roleNameById.get(roleId) || roleId}</span>)}
+                          {memberEditor.roles.length > 8 && <span>+{memberEditor.roles.length - 8}</span>}
+                          {memberEditor.roles.length === 0 && <small>Keine zusätzlichen Rollen</small>}
+                        </div>
+                      </div>
+
+                      {(memberAction === "kick" || memberAction === "ban") && (
+                        <label className="owner-member-confirm">
+                          <input type="checkbox" checked={memberConfirmed} onChange={(event) => setMemberConfirmed(event.target.checked)} />
+                          <span>Ich bestätige, dass diese Aktion das Mitglied vom Server entfernt.</span>
+                        </label>
+                      )}
+
+                      {memberActionPermission(memberAction) === false && <Notice tone="warning" text="Dem Bot fehlt für diese Aktion die benötigte Discord-Berechtigung." />}
+                      <ActionStatus status={memberActionStatus} />
+                      <div className="form-actions">
+                        <button
+                          type="button"
+                          className={memberAction === "kick" || memberAction === "ban" ? "danger-action inline" : "primary-action inline"}
+                          onClick={moderateMember}
+                          disabled={memberActionBusy || !memberEditor.manageable || memberActionPermission(memberAction) === false || ((memberAction === "kick" || memberAction === "ban") && !memberConfirmed)}
+                        >
+                          {memberActionBusy ? <Loader2 className="spin" size={16} /> : memberAction === "ban" ? <Ban size={16} /> : memberAction === "kick" ? <UserMinus size={16} /> : memberAction === "timeout_remove" ? <RotateCcw size={16} /> : <Clock3 size={16} />}
+                          {selectedMemberActionLabel[memberAction]}
+                        </button>
+                        <button type="button" className="secondary-action inline" onClick={() => setMemberEditor(null)} disabled={memberActionBusy}>
+                          <X size={16} /> Schließen
+                        </button>
+                      </div>
+                    </article>
+                  )}
                   {visibleMembers.map((member) => (
                     <article key={member.id} className="owner-detail-row member">
                       {member.avatar ? <img className="member-avatar" src={member.avatar} alt="" /> : <div className="member-avatar fallback">{member.displayName.slice(0, 2).toUpperCase()}</div>}
@@ -3621,7 +3811,11 @@ function AdminGuildViewPage({ path }: { path: string }) {
                         {member.bot && <span>Bot</span>}
                         {member.nick && <span>Nickname</span>}
                         <span>{member.roles.length} Rollen</span>
+                        {member.communicationDisabledUntil && new Date(member.communicationDisabledUntil).getTime() > Date.now() && <span className="member-timeout-tag">Timeout aktiv</span>}
                         {member.joinedAt && <span>seit {formatDateTime(member.joinedAt)}</span>}
+                        <button type="button" className="mini-text-button" title={member.manageBlockReason || "Mitglied moderieren"} onClick={() => setMemberEditor(member)}>
+                          <Shield size={14} /> Verwalten
+                        </button>
                       </div>
                     </article>
                   ))}

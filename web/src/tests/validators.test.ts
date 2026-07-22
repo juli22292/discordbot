@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   assertSameGuild,
+  adminMemberModerationSchema,
   autoroleSettingsSchema,
   backupActionSchema,
   commandConfigSchema,
@@ -64,6 +65,18 @@ describe("guild-isolated validation", () => {
     expect(safeRedirectPath("https://evil.test")).toBe("/panel");
     expect(safeRedirectPath("//evil.test")).toBe("/panel");
     expect(safeRedirectPath("/api/auth/discord")).toBe("/panel");
+  });
+
+  it("validates owner member moderation actions and Discord limits", () => {
+    expect(adminMemberModerationSchema.parse({
+      action: "timeout",
+      reason: "Spam",
+      durationSeconds: 3600
+    }).durationSeconds).toBe(3600);
+    expect(adminMemberModerationSchema.parse({ action: "ban", deleteMessageSeconds: 86400 }).action).toBe("ban");
+    expect(() => adminMemberModerationSchema.parse({ action: "timeout" })).toThrow(/Dauer/);
+    expect(() => adminMemberModerationSchema.parse({ action: "ban", deleteMessageSeconds: 604801 })).toThrow();
+    expect(() => adminMemberModerationSchema.parse({ action: "delete" })).toThrow();
   });
 
   it("validates complete TempVoice settings", () => {
