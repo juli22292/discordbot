@@ -376,7 +376,12 @@ export const raidSettingsSchema = z.object({
 const ticketSelectCategorySchema = z.object({
   label: z.string().trim().min(1).max(80),
   description: z.string().trim().min(1).max(100),
-  emoji: z.string().trim().min(1).max(20).default("🎫"),
+  emoji: z
+    .string()
+    .trim()
+    .min(1, "Für jede Ticket-Kategorie wird ein Emoji benötigt.")
+    .max(100, "Ein Ticket-Emoji darf maximal 100 Zeichen lang sein.")
+    .default("🎫"),
   value: z.string().trim().toLowerCase().regex(/^[a-z0-9_-]{1,80}$/)
 });
 

@@ -208,14 +208,19 @@ describe("guild-isolated validation", () => {
   });
 
   it("validates ticket setup including unique panel categories", () => {
+    const customEmoji = "<:ticket:1529165088760533113>";
     const settings = ticketSettingsSchema.parse({
       enabled: true,
       ticketCategoryId: "123456789012345678",
       supportRoleIds: ["223456789012345678"],
       formQuestions: ["Wobei brauchst du Hilfe?"],
-      selectCategories: [{ label: "Support", description: "Allgemeine Hilfe", emoji: "🎫", value: "support" }]
+      selectCategories: [{ label: "Support", description: "Allgemeine Hilfe", emoji: customEmoji, value: "support" }]
     });
     expect(settings.formQuestions).toHaveLength(1);
+    expect(settings.selectCategories[0].emoji).toBe(customEmoji);
+    expect(() => ticketSettingsSchema.parse({
+      selectCategories: [{ label: "Support", description: "Allgemeine Hilfe", emoji: "x".repeat(101), value: "support" }]
+    })).toThrow(/maximal 100/);
     expect(() => ticketSettingsSchema.parse({ enabled: true })).toThrow(/Discord-Kategorie/);
   });
 });

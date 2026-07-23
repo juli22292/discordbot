@@ -1,4 +1,5 @@
 import { Hono, type Context } from "hono";
+import { ZodError } from "zod";
 import {
   clearCookieHeader,
   cookieHeader,
@@ -2309,6 +2310,15 @@ async function enqueueSyncEvent(
 app.onError((error, c) => {
   if (error instanceof HttpError) {
     return json(c, { error: { code: error.code, message: error.message } }, error.status);
+  }
+
+  if (error instanceof ZodError) {
+    return json(c, {
+      error: {
+        code: "validation_error",
+        message: validationError(error)
+      }
+    }, 400);
   }
 
   if (error instanceof DiscordApiError) {
