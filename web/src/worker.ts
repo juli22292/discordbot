@@ -387,6 +387,7 @@ interface OAuthStateData {
 }
 
 type BotInstallStatus = "installed" | "missing" | "unknown";
+const sessionTokenRefreshes = new Map<string, Promise<TokenData>>();
 
 function json(c: HonoContext, data: unknown, status = 200): Response {
   return c.json(data, status as 200);
@@ -517,6 +518,58 @@ async function readEncryptedCookieState(c: HonoContext, expectedState: string, e
   return stateData;
 }
 
+async function refreshStoredSessionToken(env: Env, sessionId: string): Promise<TokenData> {
+  const activeRefresh = sessionTokenRefreshes.get(sessionId);
+  if (activeRefresh) return activeRefresh;
+
+  const refresh = (async () => {
+    const db = requireDb(env);
+    const tokenRow = await first<{ encrypted_token_data: string }>(
+      db.prepare("SELECT encrypted_token_data FROM sessions WHERE id = ? AND expires_at > ?")
+        .bind(sessionId, nowIso())
+    );
+    if (!tokenRow) {
+      throw new HttpError(401, "session_required", "Bitte melde dich erneut mit Discord an.");
+    }
+
+    const currentToken = await decryptJson<TokenData>(tokenRow.encrypted_token_data, env.ENCRYPTION_KEY);
+    if (currentToken.expiresAt >= Date.now() + 60_000) return currentToken;
+
+    try {
+      const refreshedToken = await refreshDiscordToken(env, currentToken);
+      const encrypted = await encryptJson(refreshedToken, env.ENCRYPTION_KEY);
+      await db.prepare("UPDATE sessions SET encrypted_token_data = ?, updated_at = ? WHERE id = ?")
+        .bind(encrypted, nowIso(), sessionId)
+        .run();
+      return refreshedToken;
+    } catch (error) {
+      // Eine andere Worker-Instanz kann denselben rotierenden Discord-Token
+      // bereits erneuert haben. In diesem Fall den aktuellen D1-Wert übernehmen.
+      await new Promise((resolve) => setTimeout(resolve, 75));
+      const latestRow = await first<{ encrypted_token_data: string }>(
+        db.prepare("SELECT encrypted_token_data FROM sessions WHERE id = ? AND expires_at > ?")
+          .bind(sessionId, nowIso())
+      );
+      if (latestRow) {
+        const latestToken = await decryptJson<TokenData>(latestRow.encrypted_token_data, env.ENCRYPTION_KEY);
+        if (latestToken.expiresAt >= Date.now() + 30_000 && latestToken.accessToken !== currentToken.accessToken) {
+          return latestToken;
+        }
+      }
+      throw error;
+    }
+  })();
+
+  sessionTokenRefreshes.set(sessionId, refresh);
+  try {
+    return await refresh;
+  } finally {
+    if (sessionTokenRefreshes.get(sessionId) === refresh) {
+      sessionTokenRefreshes.delete(sessionId);
+    }
+  }
+}
+
 async function getSession(c: HonoContext): Promise<ActiveSession | null> {
   requireEnv(c.env, "ENCRYPTION_KEY");
   const cookies = parseCookies(c.req.header("Cookie") ?? null);
@@ -561,11 +614,7 @@ async function getSession(c: HonoContext): Promise<ActiveSession | null> {
 
   let tokenData = await decryptJson<TokenData>(row.encrypted_token_data, c.env.ENCRYPTION_KEY);
   if (tokenData.expiresAt < Date.now() + 60_000) {
-    tokenData = await refreshDiscordToken(c.env, tokenData);
-    const encrypted = await encryptJson(tokenData, c.env.ENCRYPTION_KEY);
-    await db.prepare("UPDATE sessions SET encrypted_token_data = ?, updated_at = ? WHERE id = ?")
-      .bind(encrypted, nowIso(), row.id)
-      .run();
+    tokenData = await refreshStoredSessionToken(c.env, row.id);
   }
 
   return {

@@ -1000,11 +1000,20 @@ async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
     headers.set("Content-Type", "application/json");
   }
 
-  const response = await fetch(path, {
-    credentials: "include",
-    ...init,
-    headers
-  });
+  const request = () => fetch(
+    path,
+    {
+      credentials: "include",
+      ...init,
+      headers
+    }
+  );
+
+  let response = await request();
+  if (response.status === 401) {
+    await new Promise((resolve) => window.setTimeout(resolve, 150));
+    response = await request();
+  }
 
   const contentType = response.headers.get("Content-Type") ?? "";
   const data = contentType.includes("application/json") ? ((await response.json()) as ApiError & T) : null;
