@@ -1008,17 +1008,22 @@ async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
       headers
     }
   );
+  const readData = async (response: Response) => {
+    const contentType = response.headers.get("Content-Type") ?? "";
+    return contentType.includes("application/json")
+      ? ((await response.json()) as ApiError & T)
+      : null;
+  };
 
   let response = await request();
-  if (response.status === 401) {
+  let data = await readData(response);
+  if (response.status === 401 && data?.error?.code === "session_required") {
     await new Promise((resolve) => window.setTimeout(resolve, 150));
     response = await request();
+    data = await readData(response);
   }
 
-  const contentType = response.headers.get("Content-Type") ?? "";
-  const data = contentType.includes("application/json") ? ((await response.json()) as ApiError & T) : null;
-
-  if (response.status === 401) {
+  if (response.status === 401 && data?.error?.code === "session_required") {
     const returnTo = safeClientReturnTo(window.location.pathname + window.location.search);
     navigate(`/login?returnTo=${encodeURIComponent(returnTo)}`);
     throw new Error("Bitte erneut anmelden.");
@@ -3122,7 +3127,7 @@ function AdminGuildViewPage({ path }: { path: string }) {
   const routeGuildName = decodeURIComponent(segments[5] ?? "Guild");
   const validGuildId = /^\d{17,20}$/.test(guildId);
   const detail = useApi<AdminGuildDetail>(validGuildId ? `/api/admin/discordguilds/${guildId}` : null, [guildId]);
-  const invites = useApi<{ invites: AdminGuildInvite[] }>(validGuildId ? `/api/admin/discordguilds/${guildId}/invites` : null, [guildId]);
+  const invites = useApi<{ invites: AdminGuildInvite[]; warning?: string }>(validGuildId ? `/api/admin/discordguilds/${guildId}/invites` : null, [guildId]);
   const data = detail.data;
   const guild = data?.guild;
   const [activeTab, setActiveTab] = useState<"roles" | "members" | "channels">("roles");
@@ -3686,6 +3691,7 @@ function AdminGuildViewPage({ path }: { path: string }) {
               </div>
 
               {invites.error && <Notice tone="danger" text={invites.error} />}
+              {invites.data?.warning && <Notice tone="warning" text={invites.data.warning} />}
 
               <div className="owner-invite-form">
                 <label>

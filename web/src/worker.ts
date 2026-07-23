@@ -556,6 +556,9 @@ async function refreshStoredSessionToken(env: Env, sessionId: string): Promise<T
           return latestToken;
         }
       }
+      if (error instanceof DiscordApiError && error.status === 401) {
+        throw new HttpError(401, "session_required", "Deine Discord-Sitzung ist abgelaufen. Bitte melde dich erneut an.");
+      }
       throw error;
     }
   })();
@@ -807,6 +810,9 @@ async function getFreshGuilds(c: HonoContext, session: ActiveSession): Promise<D
   try {
     return await fetchDiscordGuilds(session.tokenData);
   } catch (error) {
+    if (error instanceof DiscordApiError && error.status === 401) {
+      throw new HttpError(401, "session_required", "Deine Discord-Sitzung ist abgelaufen. Bitte melde dich erneut an.");
+    }
     if (error instanceof DiscordApiError && error.status === 429) {
       throw new HttpError(429, "discord_rate_limited", "Discord begrenzt gerade kurz die Anfragen. Bitte in ein paar Sekunden erneut aktualisieren.");
     }
@@ -4212,8 +4218,20 @@ app.get("/api/admin/discordguilds/:guildId/invites", async (c) => {
   const guildId = snowflakeSchema.parse(c.req.param("guildId"));
   await requireAdminGuild(c.env, guildId);
 
-  const invites = await fetchDiscordBotGuildInvites(c.env, guildId);
-  return json(c, { invites: invites.map((invite) => normalizeAdminInvite(invite as unknown as Record<string, unknown>)) });
+  try {
+    const invites = await fetchDiscordBotGuildInvites(c.env, guildId);
+    return json(c, { invites: invites.map((invite) => normalizeAdminInvite(invite as unknown as Record<string, unknown>)) });
+  } catch (error) {
+    if (error instanceof DiscordApiError && (error.status === 401 || error.status === 403)) {
+      return json(c, {
+        invites: [],
+        warning: error.status === 401
+          ? "Invite-Links konnten nicht geladen werden: Der Discord-Bot-Token im Webpanel ist ungültig oder veraltet."
+          : "Invite-Links konnten nicht geladen werden: Dem Bot fehlt die Berechtigung „Server verwalten“."
+      });
+    }
+    throw error;
+  }
 });
 
 app.post("/api/admin/discordguilds/:guildId/invites", async (c) => {
