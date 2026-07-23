@@ -1967,10 +1967,10 @@ function HomePage() {
                     </div>
                   )}
                   {installed ? (
-                    <button className="primary-action" onClick={() => navigate(`/dashboard/${guild.id}/overview`)}>
+                    <a className="primary-action" href={`/dashboard/${guild.id}/overview`}>
                       Verwalten
                       <ChevronRight size={16} />
-                    </button>
+                    </a>
                   ) : (
                     <a
                       className="secondary-action invite-action"
@@ -2967,13 +2967,12 @@ function AdminPageModern() {
                         <div className="owner-guild-initial">{(guild.name || "?").slice(0, 2).toUpperCase()}</div>
                       )}
                       <div className="owner-guild-main">
-                        <button
-                          type="button"
+                        <a
                           className="owner-guild-name-link"
-                          onClick={() => navigate(adminGuildViewPath({ id: guild.id, name: guild.name }))}
+                          href={adminGuildViewPath({ id: guild.id, name: guild.name })}
                         >
                           {guild.name}
-                        </button>
+                        </a>
                         <small className="owner-guild-id">{guild.id}</small>
                         <div className="owner-guild-meta">
                           {guild.ownerName || guild.ownerId ? <span>Owner: {guild.ownerName || guild.ownerId}</span> : <span>Owner unbekannt</span>}

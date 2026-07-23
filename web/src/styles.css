@@ -3321,6 +3321,7 @@ textarea {
   display: block;
   border: 0;
   padding: 0;
+  text-decoration: none;
   color: var(--text);
   background: transparent;
   font: inherit;
