@@ -20,6 +20,7 @@ import {
   Cpu,
   Database,
   Download,
+  Eye,
   ExternalLink,
   FileJson,
   Folder,
@@ -1302,7 +1303,406 @@ function usePath() {
   return path;
 }
 
+const DEMO_GUILD_ID = "demo";
+const DEMO_GUILD_PATH = `/dashboard/${DEMO_GUILD_ID}/overview`;
+const DEMO_TEXT_CHANNEL_ID = "100000000000000001";
+const DEMO_LOG_CHANNEL_ID = "100000000000000002";
+const DEMO_VOICE_CHANNEL_ID = "100000000000000003";
+const DEMO_CATEGORY_ID = "100000000000000004";
+const DEMO_MEMBER_ROLE_ID = "200000000000000001";
+const DEMO_TEAM_ROLE_ID = "200000000000000002";
+const DEMO_USER_ID = "300000000000000001";
+
+const DEMO_USER: User = {
+  discordUserId: DEMO_USER_ID,
+  username: "demo",
+  displayName: "Demo-Modus",
+  avatar: null,
+  ownerAdmin: false
+};
+
+const DEMO_GUILD: GuildDetail = {
+  id: DEMO_GUILD_ID,
+  name: "Modmail Manager Demo",
+  icon: null,
+  botInstalled: true,
+  botInstallStatus: "installed",
+  permission: "Demo-Zugriff"
+};
+
+const DEMO_SETTINGS: SettingsRow = {
+  locale: "de",
+  timezone: "Europe/Berlin",
+  bot_nickname: "Modmail Manager",
+  bot_avatar_media_key: null,
+  bot_avatar_sync_status: "synced",
+  bot_avatar_sync_error: null
+};
+
+const DEMO_CHANNELS: ChannelOption[] = [
+  { id: DEMO_TEXT_CHANNEL_ID, name: "willkommen", type: "text", categoryName: "Community", canSend: true },
+  { id: DEMO_LOG_CHANNEL_ID, name: "modmail-logs", type: "text", categoryName: "Team", canSend: true },
+  { id: "100000000000000005", name: "bot-befehle", type: "text", categoryName: "Community", canSend: true },
+  { id: "100000000000000006", name: "tickets", type: "text", categoryName: "Support", canSend: true },
+  { id: DEMO_VOICE_CHANNEL_ID, name: "TEMPVOICE ERSTELLEN", type: "voice", categoryName: "Voice", canSend: false },
+  { id: "100000000000000007", name: "Allgemein", type: "voice", categoryName: "Voice", canSend: false },
+  { id: DEMO_CATEGORY_ID, name: "Community", type: "category", categoryName: null, canSend: false }
+];
+
+const DEMO_ROLES: RoleOption[] = [
+  { id: DEMO_TEAM_ROLE_ID, name: "Support Team", color: 0x68a8ff, managed: false, botCanManage: true },
+  { id: DEMO_MEMBER_ROLE_ID, name: "Mitglied", color: 0x2fbf7a, managed: false, botCanManage: true },
+  { id: "200000000000000003", name: "Level 10", color: 0xf4bd63, managed: false, botCanManage: true },
+  { id: "200000000000000004", name: "Modmail Manager", color: 0x9b8cff, managed: true, botCanManage: false }
+];
+
+const DEMO_COMMANDS: CommandConfig[] = [
+  {
+    commandName: "help",
+    description: "Zeigt die verfügbaren Befehle.",
+    commandType: "slash",
+    enabled: true,
+    cooldownSeconds: 3,
+    ephemeral: true,
+    administratorOnly: false,
+    moderatorOnly: false,
+    allowedChannelIds: [],
+    deniedChannelIds: [],
+    allowedRoleIds: [],
+    deniedRoleIds: []
+  },
+  {
+    commandName: "ticket",
+    description: "Öffnet und verwaltet Support-Tickets.",
+    commandType: "slash",
+    enabled: true,
+    cooldownSeconds: 10,
+    ephemeral: true,
+    administratorOnly: false,
+    moderatorOnly: false,
+    allowedChannelIds: [DEMO_TEXT_CHANNEL_ID],
+    deniedChannelIds: [],
+    allowedRoleIds: [],
+    deniedRoleIds: []
+  },
+  {
+    commandName: "moderation",
+    description: "Werkzeuge für das Moderationsteam.",
+    commandType: "slash",
+    enabled: true,
+    cooldownSeconds: 2,
+    ephemeral: true,
+    administratorOnly: false,
+    moderatorOnly: true,
+    allowedChannelIds: [],
+    deniedChannelIds: [],
+    allowedRoleIds: [DEMO_TEAM_ROLE_ID],
+    deniedRoleIds: []
+  }
+];
+
+function demoLoggingSettings(): LoggingSettings {
+  return {
+    enabled: true,
+    channelMappings: Object.fromEntries(
+      LOG_CATEGORIES.map((category) => [category.key, category.key === "general" ? DEMO_TEXT_CHANNEL_ID : DEMO_LOG_CHANNEL_ID])
+    ) as Record<LogCategory, string | null>,
+    events: Object.fromEntries(LOG_CATEGORIES.map((category) => [category.key, true])) as Record<LogCategory, boolean>
+  };
+}
+
+function demoFeatureValue(field: FeatureFieldDefinition): FeatureValue {
+  const textValues: Record<string, string> = {
+    panelTitle: "Community-Verwaltung",
+    panelDescription: "Wähle die passende Option aus.",
+    defaultDescription: "Klicke auf Teilnehmen, um beim Giveaway mitzumachen.",
+    template: "[Member] {username}",
+    timezone: "Europe/Berlin",
+    message: "Alles Gute zum Geburtstag, {user}!",
+    serverAddress: "play.example.net",
+    verificationTitle: "Verifizierung",
+    verificationText: "Bestätige unten, dass du die Regeln gelesen hast.",
+    stickyMessage: "Bitte beachte die angepinnten Hinweise.",
+    recurringMessage: "Zeit für das tägliche Community-Update.",
+    scheduledMessage: "Heute Abend startet unser Community-Event.",
+    scheduledAt: "2026-08-01T18:00:00+02:00",
+    questions: "Wie alt bist du?\nWarum möchtest du ins Team?",
+    emoji: "⭐",
+    memberChannelName: "Mitglieder: {count}",
+    botChannelName: "Bots: {count}",
+    onlineChannelName: "Online: {count}"
+  };
+  const numberValues: Record<string, number> = {
+    defaultWinnerCount: 1,
+    defaultDurationMinutes: 1440,
+    intervalMinutes: 60,
+    warnExpireDays: 30,
+    defaultTimeoutMinutes: 60,
+    autoPunishmentThreshold: 3,
+    accountAgeMinDays: 7,
+    threshold: 5,
+    updateMinutes: 10,
+    defaultVolume: 50,
+    maxQueueLength: 100,
+    cooldownSeconds: 5,
+    dailyReward: 250
+  };
+
+  if (field.type === "channel") return DEMO_TEXT_CHANNEL_ID;
+  if (field.type === "category") return DEMO_CATEGORY_ID;
+  if (field.type === "channels") return [DEMO_TEXT_CHANNEL_ID, DEMO_LOG_CHANNEL_ID];
+  if (field.type === "role") return DEMO_MEMBER_ROLE_ID;
+  if (field.type === "roles") return [DEMO_TEAM_ROLE_ID];
+  if (field.type === "toggle") return true;
+  if (field.type === "select") return field.options?.[0]?.value ?? null;
+  if (field.type === "number") {
+    const value = numberValues[field.key] ?? Math.max(field.min ?? 0, 1);
+    return Math.min(field.max ?? value, Math.max(field.min ?? value, value));
+  }
+  return textValues[field.key] ?? field.placeholder ?? "Beispielwert";
+}
+
+function demoFeatureSettings(module: FeatureModule): FeatureSettings {
+  const definition = FEATURE_DEFINITIONS.find((item) => item.module === module);
+  const fields = Object.fromEntries((definition?.fields ?? []).map((field) => [field.key, demoFeatureValue(field)]));
+  return {
+    enabled: true,
+    fields,
+    syncStatus: "synced",
+    syncError: null,
+    updatedAt: "2026-07-24T10:30:00.000Z",
+    configuredFields: Object.keys(fields).length,
+    lastAppliedAt: "2026-07-24T10:30:00.000Z"
+  };
+}
+
+function cloneDemoData<T>(value: T): T {
+  return JSON.parse(JSON.stringify(value)) as T;
+}
+
+function demoApiResponse(path: string, init: RequestInit): { handled: boolean; data: unknown } {
+  const cleanPath = path.split("?")[0];
+  const isDemoRoute = window.location.pathname.startsWith(`/dashboard/${DEMO_GUILD_ID}/`);
+  if (cleanPath === "/api/me" && isDemoRoute) {
+    return { handled: true, data: { user: DEMO_USER } };
+  }
+
+  const guildPrefix = `/api/guilds/${DEMO_GUILD_ID}`;
+  if (!cleanPath.startsWith(guildPrefix)) {
+    return { handled: false, data: null };
+  }
+
+  const method = (init.method ?? "GET").toUpperCase();
+  const suffix = cleanPath.slice(guildPrefix.length);
+  if (method !== "GET") {
+    return { handled: true, data: { ok: true, demo: true } };
+  }
+
+  if (suffix === "") return { handled: true, data: { guild: DEMO_GUILD, settings: DEMO_SETTINGS } };
+  if (suffix === "/channels") return { handled: true, data: { channels: DEMO_CHANNELS } };
+  if (suffix === "/roles") return { handled: true, data: { roles: DEMO_ROLES } };
+  if (suffix === "/commands") return { handled: true, data: { commands: DEMO_COMMANDS } };
+  if (suffix === "/custom-commands") {
+    return {
+      handled: true,
+      data: {
+        customCommands: [
+          {
+            id: "demo-status",
+            name: "status",
+            description: "Zeigt den aktuellen Serverstatus.",
+            responseContent: "Alle Systeme laufen stabil.",
+            enabled: true,
+            ephemeral: false,
+            cooldownSeconds: 5,
+            syncStatus: "synced",
+            syncError: null
+          }
+        ]
+      }
+    };
+  }
+  if (suffix === "/audit-log") {
+    return {
+      handled: true,
+      data: {
+        auditLog: [
+          { id: "demo-audit-1", action: "welcome.updated", target: "#willkommen", actorDiscordUserId: DEMO_USER_ID, createdAt: "2026-07-24T10:30:00.000Z" },
+          { id: "demo-audit-2", action: "autorole.updated", target: "Mitglied", actorDiscordUserId: DEMO_USER_ID, createdAt: "2026-07-24T09:45:00.000Z" }
+        ]
+      }
+    };
+  }
+  if (suffix === "/autorole") {
+    return {
+      handled: true,
+      data: {
+        autorole: {
+          ...DEFAULT_AUTOROLE_DRAFT,
+          enabled: true,
+          humanRoleIds: [DEMO_MEMBER_ROLE_ID],
+          botRoleIds: [],
+          delaySeconds: 5,
+          syncStatus: "synced"
+        }
+      }
+    };
+  }
+  if (suffix === "/level-system") {
+    return {
+      handled: true,
+      data: {
+        levelSystem: {
+          ...DEFAULT_LEVEL_DRAFT,
+          enabled: true,
+          announcementChannelId: DEMO_TEXT_CHANNEL_ID,
+          roleRewards: [{ level: 10, roleId: "200000000000000003" }],
+          syncStatus: "synced"
+        }
+      }
+    };
+  }
+  if (suffix === "/counting") {
+    return {
+      handled: true,
+      data: {
+        counting: {
+          ...DEFAULT_COUNTING_DRAFT,
+          enabled: true,
+          channelId: DEMO_TEXT_CHANNEL_ID,
+          currentNumber: 248,
+          recordNumber: 391,
+          totalCounts: 3810,
+          totalFailures: 27,
+          lastUserId: "300000000000000002",
+          syncStatus: "synced"
+        }
+      }
+    };
+  }
+  if (suffix === "/temp-voice") {
+    return {
+      handled: true,
+      data: {
+        tempVoice: {
+          ...DEFAULT_TEMP_VOICE_DRAFT,
+          enabled: true,
+          creatorChannelIds: [DEMO_VOICE_CHANNEL_ID],
+          categoryId: DEMO_CATEGORY_ID,
+          interfaceChannelId: DEMO_TEXT_CHANNEL_ID,
+          panelChannelId: DEMO_TEXT_CHANNEL_ID,
+          defaultUserLimit: 5,
+          syncStatus: "synced"
+        }
+      }
+    };
+  }
+  if (suffix === "/logging") return { handled: true, data: { logging: demoLoggingSettings() } };
+  if (suffix === "/welcome") {
+    return {
+      handled: true,
+      data: {
+        welcome: {
+          ...DEFAULT_WELCOME_DRAFT,
+          enabled: true,
+          channelId: DEMO_TEXT_CHANNEL_ID,
+          autoRoleId: DEMO_MEMBER_ROLE_ID,
+          embed: { ...DEFAULT_WELCOME_DRAFT.embed, imageMode: "none" }
+        }
+      }
+    };
+  }
+  if (suffix === "/security") {
+    return {
+      handled: true,
+      data: {
+        security: {
+          ...DEFAULT_SECURITY_DRAFT,
+          antispamEnabled: true,
+          antilinkEnabled: true,
+          antiinviteEnabled: true,
+          accountAgeMinDays: 7,
+          quarantineRoleId: DEMO_MEMBER_ROLE_ID,
+          auditLogWatchEnabled: true,
+          healthScore: 88,
+          activeProtections: 5,
+          botCanManageRoles: true,
+          botCanViewAuditLog: true,
+          syncStatus: "synced"
+        }
+      }
+    };
+  }
+  if (suffix === "/raidmode") {
+    return {
+      handled: true,
+      data: {
+        raidmode: {
+          ...DEFAULT_RAID_DRAFT,
+          profile: "light",
+          memberCount: 128,
+          textChannelCount: 18,
+          syncStatus: "synced"
+        }
+      }
+    };
+  }
+  if (suffix === "/tickets") {
+    return {
+      handled: true,
+      data: {
+        tickets: {
+          ...DEFAULT_TICKET_DRAFT,
+          enabled: true,
+          ticketCategoryId: DEMO_CATEGORY_ID,
+          panelChannelId: DEMO_TEXT_CHANNEL_ID,
+          logChannelId: DEMO_LOG_CHANNEL_ID,
+          supportRoleIds: [DEMO_TEAM_ROLE_ID],
+          totalTickets: 184,
+          openTickets: 6,
+          closedTickets: 171,
+          deletedTickets: 7,
+          averageRating: 4.8,
+          syncStatus: "synced"
+        }
+      }
+    };
+  }
+  if (suffix === "/backups") {
+    return {
+      handled: true,
+      data: {
+        backups: {
+          ...DEFAULT_BACKUP_DRAFT,
+          items: [
+            { scope: "roles", savedAt: "2026-07-24T08:00:00.000Z", itemCount: 24 },
+            { scope: "channels", savedAt: "2026-07-24T08:00:00.000Z", itemCount: 31 },
+            { scope: "full", savedAt: "2026-07-24T08:00:00.000Z", itemCount: 55 }
+          ],
+          lastSavedAt: "2026-07-24T08:00:00.000Z",
+          guildRoleCount: 24,
+          guildChannelCount: 31,
+          syncStatus: "synced"
+        }
+      }
+    };
+  }
+
+  const featureMatch = suffix.match(/^\/features\/([^/]+)$/);
+  if (featureMatch && FEATURE_DEFINITIONS.some((item) => item.module === featureMatch[1])) {
+    return { handled: true, data: { feature: demoFeatureSettings(featureMatch[1] as FeatureModule) } };
+  }
+
+  return { handled: true, data: { ok: true, demo: true } };
+}
+
 async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
+  const demoResponse = demoApiResponse(path, init);
+  if (demoResponse.handled) {
+    await new Promise((resolve) => window.setTimeout(resolve, 180));
+    return cloneDemoData(demoResponse.data) as T;
+  }
+
   const headers = new Headers(init.headers);
   if (!(init.body instanceof FormData) && init.body && !headers.has("Content-Type")) {
     headers.set("Content-Type", "application/json");
@@ -1463,24 +1863,31 @@ function LoginPage() {
             <h1>Modmail Manager Webpanel</h1>
             <p>Server verwalten, Slash-Befehle steuern und das Bot-Profil pro Guild sauber synchronisieren.</p>
           </div>
-          {checkingSession ? (
-            <button className="primary-action full hero-action" disabled>
-              <Loader2 className="spin" size={18} />
-              Anmeldung prüfen
-            </button>
-          ) : sessionUser ? (
-            <button className="primary-action full hero-action" onClick={() => navigate(returnTo)}>
-              <LayoutDashboard size={18} />
-              Zu deinem Dashboard
+          <div className="auth-action-stack">
+            {checkingSession ? (
+              <button className="primary-action full hero-action" disabled>
+                <Loader2 className="spin" size={18} />
+                Anmeldung prüfen
+              </button>
+            ) : sessionUser ? (
+              <button className="primary-action full hero-action" onClick={() => navigate(returnTo)}>
+                <LayoutDashboard size={18} />
+                Zu deinem Dashboard
+                <ArrowRight size={18} />
+              </button>
+            ) : (
+              <a className="primary-action full hero-action" href={`/api/auth/discord?returnTo=${encodeURIComponent(returnTo)}`}>
+                <KeyRound size={18} />
+                Mit Discord anmelden
+                <ArrowRight size={18} />
+              </a>
+            )}
+            <button className="secondary-action full hero-action demo-entry-action" type="button" onClick={() => navigate(DEMO_GUILD_PATH)}>
+              <Eye size={18} />
+              Guild-Panel als Demo ansehen
               <ArrowRight size={18} />
             </button>
-          ) : (
-            <a className="primary-action full hero-action" href={`/api/auth/discord?returnTo=${encodeURIComponent(returnTo)}`}>
-              <KeyRound size={18} />
-              Mit Discord anmelden
-              <ArrowRight size={18} />
-            </a>
-          )}
+          </div>
           <div className="auth-status-strip" aria-label="Systemstatus">
             <span>
               <BadgeCheck size={15} />
@@ -1531,7 +1938,7 @@ function AuthShowcase() {
   );
 }
 
-function TopNav({ user }: { user?: User | null }) {
+function TopNav({ user, demoMode = false }: { user?: User | null; demoMode?: boolean }) {
   const path = usePath();
   const cleanPath = path.split("?")[0];
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -1564,7 +1971,7 @@ function TopNav({ user }: { user?: User | null }) {
   }, [user]);
 
   const navItems: NavItem[] = [
-    { key: "panel", label: "Panel", path: "/panel", icon: <Home size={17} />, active: cleanPath === "/panel" || cleanPath === "/home" || cleanPath.startsWith("/dashboard/") },
+    { key: "panel", label: demoMode ? "Demo" : "Panel", path: demoMode ? DEMO_GUILD_PATH : "/panel", icon: demoMode ? <Eye size={17} /> : <Home size={17} />, active: cleanPath === "/panel" || cleanPath === "/home" || cleanPath.startsWith("/dashboard/") },
     ...(navUser?.ownerAdmin ? [{ key: "admin", label: "Admin", path: "/admin", icon: <Gauge size={17} />, active: cleanPath === "/admin" || cleanPath.startsWith("/admin/") }] : []),
     { key: "docs", label: "Dokumentation", path: "/dokumentation", icon: <ClipboardList size={17} />, active: cleanPath === "/dokumentation" },
     { key: "privacy", label: "Datenschutz", path: "/datenschutz", icon: <ShieldCheck size={17} />, active: cleanPath === "/datenschutz" },
@@ -1594,7 +2001,7 @@ function TopNav({ user }: { user?: User | null }) {
   return (
     <>
       <header className="top-nav">
-        <button className="brand-link" onClick={() => navigate("/panel")}>
+        <button className="brand-link" onClick={() => navigate(demoMode ? "/" : "/panel")}>
           <Bot size={22} />
           <span>Modmail Manager</span>
         </button>
@@ -1603,11 +2010,16 @@ function TopNav({ user }: { user?: User | null }) {
           {mobileOpen ? <X size={18} /> : <Menu size={18} />}
         </button>
         <span className="nav-status">
-          <Activity size={14} />
-          Live
+          {demoMode ? <Eye size={14} /> : <Activity size={14} />}
+          {demoMode ? "Vorschau" : "Live"}
         </span>
         <ThemeToggle compact />
-        {navUser && (
+        {demoMode ? (
+          <div className="user-chip demo-user-chip">
+            <Eye size={18} />
+            <span>Demo-Modus</span>
+          </div>
+        ) : navUser && (
           <div className="user-chip">
             {navUser.avatar ? <img src={navUser.avatar} alt="" /> : <UserRound size={18} />}
             <span>{navUser.displayName || navUser.username}</span>
@@ -4469,6 +4881,7 @@ function GuildIcon({ guild }: { guild: { name: string; icon: string | null } }) 
 function Dashboard({ path }: { path: string }) {
   const parts = path.split("/").filter(Boolean);
   const guildId = parts[1];
+  const demoMode = guildId === DEMO_GUILD_ID;
   const section = parts[2] ?? "overview";
   const plannedSection = getPlannedSection(section);
   const featureDefinition = getFeatureDefinition(section);
@@ -4497,12 +4910,12 @@ function Dashboard({ path }: { path: string }) {
 
   return (
     <div className="app-shell">
-      <TopNav user={me.data?.user} />
+      <TopNav user={me.data?.user} demoMode={demoMode} />
       <div className="dashboard-layout">
         <aside className="sidebar">
           <div className="sidebar-head">
             <div className="sidebar-product"><SlidersHorizontal size={17} /><span>Serververwaltung</span></div>
-            <GuildSwitcher currentGuild={detail.data?.guild ?? null} currentGuildId={guildId} />
+            <GuildSwitcher currentGuild={detail.data?.guild ?? null} currentGuildId={guildId} demoMode={demoMode} />
           </div>
           <nav className="sidebar-navigation" aria-label="Guild-Kategorien">
             <SidebarGroup label="Start" tone="blue">
@@ -4548,11 +4961,14 @@ function Dashboard({ path }: { path: string }) {
               <SideLink icon={<AlertTriangle size={17} />} label="Gefahrenbereich" section="danger-zone" current={section} guildId={guildId} badge="geplant" />
             </SidebarGroup>
           </nav>
-          <button className="sidebar-account" onClick={() => navigate("/panel")} title="Zur Serverauswahl">
+          <button className="sidebar-account" onClick={() => navigate(demoMode ? "/" : "/panel")} title={demoMode ? "Demo beenden" : "Zur Serverauswahl"}>
             <span className="sidebar-account-avatar">
               {me.data?.user.avatar ? <img src={me.data.user.avatar} alt="" /> : <UserRound size={17} />}
             </span>
-            <span><strong>{me.data?.user.displayName || me.data?.user.username || "Account"}</strong><small>Server wechseln</small></span>
+            <span>
+              <strong>{me.data?.user.displayName || me.data?.user.username || "Account"}</strong>
+              <small>{demoMode ? "Demo beenden" : "Server wechseln"}</small>
+            </span>
             <ChevronRight size={16} />
           </button>
         </aside>
@@ -4576,23 +4992,35 @@ function Dashboard({ path }: { path: string }) {
                   <RefreshButton loading={detail.loading} onClick={detail.reload} />
                 </div>
               </div>
-              {section === "overview" && <OverviewPage guildId={guildId} initial={detail.data} />}
-              {section === "profile" && <ProfilePage guildId={guildId} settings={detail.data.settings} onSaved={detail.reload} />}
-              {section === "commands" && <CommandsPage guildId={guildId} />}
-              {section === "custom-commands" && <CustomCommandsPage guildId={guildId} />}
-              {section === "logging" && <LoggingPage guildId={guildId} />}
-              {section === "audit-log" && <AuditLogPage guildId={guildId} />}
-              {section === "welcome" && <WelcomePage guildId={guildId} />}
-              {section === "temp-voice" && <TempVoicePage guildId={guildId} />}
-              {section === "counting" && <CountingPage guildId={guildId} />}
-              {section === "level-system" && <LevelSystemPage guildId={guildId} />}
-              {section === "autorole" && <AutorolePage guildId={guildId} />}
-              {section === "security" && <SecurityPage guildId={guildId} />}
-              {section === "raidmode" && <RaidmodePage guildId={guildId} />}
-              {section === "tickets" && <TicketSystemPage guildId={guildId} />}
-              {section === "backups" && <BackupsPage guildId={guildId} />}
-              {featureDefinition && <FeatureModulePage guildId={guildId} definition={featureDefinition} />}
-              {plannedSection && !featureDefinition && section !== "welcome" && section !== "logging" && section !== "temp-voice" && section !== "counting" && section !== "level-system" && section !== "autorole" && <PlannedPage section={plannedSection} />}
+              {demoMode && (
+                <section className="demo-mode-banner" role="status">
+                  <span className="demo-mode-banner-icon"><Eye size={20} /></span>
+                  <div>
+                    <strong>Interaktive Guild-Demo</strong>
+                    <p>Alle Kategorien enthalten Beispieldaten. Änderungen und Bot-Aktionen sind in dieser Vorschau gesperrt.</p>
+                  </div>
+                  <span className="pill neutral"><ShieldCheck size={13} /> Schreibgeschützt</span>
+                </section>
+              )}
+              <fieldset className={`dashboard-page-frame ${demoMode ? "demo-readonly" : ""}`} disabled={demoMode}>
+                {section === "overview" && <OverviewPage guildId={guildId} initial={detail.data} />}
+                {section === "profile" && <ProfilePage guildId={guildId} settings={detail.data.settings} onSaved={detail.reload} />}
+                {section === "commands" && <CommandsPage guildId={guildId} />}
+                {section === "custom-commands" && <CustomCommandsPage guildId={guildId} />}
+                {section === "logging" && <LoggingPage guildId={guildId} />}
+                {section === "audit-log" && <AuditLogPage guildId={guildId} />}
+                {section === "welcome" && <WelcomePage guildId={guildId} />}
+                {section === "temp-voice" && <TempVoicePage guildId={guildId} />}
+                {section === "counting" && <CountingPage guildId={guildId} />}
+                {section === "level-system" && <LevelSystemPage guildId={guildId} />}
+                {section === "autorole" && <AutorolePage guildId={guildId} />}
+                {section === "security" && <SecurityPage guildId={guildId} />}
+                {section === "raidmode" && <RaidmodePage guildId={guildId} />}
+                {section === "tickets" && <TicketSystemPage guildId={guildId} />}
+                {section === "backups" && <BackupsPage guildId={guildId} />}
+                {featureDefinition && <FeatureModulePage guildId={guildId} definition={featureDefinition} />}
+                {plannedSection && !featureDefinition && section !== "welcome" && section !== "logging" && section !== "temp-voice" && section !== "counting" && section !== "level-system" && section !== "autorole" && <PlannedPage section={plannedSection} />}
+              </fieldset>
             </>
           )}
         </main>
@@ -4601,15 +5029,23 @@ function Dashboard({ path }: { path: string }) {
   );
 }
 
-function GuildSwitcher({ currentGuild, currentGuildId }: { currentGuild: GuildDetail | null; currentGuildId: string }) {
+function GuildSwitcher({
+  currentGuild,
+  currentGuildId,
+  demoMode = false
+}: {
+  currentGuild: GuildDetail | null;
+  currentGuildId: string;
+  demoMode?: boolean;
+}) {
   return (
     <div className="guild-switcher">
       <span>Aktiver Server</span>
-      <button className="guild-switcher-button" onClick={() => navigate("/panel")}>
+      <button className="guild-switcher-button" onClick={() => navigate(demoMode ? "/" : "/panel")}>
         <GuildIcon guild={{ name: currentGuild?.name ?? "Guild", icon: currentGuild?.icon ?? null }} />
         <span className="guild-switcher-copy">
           <strong>{currentGuild?.name ?? currentGuildId}</strong>
-          <small>{currentGuild ? currentGuildId : "Serverdaten werden geladen"}</small>
+          <small>{demoMode ? "Schreibgeschützte Vorschau" : currentGuild ? currentGuildId : "Serverdaten werden geladen"}</small>
         </span>
         <ChevronRight size={16} />
       </button>
