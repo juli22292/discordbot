@@ -46,6 +46,9 @@ import {
   countingResetSchema,
   countingSettingsSchema,
   customCommandSchema,
+  featureModuleNames,
+  featureModuleSchema,
+  featureSettingsSchema,
   guildModuleSettingsSchema,
   inviteCreateSchema,
   levelSettingsSchema,
@@ -67,7 +70,8 @@ import {
   ticketPanelSchema,
   ticketSettingsSchema,
   validationError,
-  welcomeSettingsSchema
+  welcomeSettingsSchema,
+  type FeatureModule
 } from "./server/validators";
 
 type AppBindings = { Bindings: Env };
@@ -286,7 +290,7 @@ interface AutoroleSettingsResponse {
   syncError: string | null;
 }
 
-type GuildControlModule = "security" | "raidmode" | "tickets" | "backups";
+type GuildControlModule = "security" | "raidmode" | "tickets" | "backups" | FeatureModule;
 
 interface GuildControlModuleRow {
   guild_id: string;
@@ -1429,18 +1433,182 @@ const DEFAULT_TICKET_CONFIGURATION = {
   blacklistUserIds: []
 };
 
+const DEFAULT_FEATURE_CONFIGURATIONS: Record<FeatureModule, Record<string, unknown>> = {
+  "giveaways": {
+    enabled: false,
+    fields: {
+      defaultChannelId: "",
+      managerRoleIds: [],
+      defaultWinnerCount: 1,
+      defaultDurationMinutes: 60,
+      mentionRoleId: "",
+      defaultDescription: "Klicke auf den Button, um teilzunehmen."
+    }
+  },
+  "reaction-roles": {
+    enabled: false,
+    fields: {
+      panelChannelId: "",
+      roleIds: [],
+      panelTitle: "Rollen auswählen",
+      panelDescription: "Wähle unten deine Rollen aus.",
+      allowMultiple: true
+    }
+  },
+  "automations": {
+    enabled: false,
+    fields: {
+      channelId: "",
+      stickyMessage: "",
+      recurringMessage: "",
+      intervalMinutes: 60,
+      scheduledMessage: "",
+      scheduledAt: ""
+    }
+  },
+  "moderation-center": {
+    enabled: false,
+    fields: {
+      logChannelId: "",
+      moderatorRoleIds: [],
+      warnExpireDays: 30,
+      defaultTimeoutMinutes: 10,
+      autoPunishmentThreshold: 3,
+      autoPunishmentAction: "timeout"
+    }
+  },
+  "suggestions": {
+    enabled: false,
+    fields: {
+      channelId: "",
+      reviewChannelId: "",
+      reviewerRoleIds: [],
+      anonymous: false,
+      autoThread: true
+    }
+  },
+  "onboarding": {
+    enabled: false,
+    fields: {
+      verificationChannelId: "",
+      verificationRoleId: "",
+      verificationTitle: "Verifizierung",
+      verificationText: "Klicke auf den Button, um dich zu verifizieren.",
+      accountAgeMinDays: 0
+    }
+  },
+  "auto-nickname": {
+    enabled: false,
+    fields: {
+      template: "{display_name}",
+      includeBots: false
+    }
+  },
+  "applications": {
+    enabled: false,
+    fields: {
+      applicationChannelId: "",
+      reviewChannelId: "",
+      reportChannelId: "",
+      appealChannelId: "",
+      reviewerRoleIds: [],
+      title: "Bewerbung",
+      questions: "Warum möchtest du dich bewerben?\nWelche Erfahrungen bringst du mit?"
+    }
+  },
+  "starboard": {
+    enabled: false,
+    fields: {
+      channelId: "",
+      ignoredChannelIds: [],
+      emoji: "⭐",
+      threshold: 3,
+      allowSelfStar: false
+    }
+  },
+  "server-stats": {
+    enabled: false,
+    fields: {
+      categoryId: "",
+      memberChannelName: "Mitglieder: {count}",
+      botChannelName: "Bots: {count}",
+      onlineChannelName: "Online: {count}",
+      updateMinutes: 10
+    }
+  },
+  "birthdays": {
+    enabled: false,
+    fields: {
+      channelId: "",
+      roleId: "",
+      message: "Alles Gute zum Geburtstag, {member}!",
+      timezone: "Europe/Berlin"
+    }
+  },
+  "minecraft": {
+    enabled: false,
+    fields: {
+      serverAddress: "",
+      statusChannelId: "",
+      whitelistRoleIds: [],
+      showPlayers: true
+    }
+  },
+  "badges": {
+    enabled: false,
+    fields: {
+      announceChannelId: "",
+      managerRoleIds: [],
+      allowSelfProfile: true
+    }
+  },
+  "community-tools": {
+    enabled: false,
+    fields: {
+      confessionChannelId: "",
+      quoteChannelId: "",
+      pollChannelId: "",
+      anonymousConfessions: true
+    }
+  },
+  "youtube-music": {
+    enabled: false,
+    fields: {
+      requestChannelId: "",
+      djRoleIds: [],
+      defaultVolume: 50,
+      autoplay: false,
+      maxQueueLength: 100
+    }
+  },
+  "games": {
+    enabled: false,
+    fields: {
+      allowedChannelIds: [],
+      cooldownSeconds: 5,
+      xpRewards: true,
+      dailyReward: 100
+    }
+  }
+};
+
 const DEFAULT_CONTROL_CONFIGURATIONS: Record<GuildControlModule, Record<string, unknown>> = {
   security: DEFAULT_SECURITY_CONFIGURATION,
   raidmode: DEFAULT_RAID_CONFIGURATION,
   tickets: DEFAULT_TICKET_CONFIGURATION,
-  backups: {}
+  backups: {},
+  ...DEFAULT_FEATURE_CONFIGURATIONS
 };
 
 const DEFAULT_CONTROL_RUNTIME: Record<GuildControlModule, Record<string, unknown>> = {
   security: { healthScore: 0, activeProtections: 0, totalProtections: 8 },
   raidmode: { raidmodeEnabled: false, panicEnabled: false },
   tickets: { totalTickets: 0, openTickets: 0, closedTickets: 0, deletedTickets: 0, averageRating: null, panelMessageId: null },
-  backups: { items: [], lastSavedAt: null }
+  backups: { items: [], lastSavedAt: null },
+  ...featureModuleNames.reduce<Record<FeatureModule, Record<string, unknown>>>((runtime, module) => {
+    runtime[module] = { enabled: false, configuredFields: 0, lastAppliedAt: null };
+    return runtime;
+  }, {} as Record<FeatureModule, Record<string, unknown>>)
 };
 
 let guildControlStorageReady: Promise<void> | null = null;
@@ -3308,6 +3476,75 @@ app.post("/api/guilds/:guildId/backups/actions", async (c) => {
   return json(c, { ok: true, eventId });
 });
 
+app.get("/api/guilds/:guildId/features/:module", async (c) => {
+  const access = await requireGuildManagementAccess(c, c.req.param("guildId"));
+  const module = featureModuleSchema.parse(c.req.param("module"));
+  return json(c, {
+    feature: await ensureGuildControlModule(c.env, access.guild.id, module)
+  });
+});
+
+app.put("/api/guilds/:guildId/features/:module", async (c) => {
+  const access = await requireGuildManagementAccess(c, c.req.param("guildId"));
+  const module = featureModuleSchema.parse(c.req.param("module"));
+  const data = featureSettingsSchema.parse(await readJsonBody(c));
+  const oldValue = await ensureGuildControlModule(c.env, access.guild.id, module);
+  const channelIds = new Set<string>();
+  const roleIds = new Set<string>();
+
+  for (const [key, value] of Object.entries(data.fields)) {
+    const values = Array.isArray(value) ? value : [value];
+    for (const rawValue of values) {
+      const id = typeof rawValue === "string" ? rawValue.trim() : "";
+      if (!id) continue;
+      if (/channelids?$/i.test(key) || /categoryid$/i.test(key)) channelIds.add(id);
+      if (/roleids?$/i.test(key)) roleIds.add(id);
+    }
+  }
+
+  for (const id of [...channelIds, ...roleIds]) {
+    if (!snowflakeSchema.safeParse(id).success) {
+      throw new HttpError(400, "feature_resource_invalid", `Die Discord-ID ${id} ist ungültig.`);
+    }
+  }
+
+  if (channelIds.size) {
+    const rows = await all<{ id: string }>(
+      c.env.DB.prepare(
+        `SELECT discord_channel_id AS id FROM guild_channels
+          WHERE guild_id = ? AND discord_channel_id IN (${Array.from(channelIds).map(() => "?").join(", ")})`
+      ).bind(access.guild.id, ...channelIds)
+    );
+    const found = new Set(rows.map((row) => row.id));
+    if (Array.from(channelIds).some((id) => !found.has(id))) {
+      throw new HttpError(400, "feature_channel_missing", "Mindestens ein ausgewählter Kanal gehört nicht zu dieser Guild.");
+    }
+  }
+
+  if (roleIds.size) {
+    const rows = await all<{ id: string; managed: number }>(
+      c.env.DB.prepare(
+        `SELECT discord_role_id AS id, managed FROM guild_roles
+          WHERE guild_id = ? AND discord_role_id IN (${Array.from(roleIds).map(() => "?").join(", ")})`
+      ).bind(access.guild.id, ...roleIds)
+    );
+    const found = new Set(rows.map((row) => row.id));
+    if (Array.from(roleIds).some((id) => !found.has(id))) {
+      throw new HttpError(400, "feature_role_missing", "Mindestens eine ausgewählte Rolle gehört nicht zu dieser Guild.");
+    }
+  }
+
+  await setGuildControlPending(c.env, access.guild.id, module, data);
+  const eventId = await enqueueSyncEvent(c.env, access.guild, "feature.settings.upsert", {
+    discordGuildId: access.guild.discordGuildId,
+    module,
+    settings: data
+  });
+  const saved = { ...oldValue, ...data, syncStatus: "pending", syncError: null };
+  await audit(c.env, access.guild.id, access.session.user.discordUserId, `feature.${module}.update`, module, oldValue, saved);
+  return json(c, { ok: true, eventId, feature: saved });
+});
+
 app.get("/api/guilds/:guildId/roles", async (c) => {
   const access = await requireGuildManagementAccess(c, c.req.param("guildId"));
   const roles = await all<Record<string, unknown>>(
@@ -4583,6 +4820,7 @@ app.post("/api/internal/bot/snapshot", async (c) => {
       raidmode?: Record<string, unknown>;
       tickets?: Record<string, unknown>;
       backups?: Record<string, unknown>;
+      features?: Partial<Record<FeatureModule, Record<string, unknown>>>;
     }>;
     commands?: Array<{ name: string; description?: string; type?: string }>;
   };
@@ -4736,7 +4974,7 @@ app.post("/api/internal/bot/snapshot", async (c) => {
       timestamp
     });
 
-    for (const module of ["security", "raidmode", "tickets", "backups"] as GuildControlModule[]) {
+    for (const module of ["security", "raidmode", "tickets", "backups"] as const) {
       const section = recordValue(guild[module]);
       controlRows.push({
         guildId: internalGuildId,
@@ -4745,6 +4983,19 @@ app.post("/api/internal/bot/snapshot", async (c) => {
         runtimeState: recordValue(section.runtime),
         timestamp
       });
+    }
+
+    if (guild.features) {
+      for (const module of featureModuleNames) {
+        const section = recordValue(guild.features[module]);
+        controlRows.push({
+          guildId: internalGuildId,
+          module,
+          configuration: recordValue(section.configuration),
+          runtimeState: recordValue(section.runtime),
+          timestamp
+        });
+      }
     }
   }
 
@@ -5228,7 +5479,12 @@ app.post("/api/internal/bot/sync-events/:eventId/complete", async (c) => {
     "ticket.panel.send": "tickets",
     "backup.action": "backups"
   };
-  const controlModule = controlModuleByAction[row.action];
+  const featureModule = row.action === "feature.settings.upsert"
+    ? featureModuleSchema.safeParse(eventPayload.module)
+    : null;
+  const controlModule = featureModule?.success
+    ? featureModule.data
+    : controlModuleByAction[row.action];
   if (controlModule) {
     await ensureGuildControlStorage(c.env);
     const currentRow = await first<GuildControlModuleRow>(
@@ -5361,7 +5617,13 @@ app.post("/api/internal/bot/sync-events/:eventId/fail", async (c) => {
     "ticket.panel.send": "tickets",
     "backup.action": "backups"
   };
-  const failedControlModule = failedControlModuleByAction[row.action];
+  const failedPayload = parseJson<Record<string, unknown>>(row.payload, {});
+  const failedFeatureModule = row.action === "feature.settings.upsert"
+    ? featureModuleSchema.safeParse(failedPayload.module)
+    : null;
+  const failedControlModule = failedFeatureModule?.success
+    ? failedFeatureModule.data
+    : failedControlModuleByAction[row.action];
   if (!retry && failedControlModule) {
     await ensureGuildControlStorage(c.env);
     await c.env.DB.prepare(

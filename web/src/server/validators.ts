@@ -24,6 +24,41 @@ export const logCategories = [
 
 export const logCategorySchema = z.enum(logCategories);
 
+export const featureModuleNames = [
+  "giveaways",
+  "reaction-roles",
+  "automations",
+  "moderation-center",
+  "suggestions",
+  "onboarding",
+  "auto-nickname",
+  "applications",
+  "starboard",
+  "server-stats",
+  "birthdays",
+  "minecraft",
+  "badges",
+  "community-tools",
+  "youtube-music",
+  "games"
+] as const;
+
+export const featureModuleSchema = z.enum(featureModuleNames);
+export type FeatureModule = z.infer<typeof featureModuleSchema>;
+
+const featureFieldValueSchema = z.union([
+  z.string().max(4000),
+  z.number().finite().min(-1_000_000).max(1_000_000),
+  z.boolean(),
+  z.null(),
+  z.array(z.string().max(200)).max(100)
+]);
+
+export const featureSettingsSchema = z.object({
+  enabled: z.boolean().default(false),
+  fields: z.record(z.string().min(1).max(80), featureFieldValueSchema).default({})
+});
+
 const hexColorSchema = z
   .string()
   .trim()

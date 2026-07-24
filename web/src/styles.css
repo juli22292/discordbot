@@ -7537,6 +7537,211 @@ textarea {
   color: var(--muted);
 }
 
+.feature-hero {
+  display: grid;
+  grid-template-columns: 46px minmax(0, 1fr) auto;
+  align-items: center;
+}
+
+.feature-hero-icon {
+  width: 46px;
+  height: 46px;
+  display: grid;
+  place-items: center;
+  border: 1px solid rgba(104, 168, 255, 0.22);
+  border-radius: 8px;
+  color: var(--blue);
+  background: rgba(104, 168, 255, 0.09);
+}
+
+.feature-master-toggle {
+  display: inline-flex;
+  align-items: center;
+  min-height: 38px;
+  padding: 0 13px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--muted-strong);
+  background: var(--control-bg);
+  cursor: pointer;
+}
+
+.feature-master-toggle:has(input:checked) {
+  border-color: rgba(47, 191, 122, 0.38);
+  color: var(--green);
+  background: rgba(47, 191, 122, 0.09);
+}
+
+.feature-master-toggle input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+}
+
+.feature-inactive {
+  display: grid;
+  grid-template-columns: 42px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 14px;
+  min-height: 116px;
+  padding: 18px;
+  border: 1px dashed var(--border);
+  border-radius: 8px;
+  background: var(--panel-bg-soft);
+}
+
+.feature-inactive > span {
+  width: 42px;
+  height: 42px;
+  display: grid;
+  place-items: center;
+  border-radius: 8px;
+  color: var(--muted-strong);
+  background: var(--control-bg);
+}
+
+.feature-inactive h3,
+.feature-inactive p {
+  margin: 0;
+}
+
+.feature-inactive p {
+  margin-top: 4px;
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+.feature-field-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.feature-field {
+  min-width: 0;
+  display: grid;
+  align-content: start;
+  gap: 10px;
+  padding: 15px;
+  border: 1px solid var(--border-soft);
+  border-radius: 8px;
+  color: var(--muted-strong);
+  background: var(--panel-bg-soft);
+}
+
+.feature-field.wide {
+  grid-column: 1 / -1;
+}
+
+.feature-field > span,
+.feature-field > header,
+.feature-toggle-field > div {
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+}
+
+.feature-field strong {
+  color: var(--text);
+}
+
+.feature-field small {
+  color: var(--muted);
+  line-height: 1.4;
+}
+
+.feature-field textarea {
+  min-height: 104px;
+  resize: vertical;
+}
+
+.feature-toggle-field {
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+}
+
+.feature-number-input {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  overflow: hidden;
+  min-height: 42px;
+  border: 1px solid var(--border-soft);
+  border-radius: 8px;
+  background: var(--field-bg);
+}
+
+.feature-number-input input {
+  min-width: 0;
+  border: 0;
+  background: transparent;
+}
+
+.feature-number-input > small {
+  padding: 0 11px;
+  white-space: nowrap;
+}
+
+.feature-resource-list {
+  display: grid;
+  gap: 12px;
+  max-height: 320px;
+  overflow: auto;
+  padding-right: 3px;
+}
+
+.feature-resource-list section {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 7px;
+}
+
+.feature-resource-list section > span {
+  grid-column: 1 / -1;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.feature-resource-list button {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr) 18px;
+  align-items: center;
+  gap: 8px;
+  min-height: 50px;
+  padding: 8px 10px;
+  border: 1px solid var(--border-soft);
+  border-radius: 8px;
+  color: var(--text);
+  background: var(--field-bg);
+  text-align: left;
+}
+
+.feature-resource-list button > span {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.feature-resource-list button strong,
+.feature-resource-list button small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.feature-resource-list button.selected {
+  border-color: rgba(47, 191, 122, 0.34);
+  color: var(--green);
+  background: rgba(47, 191, 122, 0.07);
+}
+
+.feature-control .control-savebar span {
+  color: var(--muted);
+  font-size: 13px;
+}
+
 @media (max-width: 1180px) {
   .control-columns,
   .ticket-columns {
@@ -7570,11 +7775,24 @@ textarea {
     justify-content: flex-start;
   }
 
+  .feature-hero {
+    grid-template-columns: 46px minmax(0, 1fr);
+  }
+
+  .feature-hero .control-hero-actions {
+    grid-column: 1 / -1;
+  }
+
   .raid-profile-grid,
   .control-toggle-settings,
   .control-field-grid,
-  .control-field-grid.two {
+  .control-field-grid.two,
+  .feature-field-grid {
     grid-template-columns: 1fr;
+  }
+
+  .feature-field.wide {
+    grid-column: auto;
   }
 
   .panic-panel {
@@ -7601,8 +7819,22 @@ textarea {
 
 @media (max-width: 560px) {
   .control-stat-grid,
-  .control-role-list {
+  .control-role-list,
+  .feature-resource-list section {
     grid-template-columns: 1fr;
+  }
+
+  .feature-resource-list section > span {
+    grid-column: 1;
+  }
+
+  .feature-inactive {
+    grid-template-columns: 42px minmax(0, 1fr);
+  }
+
+  .feature-inactive .primary-action {
+    grid-column: 1 / -1;
+    width: 100%;
   }
 
   .control-savebar .form-actions,

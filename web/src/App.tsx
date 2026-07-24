@@ -155,6 +155,60 @@ type RoleOption = {
   botCanManage: boolean;
 };
 
+type FeatureModule =
+  | "giveaways"
+  | "reaction-roles"
+  | "automations"
+  | "moderation-center"
+  | "suggestions"
+  | "onboarding"
+  | "auto-nickname"
+  | "applications"
+  | "starboard"
+  | "server-stats"
+  | "birthdays"
+  | "minecraft"
+  | "badges"
+  | "community-tools"
+  | "youtube-music"
+  | "games";
+
+type FeatureValue = string | number | boolean | string[] | null;
+type FeatureFieldType = "text" | "textarea" | "number" | "toggle" | "select" | "channel" | "category" | "channels" | "role" | "roles";
+
+type FeatureFieldDefinition = {
+  key: string;
+  label: string;
+  description: string;
+  type: FeatureFieldType;
+  placeholder?: string;
+  min?: number;
+  max?: number;
+  suffix?: string;
+  options?: Array<{ value: string; label: string }>;
+  wide?: boolean;
+};
+
+type FeatureDefinition = {
+  module: FeatureModule;
+  section: string;
+  label: string;
+  kicker: string;
+  description: string;
+  icon: React.ReactNode;
+  fields: FeatureFieldDefinition[];
+};
+
+type FeatureSettings = {
+  enabled: boolean;
+  fields: Record<string, FeatureValue>;
+  syncStatus: string;
+  syncError: string | null;
+  updatedAt: string | null;
+  configuredFields?: number;
+  lastAppliedAt?: string | null;
+};
+
 type WelcomeSettings = {
   enabled: boolean;
   channelId: string | null;
@@ -790,6 +844,260 @@ function plannedIcon(section: string, size = 17) {
 function getPlannedSection(section: string) {
   const normalizedSection = section === "spotify-music" ? "youtube-music" : section;
   return plannedSections.find((item) => item.section === normalizedSection);
+}
+
+const FEATURE_DEFINITIONS: FeatureDefinition[] = [
+  {
+    module: "giveaways",
+    section: "giveaways",
+    label: "Giveaways",
+    kicker: "Community Rewards",
+    description: "Standardwerte, Teamrechte und Zielkanal für neue Verlosungen zentral festlegen.",
+    icon: <Trophy size={18} />,
+    fields: [
+      { key: "defaultChannelId", label: "Standardkanal", description: "Neue Giveaways verwenden diesen Kanal als vorausgewähltes Ziel.", type: "channel" },
+      { key: "managerRoleIds", label: "Giveaway-Team", description: "Diese Rollen dürfen Verlosungen verwalten.", type: "roles", wide: true },
+      { key: "defaultWinnerCount", label: "Gewinner", description: "Voreinstellung für die Anzahl der Gewinner.", type: "number", min: 1, max: 20, suffix: "Personen" },
+      { key: "defaultDurationMinutes", label: "Laufzeit", description: "Standarddauer für neue Verlosungen.", type: "number", min: 1, max: 525600, suffix: "Minuten" },
+      { key: "mentionRoleId", label: "Erwähnungsrolle", description: "Optionale Rolle, die beim Start erwähnt wird.", type: "role" },
+      { key: "defaultDescription", label: "Standardbeschreibung", description: "Wird als Ausgangstext für neue Giveaways verwendet.", type: "textarea", placeholder: "Klicke auf Teilnehmen, um mitzumachen.", wide: true }
+    ]
+  },
+  {
+    module: "reaction-roles",
+    section: "reaction-roles",
+    label: "Reaction Roles",
+    kicker: "Self Roles",
+    description: "Rollenpanel, auswählbare Rollen und Mehrfachauswahl für Mitglieder vorbereiten.",
+    icon: <BadgeCheck size={18} />,
+    fields: [
+      { key: "panelChannelId", label: "Panelkanal", description: "Kanal, in dem das Rollenpanel veröffentlicht wird.", type: "channel" },
+      { key: "allowMultiple", label: "Mehrfachauswahl", description: "Mitglieder dürfen mehrere Rollen aus dem Panel wählen.", type: "toggle" },
+      { key: "panelTitle", label: "Paneltitel", description: "Überschrift des Rollenpanels.", type: "text", placeholder: "Wähle deine Rollen" },
+      { key: "panelDescription", label: "Panelbeschreibung", description: "Kurze Erklärung oberhalb der Rollenauswahl.", type: "textarea", wide: true },
+      { key: "roleIds", label: "Auswählbare Rollen", description: "Rollen, die im Self-Role-Panel angeboten werden.", type: "roles", wide: true }
+    ]
+  },
+  {
+    module: "automations",
+    section: "automations",
+    label: "Automationen",
+    kicker: "Scheduled Operations",
+    description: "Sticky-, wiederkehrende und geplante Nachrichten an einem Ort konfigurieren.",
+    icon: <Clock3 size={18} />,
+    fields: [
+      { key: "channelId", label: "Zielkanal", description: "Gemeinsames Ziel für die konfigurierten Nachrichten.", type: "channel" },
+      { key: "intervalMinutes", label: "Intervall", description: "Abstand zwischen wiederkehrenden Nachrichten.", type: "number", min: 1, max: 525600, suffix: "Minuten" },
+      { key: "stickyMessage", label: "Sticky-Nachricht", description: "Bleibt durch erneutes Senden am Ende des Kanals sichtbar.", type: "textarea", wide: true },
+      { key: "recurringMessage", label: "Wiederkehrende Nachricht", description: "Text für die regelmäßige Veröffentlichung.", type: "textarea", wide: true },
+      { key: "scheduledMessage", label: "Geplante Nachricht", description: "Einmalige Nachricht für den angegebenen Zeitpunkt.", type: "textarea", wide: true },
+      { key: "scheduledAt", label: "Zeitpunkt", description: "ISO-Zeitpunkt, zum Beispiel 2026-08-01T18:00:00+02:00.", type: "text", placeholder: "2026-08-01T18:00:00+02:00" }
+    ]
+  },
+  {
+    module: "moderation-center",
+    section: "moderation-center",
+    label: "Moderation",
+    kicker: "Moderation Center",
+    description: "Teamrollen, Mod-Logs, Warnablauf und automatische Eskalationen verwalten.",
+    icon: <Shield size={18} />,
+    fields: [
+      { key: "logChannelId", label: "Moderations-Log", description: "Warns, Timeouts, Kicks und Bans werden hier protokolliert.", type: "channel" },
+      { key: "moderatorRoleIds", label: "Moderatorrollen", description: "Rollen mit Zugriff auf die Moderationswerkzeuge.", type: "roles", wide: true },
+      { key: "warnExpireDays", label: "Warnablauf", description: "Nach dieser Zeit laufen Verwarnungen automatisch ab; 0 deaktiviert den Ablauf.", type: "number", min: 0, max: 3650, suffix: "Tage" },
+      { key: "defaultTimeoutMinutes", label: "Standard-Timeout", description: "Vorausgewählte Timeout-Dauer.", type: "number", min: 1, max: 40320, suffix: "Minuten" },
+      { key: "autoPunishmentThreshold", label: "Eskalationsgrenze", description: "Anzahl aktiver Warns bis zur automatischen Strafe; 0 deaktiviert sie.", type: "number", min: 0, max: 100, suffix: "Warns" },
+      {
+        key: "autoPunishmentAction",
+        label: "Automatische Strafe",
+        description: "Aktion beim Erreichen der Eskalationsgrenze.",
+        type: "select",
+        options: [
+          { value: "timeout", label: "Timeout" },
+          { value: "kick", label: "Kicken" },
+          { value: "ban", label: "Bannen" },
+          { value: "log", label: "Nur protokollieren" }
+        ]
+      }
+    ]
+  },
+  {
+    module: "suggestions",
+    section: "suggestions",
+    label: "Vorschläge",
+    kicker: "Community Feedback",
+    description: "Vorschlagskanal, internes Review und anonyme Einreichungen steuern.",
+    icon: <MessageSquare size={18} />,
+    fields: [
+      { key: "channelId", label: "Vorschlagskanal", description: "Öffentlicher Kanal für neue Vorschläge.", type: "channel" },
+      { key: "reviewChannelId", label: "Review-Kanal", description: "Optionales internes Ziel für neue Vorschläge.", type: "channel" },
+      { key: "reviewerRoleIds", label: "Reviewerrollen", description: "Diese Rollen können Vorschläge annehmen oder ablehnen.", type: "roles", wide: true },
+      { key: "anonymous", label: "Anonyme Vorschläge", description: "Der Verfasser wird in der öffentlichen Nachricht nicht angezeigt.", type: "toggle" },
+      { key: "autoThread", label: "Diskussionsthread", description: "Für jeden Vorschlag automatisch einen Thread erstellen.", type: "toggle" }
+    ]
+  },
+  {
+    module: "onboarding",
+    section: "onboarding",
+    label: "Onboarding",
+    kicker: "Member Journey",
+    description: "Verifizierung, Mindestalter des Accounts und Einstiegstext sauber bündeln.",
+    icon: <UserPlus size={18} />,
+    fields: [
+      { key: "verificationChannelId", label: "Verifizierungskanal", description: "Kanal für das Verifizierungs-Panel.", type: "channel" },
+      { key: "verificationRoleId", label: "Verifizierte Rolle", description: "Wird nach erfolgreicher Verifizierung vergeben.", type: "role" },
+      { key: "verificationTitle", label: "Titel", description: "Überschrift des Verifizierungs-Panels.", type: "text", placeholder: "Verifizierung" },
+      { key: "accountAgeMinDays", label: "Mindestalter", description: "Minimales Discord-Accountalter; 0 deaktiviert die Prüfung.", type: "number", min: 0, max: 3650, suffix: "Tage" },
+      { key: "verificationText", label: "Paneltext", description: "Erklärt Mitgliedern den Verifizierungsschritt.", type: "textarea", wide: true }
+    ]
+  },
+  {
+    module: "auto-nickname",
+    section: "auto-nickname",
+    label: "Auto-Nickname",
+    kicker: "Identity Automation",
+    description: "Neue Mitglieder automatisch nach einer einheitlichen Vorlage benennen.",
+    icon: <AtSign size={18} />,
+    fields: [
+      { key: "template", label: "Nickname-Vorlage", description: "Verwende zum Beispiel {username}, {display_name} oder {id}.", type: "text", placeholder: "[Member] {username}", wide: true },
+      { key: "includeBots", label: "Bots einschließen", description: "Die Vorlage wird auch auf neu beitretende Bots angewendet.", type: "toggle" }
+    ]
+  },
+  {
+    module: "applications",
+    section: "applications",
+    label: "Bewerbungen",
+    kicker: "Application Center",
+    description: "Bewerbungen, Reports und Entbannungsanträge mit Teamrechten organisieren.",
+    icon: <ClipboardList size={18} />,
+    fields: [
+      { key: "applicationChannelId", label: "Bewerbungskanal", description: "Öffentlicher Einstieg für Bewerbungen.", type: "channel" },
+      { key: "reviewChannelId", label: "Review-Kanal", description: "Interner Kanal für eingegangene Bewerbungen.", type: "channel" },
+      { key: "reportChannelId", label: "Report-Kanal", description: "Interner Kanal für gemeldete Fälle.", type: "channel" },
+      { key: "appealChannelId", label: "Entbannungsanträge", description: "Interner Kanal für Appeals.", type: "channel" },
+      { key: "reviewerRoleIds", label: "Bearbeiterrollen", description: "Teamrollen, die Einreichungen verwalten dürfen.", type: "roles", wide: true },
+      { key: "title", label: "Formulartitel", description: "Titel für das Bewerbungsformular.", type: "text", placeholder: "Team-Bewerbung" },
+      { key: "questions", label: "Fragen", description: "Eine Frage pro Zeile. Die Reihenfolge wird übernommen.", type: "textarea", placeholder: "Wie alt bist du?\nWarum möchtest du ins Team?", wide: true }
+    ]
+  },
+  {
+    module: "starboard",
+    section: "starboard",
+    label: "Starboard",
+    kicker: "Community Highlights",
+    description: "Beliebte Nachrichten automatisch in einem Highlight-Kanal sammeln.",
+    icon: <Star size={18} />,
+    fields: [
+      { key: "channelId", label: "Starboard-Kanal", description: "Ziel für Nachrichten, die den Schwellenwert erreichen.", type: "channel" },
+      { key: "emoji", label: "Reaktions-Emoji", description: "Unicode- oder Server-Emoji, das gezählt wird.", type: "text", placeholder: "⭐" },
+      { key: "threshold", label: "Schwellenwert", description: "Benötigte Reaktionen für einen Starboard-Eintrag.", type: "number", min: 1, max: 100, suffix: "Reaktionen" },
+      { key: "allowSelfStar", label: "Eigene Reaktion", description: "Nachrichtenautoren dürfen ihre eigene Nachricht werten.", type: "toggle" },
+      { key: "ignoredChannelIds", label: "Ignorierte Kanäle", description: "Nachrichten aus diesen Kanälen erscheinen nie im Starboard.", type: "channels", wide: true }
+    ]
+  },
+  {
+    module: "server-stats",
+    section: "server-stats",
+    label: "Server-Statistiken",
+    kicker: "Live Counters",
+    description: "Automatische Voice-Counter für Mitglieder, Bots und Online-Status konfigurieren.",
+    icon: <BarChart3 size={18} />,
+    fields: [
+      { key: "categoryId", label: "Counter-Kategorie", description: "Kategorie, in der die Statistikkanäle liegen.", type: "category" },
+      { key: "updateMinutes", label: "Aktualisierung", description: "Zeitabstand für regelmäßige Counter-Updates.", type: "number", min: 1, max: 1440, suffix: "Minuten" },
+      { key: "memberChannelName", label: "Mitglieder-Counter", description: "Nutze {count} als Platzhalter.", type: "text", placeholder: "Mitglieder: {count}" },
+      { key: "botChannelName", label: "Bot-Counter", description: "Nutze {count} als Platzhalter.", type: "text", placeholder: "Bots: {count}" },
+      { key: "onlineChannelName", label: "Online-Counter", description: "Nutze {count} als Platzhalter.", type: "text", placeholder: "Online: {count}" }
+    ]
+  },
+  {
+    module: "birthdays",
+    section: "birthdays",
+    label: "Geburtstage",
+    kicker: "Member Moments",
+    description: "Geburtstagsnachrichten, Zeitzone und optionale Tagesrolle verwalten.",
+    icon: <Sparkles size={18} />,
+    fields: [
+      { key: "channelId", label: "Geburtstagskanal", description: "Hier veröffentlicht der Bot Glückwünsche.", type: "channel" },
+      { key: "roleId", label: "Geburtstagsrolle", description: "Optionale Rolle für das Geburtstagskind.", type: "role" },
+      { key: "timezone", label: "Zeitzone", description: "IANA-Zeitzone für den Tageswechsel.", type: "text", placeholder: "Europe/Berlin" },
+      { key: "message", label: "Glückwunschtext", description: "Verwende {user} als Erwähnung.", type: "textarea", placeholder: "Alles Gute zum Geburtstag, {user}!", wide: true }
+    ]
+  },
+  {
+    module: "minecraft",
+    section: "minecraft",
+    label: "Minecraft",
+    kicker: "Game Integration",
+    description: "Standardserver, Statusziel und Rollen für Whitelist-Aktionen festlegen.",
+    icon: <Server size={18} />,
+    fields: [
+      { key: "serverAddress", label: "Serveradresse", description: "Standardadresse für Status- und Spielerabfragen.", type: "text", placeholder: "play.example.net" },
+      { key: "statusChannelId", label: "Statuskanal", description: "Ziel für automatische Statusmeldungen.", type: "channel" },
+      { key: "whitelistRoleIds", label: "Whitelist-Team", description: "Rollen, die Whitelist-Einträge verwalten dürfen.", type: "roles", wide: true },
+      { key: "showPlayers", label: "Spielerliste anzeigen", description: "Online-Spieler dürfen in Statusmeldungen erscheinen.", type: "toggle" }
+    ]
+  },
+  {
+    module: "badges",
+    section: "badges",
+    label: "Badges",
+    kicker: "Member Recognition",
+    description: "Badge-Verwaltung, Ankündigungen und öffentliche Profile konfigurieren.",
+    icon: <Crown size={18} />,
+    fields: [
+      { key: "announceChannelId", label: "Ankündigungskanal", description: "Neue Badge-Vergaben können hier gemeldet werden.", type: "channel" },
+      { key: "managerRoleIds", label: "Badge-Team", description: "Rollen, die Badges erstellen und vergeben dürfen.", type: "roles", wide: true },
+      { key: "allowSelfProfile", label: "Öffentliche Profile", description: "Mitglieder dürfen ihr eigenes Badge-Profil anzeigen.", type: "toggle" }
+    ]
+  },
+  {
+    module: "community-tools",
+    section: "community-tools",
+    label: "Community Tools",
+    kicker: "Engagement Suite",
+    description: "Beichten, Zitate und Umfragen auf feste Kanäle begrenzen.",
+    icon: <UsersRound size={18} />,
+    fields: [
+      { key: "confessionChannelId", label: "Beichten", description: "Zielkanal für anonyme Beichten.", type: "channel" },
+      { key: "quoteChannelId", label: "Zitate", description: "Zielkanal für gespeicherte Community-Zitate.", type: "channel" },
+      { key: "pollChannelId", label: "Umfragen", description: "Bevorzugter Kanal für Community-Umfragen.", type: "channel" },
+      { key: "anonymousConfessions", label: "Anonym veröffentlichen", description: "Der Absender einer Beichte bleibt öffentlich verborgen.", type: "toggle" }
+    ]
+  },
+  {
+    module: "youtube-music",
+    section: "youtube-music",
+    label: "YouTube Music",
+    kicker: "Music Operations",
+    description: "Request-Kanal, DJ-Rollen, Lautstärke und Queue-Regeln für Lavalink festlegen.",
+    icon: <Youtube size={18} />,
+    fields: [
+      { key: "requestChannelId", label: "Musikkanal", description: "Bevorzugter Kanal für Musikwünsche und Playermeldungen.", type: "channel" },
+      { key: "djRoleIds", label: "DJ-Rollen", description: "Rollen mit erweiterten Playerrechten.", type: "roles", wide: true },
+      { key: "defaultVolume", label: "Standardlautstärke", description: "Startlautstärke für neue Player.", type: "number", min: 1, max: 100, suffix: "%" },
+      { key: "maxQueueLength", label: "Queue-Limit", description: "Maximale Anzahl gespeicherter Titel pro Server.", type: "number", min: 1, max: 1000, suffix: "Titel" },
+      { key: "autoplay", label: "Autoplay", description: "Nach dem Ende der Queue automatisch passende Titel suchen.", type: "toggle" }
+    ]
+  },
+  {
+    module: "games",
+    section: "games",
+    label: "Games",
+    kicker: "Fun & Rewards",
+    description: "Spielkanäle, Cooldown und Belohnungen für Fun-Commands steuern.",
+    icon: <Gamepad2 size={18} />,
+    fields: [
+      { key: "allowedChannelIds", label: "Erlaubte Spielkanäle", description: "Ist die Liste leer, funktionieren Spiele in allen Textkanälen.", type: "channels", wide: true },
+      { key: "cooldownSeconds", label: "Spiel-Cooldown", description: "Mindestabstand zwischen Spielaktionen eines Nutzers.", type: "number", min: 0, max: 86400, suffix: "Sekunden" },
+      { key: "xpRewards", label: "XP-Belohnungen", description: "Erfolgreiche Spielrunden können Level-XP vergeben.", type: "toggle" },
+      { key: "dailyReward", label: "Tägliche Belohnung", description: "Voreinstellung für die tägliche Economy-Belohnung.", type: "number", min: 0, max: 1000000, suffix: "Coins" }
+    ]
+  }
+];
+
+function getFeatureDefinition(section: string) {
+  return FEATURE_DEFINITIONS.find((definition) => definition.section === section);
 }
 
 function navigate(path: string) {
@@ -4163,6 +4471,7 @@ function Dashboard({ path }: { path: string }) {
   const guildId = parts[1];
   const section = parts[2] ?? "overview";
   const plannedSection = getPlannedSection(section);
+  const featureDefinition = getFeatureDefinition(section);
   const me = useApi<{ user: User }>("/api/me", []);
   const detail = useApi<{ guild: GuildDetail; settings: SettingsRow }>(`/api/guilds/${guildId}`, [guildId]);
 
@@ -4205,9 +4514,20 @@ function Dashboard({ path }: { path: string }) {
               <SideLink icon={<UserPlus size={17} />} label="Autorole" section="autorole" current={section} guildId={guildId} />
               <SideLink icon={<BarChart3 size={17} />} label="Level-System" section="level-system" current={section} guildId={guildId} />
               <SideLink icon={<ListOrdered size={17} />} label="Counting" section="counting" current={section} guildId={guildId} />
+              <SideLink icon={<Trophy size={17} />} label="Giveaways" section="giveaways" current={section} guildId={guildId} />
+              <SideLink icon={<BadgeCheck size={17} />} label="Reaction Roles" section="reaction-roles" current={section} guildId={guildId} />
+              <SideLink icon={<MessageSquare size={17} />} label="Vorschläge" section="suggestions" current={section} guildId={guildId} />
+              <SideLink icon={<Star size={17} />} label="Starboard" section="starboard" current={section} guildId={guildId} />
+              <SideLink icon={<Sparkles size={17} />} label="Geburtstage" section="birthdays" current={section} guildId={guildId} />
+              <SideLink icon={<Crown size={17} />} label="Badges" section="badges" current={section} guildId={guildId} />
+              <SideLink icon={<UsersRound size={17} />} label="Community Tools" section="community-tools" current={section} guildId={guildId} />
               <SideLink icon={<LifeBuoy size={17} />} label="Ticket-System" section="tickets" current={section} guildId={guildId} />
             </SidebarGroup>
             <SidebarGroup label="Automatisierung" tone="violet">
+              <SideLink icon={<Clock3 size={17} />} label="Automationen" section="automations" current={section} guildId={guildId} />
+              <SideLink icon={<AtSign size={17} />} label="Auto-Nickname" section="auto-nickname" current={section} guildId={guildId} />
+              <SideLink icon={<ClipboardList size={17} />} label="Bewerbungen" section="applications" current={section} guildId={guildId} />
+              <SideLink icon={<BarChart3 size={17} />} label="Server-Statistiken" section="server-stats" current={section} guildId={guildId} />
               <SideLink icon={<Command size={17} />} label="Slash-Befehle" section="commands" current={section} guildId={guildId} />
               <SideLink icon={<ClipboardList size={17} />} label="Custom Commands" section="custom-commands" current={section} guildId={guildId} />
               <SideLink icon={<ListFilter size={17} />} label="Logging" section="logging" current={section} guildId={guildId} />
@@ -4215,12 +4535,15 @@ function Dashboard({ path }: { path: string }) {
             </SidebarGroup>
             <SidebarGroup label="Voice & Unterhaltung" tone="amber">
               <SideLink icon={<Mic2 size={17} />} label="Temp-Voice" section="temp-voice" current={section} guildId={guildId} />
-              <SideLink icon={<Youtube size={17} />} label="YouTube Music" section="youtube-music" current={section} guildId={guildId} badge="geplant" />
-              <SideLink icon={<Gamepad2 size={17} />} label="Games" section="games" current={section} guildId={guildId} badge="geplant" />
+              <SideLink icon={<Youtube size={17} />} label="YouTube Music" section="youtube-music" current={section} guildId={guildId} />
+              <SideLink icon={<Gamepad2 size={17} />} label="Games" section="games" current={section} guildId={guildId} />
+              <SideLink icon={<Server size={17} />} label="Minecraft" section="minecraft" current={section} guildId={guildId} />
             </SidebarGroup>
             <SidebarGroup label="Sicherheit" tone="red">
               <SideLink icon={<ShieldCheck size={17} />} label="Security Center" section="security" current={section} guildId={guildId} />
               <SideLink icon={<AlertTriangle size={17} />} label="Raidmode" section="raidmode" current={section} guildId={guildId} />
+              <SideLink icon={<Shield size={17} />} label="Moderation" section="moderation-center" current={section} guildId={guildId} />
+              <SideLink icon={<UserPlus size={17} />} label="Onboarding" section="onboarding" current={section} guildId={guildId} />
               <SideLink icon={<Database size={17} />} label="Backups" section="backups" current={section} guildId={guildId} />
               <SideLink icon={<AlertTriangle size={17} />} label="Gefahrenbereich" section="danger-zone" current={section} guildId={guildId} badge="geplant" />
             </SidebarGroup>
@@ -4268,7 +4591,8 @@ function Dashboard({ path }: { path: string }) {
               {section === "raidmode" && <RaidmodePage guildId={guildId} />}
               {section === "tickets" && <TicketSystemPage guildId={guildId} />}
               {section === "backups" && <BackupsPage guildId={guildId} />}
-              {plannedSection && section !== "welcome" && section !== "logging" && section !== "temp-voice" && section !== "counting" && section !== "level-system" && section !== "autorole" && <PlannedPage section={plannedSection} />}
+              {featureDefinition && <FeatureModulePage guildId={guildId} definition={featureDefinition} />}
+              {plannedSection && !featureDefinition && section !== "welcome" && section !== "logging" && section !== "temp-voice" && section !== "counting" && section !== "level-system" && section !== "autorole" && <PlannedPage section={plannedSection} />}
             </>
           )}
         </main>
@@ -6750,6 +7074,245 @@ function RoleChecklist({
         );
       })}
     </div>
+  );
+}
+
+function FeatureChannelChecklist({
+  channels,
+  selected,
+  onToggle
+}: {
+  channels: ChannelOption[];
+  selected: string[];
+  onToggle: (channelId: string) => void;
+}) {
+  if (!channels.length) return <p className="muted">Keine passenden Textkanäle verfügbar.</p>;
+
+  return (
+    <div className="feature-resource-list">
+      {groupedChannels(channels).map((group) => (
+        <section key={group.label}>
+          <span>{group.label}</span>
+          {group.items.map((channel) => {
+            const active = selected.includes(channel.id);
+            return (
+              <button type="button" className={active ? "selected" : ""} onClick={() => onToggle(channel.id)} key={channel.id}>
+                <Hash size={15} />
+                <span><strong>{channel.name}</strong><small>{channelTypeLabel(channel.type)}</small></span>
+                {active ? <Check size={15} /> : <Plus size={15} />}
+              </button>
+            );
+          })}
+        </section>
+      ))}
+    </div>
+  );
+}
+
+function FeatureModulePage({ guildId, definition }: { guildId: string; definition: FeatureDefinition }) {
+  const settings = useApi<{ feature: FeatureSettings }>(`/api/guilds/${guildId}/features/${definition.module}`, [guildId, definition.module]);
+  const channels = useApi<{ channels: ChannelOption[] }>(`/api/guilds/${guildId}/channels`, [guildId]);
+  const roles = useApi<{ roles: RoleOption[] }>(`/api/guilds/${guildId}/roles`, [guildId]);
+  const [draft, setDraft] = useState<FeatureSettings>({
+    enabled: false,
+    fields: {},
+    syncStatus: "idle",
+    syncError: null,
+    updatedAt: null
+  });
+  const [saving, setSaving] = useState(false);
+  const [status, setStatus] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (settings.data?.feature) {
+      setDraft({
+        ...settings.data.feature,
+        enabled: Boolean(settings.data.feature.enabled),
+        fields: settings.data.feature.fields && typeof settings.data.feature.fields === "object"
+          ? settings.data.feature.fields
+          : {}
+      });
+    }
+  }, [settings.data]);
+
+  const textChannels = useMemo(
+    () => (channels.data?.channels ?? []).filter((channel) => isTextGuildChannel(channel) && channel.canSend !== false),
+    [channels.data]
+  );
+  const categoryChannels = useMemo(
+    () => (channels.data?.channels ?? []).filter((channel) => ["category", "kategorie"].includes(channel.type.toLowerCase())),
+    [channels.data]
+  );
+  const availableRoles = useMemo(
+    () => (roles.data?.roles ?? []).filter((role) => !role.managed && role.name !== "@everyone"),
+    [roles.data]
+  );
+  const loading = (settings.loading && !settings.data) || (channels.loading && !channels.data) || (roles.loading && !roles.data);
+  const loadError = settings.error || channels.error || roles.error;
+
+  function setField(key: string, value: FeatureValue) {
+    setDraft((current) => ({ ...current, fields: { ...current.fields, [key]: value } }));
+  }
+
+  function toggleListField(key: string, value: string) {
+    const current = Array.isArray(draft.fields[key]) ? draft.fields[key] as string[] : [];
+    setField(key, current.includes(value) ? current.filter((entry) => entry !== value) : [...current, value]);
+  }
+
+  async function reload() {
+    setStatus(null);
+    await Promise.all([settings.reload(), channels.reload(), roles.reload()]);
+  }
+
+  async function save() {
+    setSaving(true);
+    setStatus(null);
+    try {
+      const response = await api<{ feature: FeatureSettings }>(`/api/guilds/${guildId}/features/${definition.module}`, {
+        method: "PUT",
+        body: JSON.stringify({ enabled: draft.enabled, fields: draft.fields })
+      });
+      setDraft(response.feature);
+      setStatus(`${definition.label} wurde gespeichert. Der Bot übernimmt die Konfiguration jetzt.`);
+      await settings.reload();
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : `${definition.label} konnte nicht gespeichert werden.`);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  function renderField(field: FeatureFieldDefinition) {
+    const value = draft.fields[field.key];
+    const className = `feature-field ${field.wide ? "wide" : ""}`;
+
+    if (field.type === "toggle") {
+      return (
+        <div className={`${className} feature-toggle-field`} key={field.key}>
+          <div><strong>{field.label}</strong><small>{field.description}</small></div>
+          <label className="compact-switch">
+            <input type="checkbox" checked={Boolean(value)} onChange={(event) => setField(field.key, event.target.checked)} />
+            <span />
+          </label>
+        </div>
+      );
+    }
+
+    if (field.type === "roles") {
+      return (
+        <div className={className} key={field.key}>
+          <header><strong>{field.label}</strong><small>{field.description}</small></header>
+          <RoleChecklist roles={availableRoles} selected={Array.isArray(value) ? value : []} onToggle={(roleId) => toggleListField(field.key, roleId)} />
+        </div>
+      );
+    }
+
+    if (field.type === "channels") {
+      return (
+        <div className={className} key={field.key}>
+          <header><strong>{field.label}</strong><small>{field.description}</small></header>
+          <FeatureChannelChecklist channels={textChannels} selected={Array.isArray(value) ? value : []} onToggle={(channelId) => toggleListField(field.key, channelId)} />
+        </div>
+      );
+    }
+
+    return (
+      <label className={className} key={field.key}>
+        <span><strong>{field.label}</strong><small>{field.description}</small></span>
+        {field.type === "textarea" && (
+          <textarea value={typeof value === "string" ? value : ""} placeholder={field.placeholder} onChange={(event) => setField(field.key, event.target.value)} />
+        )}
+        {field.type === "text" && (
+          <input type="text" value={typeof value === "string" ? value : ""} placeholder={field.placeholder} onChange={(event) => setField(field.key, event.target.value)} />
+        )}
+        {field.type === "number" && (
+          <div className="feature-number-input">
+            <input
+              type="number"
+              min={field.min}
+              max={field.max}
+              value={typeof value === "number" ? value : field.min ?? 0}
+              onChange={(event) => setField(field.key, Math.max(field.min ?? -1000000, Math.min(field.max ?? 1000000, Number(event.target.value) || 0)))}
+            />
+            {field.suffix && <small>{field.suffix}</small>}
+          </div>
+        )}
+        {field.type === "select" && (
+          <select value={typeof value === "string" ? value : ""} onChange={(event) => setField(field.key, event.target.value)}>
+            {(field.options ?? []).map((option) => <option value={option.value} key={option.value}>{option.label}</option>)}
+          </select>
+        )}
+        {field.type === "channel" && (
+          <select value={typeof value === "string" ? value : ""} onChange={(event) => setField(field.key, event.target.value)}>
+            <ChannelSelectOptions channels={textChannels} noneLabel="Kein Kanal" />
+          </select>
+        )}
+        {field.type === "category" && (
+          <select value={typeof value === "string" ? value : ""} onChange={(event) => setField(field.key, event.target.value)}>
+            <option value="">Keine Kategorie</option>
+            {categoryChannels.map((channel) => <option value={channel.id} key={channel.id}>{channel.name}</option>)}
+          </select>
+        )}
+        {field.type === "role" && (
+          <select value={typeof value === "string" ? value : ""} onChange={(event) => setField(field.key, event.target.value)}>
+            <option value="">Keine Rolle</option>
+            {availableRoles.map((role) => <option value={role.id} key={role.id}>{role.name}</option>)}
+          </select>
+        )}
+      </label>
+    );
+  }
+
+  return (
+    <section className="control-page feature-control">
+      <header className="control-hero feature-hero">
+        <div className="feature-hero-icon">{definition.icon}</div>
+        <div>
+          <p className="eyebrow">{definition.kicker}</p>
+          <h2>{definition.label}</h2>
+          <p>{definition.description}</p>
+        </div>
+        <div className="control-hero-actions">
+          <SyncPill status={draft.syncStatus} />
+          <label className="feature-master-toggle">
+            <input type="checkbox" checked={draft.enabled} onChange={(event) => setDraft({ ...draft, enabled: event.target.checked })} />
+            <span>{draft.enabled ? "Aktiv" : "Inaktiv"}</span>
+          </label>
+          <RefreshButton loading={settings.loading || channels.loading || roles.loading} onClick={() => void reload()} />
+        </div>
+      </header>
+
+      {loading && <LoadingBlock text={`${definition.label} wird geladen`} />}
+      {loadError && <Notice tone="danger" text={loadError} />}
+      {draft.syncError && <Notice tone="danger" text={draft.syncError} />}
+      <ActionStatus status={status} />
+
+      {!loading && !draft.enabled && (
+        <section className="feature-inactive">
+          <span>{definition.icon}</span>
+          <div><h3>{definition.label} ist inaktiv</h3><p>Aktiviere das Modul oben. Danach werden alle Einstellungen eingeblendet und können gemeinsam gespeichert werden.</p></div>
+          <button className="primary-action inline" type="button" onClick={() => setDraft({ ...draft, enabled: true })}><Power size={16} /> Aktivieren</button>
+        </section>
+      )}
+
+      {!loading && draft.enabled && (
+        <>
+          <div className="feature-field-grid">
+            {definition.fields.map(renderField)}
+          </div>
+          <footer className="control-savebar">
+            <div>
+              <strong>{definition.label} speichern</strong>
+              <span>Kanal- und Rollenwerte werden vor der Übernahme serverseitig geprüft.</span>
+            </div>
+            <button className="primary-action inline" type="button" onClick={() => void save()} disabled={saving}>
+              {saving ? <Loader2 className="spin" size={16} /> : <Save size={16} />}
+              {saving ? "Wird gespeichert" : "Änderungen speichern"}
+            </button>
+          </footer>
+        </>
+      )}
+    </section>
   );
 }
 

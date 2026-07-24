@@ -11,6 +11,8 @@ import {
   countingResetSchema,
   countingSettingsSchema,
   customCommandSchema,
+  featureModuleSchema,
+  featureSettingsSchema,
   levelSettingsSchema,
   musicSourceSchema,
   nicknameSchema,
@@ -222,5 +224,27 @@ describe("guild-isolated validation", () => {
       selectCategories: [{ label: "Support", description: "Allgemeine Hilfe", emoji: "x".repeat(101), value: "support" }]
     })).toThrow(/maximal 100/);
     expect(() => ticketSettingsSchema.parse({ enabled: true })).toThrow(/Discord-Kategorie/);
+  });
+
+  it("validates configurable guild feature modules", () => {
+    expect(featureModuleSchema.parse("starboard")).toBe("starboard");
+    expect(featureModuleSchema.parse("youtube-music")).toBe("youtube-music");
+    expect(() => featureModuleSchema.parse("unknown-module")).toThrow();
+
+    const settings = featureSettingsSchema.parse({
+      enabled: true,
+      fields: {
+        channelId: "123456789012345678",
+        threshold: 3,
+        allowSelfStar: false,
+        roleIds: ["223456789012345678"]
+      }
+    });
+    expect(settings.enabled).toBe(true);
+    expect(settings.fields.threshold).toBe(3);
+    expect(() => featureSettingsSchema.parse({
+      enabled: true,
+      fields: { description: "x".repeat(4001) }
+    })).toThrow();
   });
 });
