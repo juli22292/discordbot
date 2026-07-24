@@ -1750,7 +1750,8 @@ p {
 
 .side-link:hover:not(.disabled) {
   color: var(--text);
-  background: var(--sidebar-accent-bg, var(--hover-bg));
+  background:
+    linear-gradient(90deg, rgba(104, 168, 255, 0.14), rgba(104, 168, 255, 0.07));
 }
 
 .side-link.active {
