@@ -1,3 +1,4 @@
+import "@fontsource-variable/inter";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import type { AssistantTarget } from "./server/assistant";

@@ -39,7 +39,9 @@
     linear-gradient(180deg, rgba(21, 25, 34, 0.92), rgba(11, 14, 19, 0.82)),
     rgba(11, 14, 19, 0.86);
   font-family:
-    Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    "Inter Variable", Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
 }
 
 :root[data-theme="light"] {
@@ -128,6 +130,17 @@ h2,
 h3,
 p {
   overflow-wrap: anywhere;
+}
+
+h1,
+h2,
+h3 {
+  font-weight: 600;
+}
+
+strong,
+b {
+  font-weight: 600;
 }
 
 .app-shell {
@@ -254,7 +267,7 @@ p {
   margin: 0 0 10px;
   color: var(--blue);
   font-size: 13px;
-  font-weight: 780;
+  font-weight: 600;
 }
 
 .auth-copy h1,
@@ -312,7 +325,7 @@ p {
   color: var(--muted-strong);
   background: var(--control-bg);
   font-size: 12px;
-  font-weight: 760;
+  font-weight: 600;
   white-space: nowrap;
 }
 
@@ -490,7 +503,7 @@ p {
   padding: 0;
   color: var(--text);
   background: transparent;
-  font-weight: 800;
+  font-weight: 600;
 }
 
 .brand-link svg {
@@ -885,7 +898,7 @@ p {
   border-radius: 8px;
   color: var(--green);
   background: rgba(47, 191, 122, 0.07);
-  font-weight: 850;
+  font-weight: 700;
 }
 
 .docs-status-list strong {
@@ -976,13 +989,13 @@ p {
 .docs-step > span {
   color: var(--green);
   font-size: 18px;
-  font-weight: 900;
+  font-weight: 700;
 }
 
 .docs-step small {
   color: var(--blue);
   font-size: 12px;
-  font-weight: 800;
+  font-weight: 600;
   text-transform: uppercase;
 }
 
@@ -1141,7 +1154,7 @@ p {
   border-radius: 999px;
   color: var(--text);
   font-size: 12px;
-  font-weight: 800;
+  font-weight: 600;
   text-align: center;
   background: rgba(255, 255, 255, 0.075);
 }
@@ -1295,7 +1308,7 @@ p {
   background:
     linear-gradient(135deg, rgba(255, 255, 255, 0.16), transparent 42%),
     linear-gradient(135deg, #ff7474, #d53f3f);
-  font-weight: 800;
+  font-weight: 600;
   box-shadow: 0 0 26px rgba(255, 116, 116, 0.18), inset 0 1px 0 rgba(255, 255, 255, 0.24);
 }
 
@@ -1329,7 +1342,7 @@ p {
   gap: 6px;
   color: var(--amber);
   font-size: 12px;
-  font-weight: 800;
+  font-weight: 600;
 }
 
 .guild-invite-diagnose small {
@@ -1392,7 +1405,7 @@ p {
   display: grid;
   place-items: center;
   color: var(--blue);
-  font-weight: 850;
+  font-weight: 700;
 }
 
 .status-light {
@@ -1485,7 +1498,7 @@ p {
   background:
     linear-gradient(135deg, rgba(255, 255, 255, 0.22), transparent 42%),
     linear-gradient(135deg, #8bc2ff, #5f8dff);
-  font-weight: 800;
+  font-weight: 600;
   box-shadow: 0 0 30px rgba(104, 168, 255, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.3);
 }
 
@@ -1526,7 +1539,7 @@ p {
 .danger-action {
   color: #230707;
   background: var(--red);
-  font-weight: 800;
+  font-weight: 600;
 }
 
 .primary-action.full {
@@ -1550,7 +1563,7 @@ p {
 .demo-entry-action {
   border-color: rgba(104, 168, 255, 0.3);
   color: var(--blue);
-  font-weight: 780;
+  font-weight: 600;
   background:
     linear-gradient(135deg, rgba(104, 168, 255, 0.12), transparent 46%),
     var(--control-bg);
@@ -1636,7 +1649,7 @@ p {
   min-height: 24px;
   color: var(--text);
   font-size: 13px;
-  font-weight: 820;
+  font-weight: 600;
 }
 
 .sidebar-product svg {
@@ -1671,7 +1684,7 @@ p {
 .guild-switcher > span {
   padding: 0 3px;
   font-size: 10px;
-  font-weight: 800;
+  font-weight: 600;
   text-transform: uppercase;
 }
 
@@ -1743,7 +1756,7 @@ p {
   color: var(--muted);
   background: transparent;
   font-size: 13px;
-  font-weight: 720;
+  font-weight: 500;
   text-align: left;
   transition: color 160ms ease, background 160ms ease, transform 160ms ease;
 }
@@ -1796,7 +1809,7 @@ p {
   color: rgba(194, 209, 230, 0.78);
   background: rgba(119, 183, 255, 0.08);
   font-size: 10px;
-  font-weight: 760;
+  font-weight: 600;
   line-height: 1;
   text-transform: uppercase;
 }
@@ -1823,7 +1836,7 @@ p {
   padding: 0 10px 4px;
   color: var(--muted);
   font-size: 10px;
-  font-weight: 820;
+  font-weight: 600;
   text-transform: uppercase;
 }
 
@@ -2206,7 +2219,7 @@ p {
   color: #fff;
   background: rgba(4, 7, 12, 0.82);
   font-size: 11px;
-  font-weight: 800;
+  font-weight: 600;
   text-align: center;
 }
 
@@ -2474,7 +2487,7 @@ textarea {
   color: var(--green);
   font-size: 12px;
   font-style: normal;
-  font-weight: 800;
+  font-weight: 600;
   background: rgba(47, 191, 122, 0.07);
 }
 
@@ -3118,7 +3131,7 @@ textarea {
 .owner-music-stat-grid dd {
   margin: 0;
   color: var(--text);
-  font-weight: 800;
+  font-weight: 600;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -3324,7 +3337,7 @@ textarea {
   display: grid;
   place-items: center;
   color: var(--blue);
-  font-weight: 800;
+  font-weight: 600;
   background: rgba(119, 183, 255, 0.1);
 }
 
@@ -3347,7 +3360,7 @@ textarea {
   color: var(--text);
   background: transparent;
   font: inherit;
-  font-weight: 800;
+  font-weight: 600;
   text-align: left;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -3472,7 +3485,7 @@ textarea {
   margin-left: auto;
   color: var(--muted-strong);
   font-size: 12px;
-  font-weight: 900;
+  font-weight: 700;
   line-height: 1;
 }
 
@@ -3510,7 +3523,7 @@ textarea {
   margin-left: auto;
   color: var(--blue);
   font-size: 12px;
-  font-weight: 800;
+  font-weight: 600;
 }
 
 .owner-event-error {
@@ -3573,7 +3586,7 @@ textarea {
   display: grid;
   place-items: center;
   color: var(--blue);
-  font-weight: 900;
+  font-weight: 700;
   font-size: 20px;
 }
 
@@ -4227,7 +4240,7 @@ textarea {
   place-items: center;
   color: var(--blue);
   background: rgba(119, 183, 255, 0.1);
-  font-weight: 900;
+  font-weight: 700;
 }
 
 .channel-symbol.category {
@@ -4252,7 +4265,7 @@ textarea {
   place-items: center;
   color: var(--blue);
   font-size: 12px;
-  font-weight: 800;
+  font-weight: 600;
 }
 
 .welcome-page {
@@ -4418,7 +4431,7 @@ textarea {
   background:
     linear-gradient(135deg, rgba(255, 255, 255, 0.2), transparent 42%),
     linear-gradient(135deg, #8bc2ff, #5f8dff);
-  font-weight: 800;
+  font-weight: 600;
 }
 
 .role-chip span {
@@ -4456,7 +4469,7 @@ textarea {
   place-items: center;
   border-radius: 50%;
   color: #06101f;
-  font-weight: 900;
+  font-weight: 700;
   background: linear-gradient(135deg, #8bc2ff, #5f8dff);
 }
 
@@ -4622,7 +4635,7 @@ textarea {
   gap: 7px;
   color: var(--muted);
   font-size: 12px;
-  font-weight: 800;
+  font-weight: 600;
   text-transform: uppercase;
 }
 
@@ -4709,7 +4722,7 @@ textarea {
 .tempvoice-preview-heading span:first-child {
   color: var(--blue);
   font-size: 12px;
-  font-weight: 800;
+  font-weight: 600;
   text-transform: uppercase;
 }
 
@@ -4920,7 +4933,7 @@ textarea {
   background: transparent;
   cursor: pointer;
   font: inherit;
-  font-weight: 750;
+  font-weight: 600;
 }
 
 .autorole-target-tabs button:hover,
@@ -4959,7 +4972,7 @@ textarea {
 .autorole-selected-list > span {
   color: var(--muted);
   font-size: 12px;
-  font-weight: 750;
+  font-weight: 600;
   text-transform: uppercase;
 }
 
@@ -5189,7 +5202,7 @@ textarea {
 .autorole-preview-heading > div > span {
   color: var(--green);
   font-size: 12px;
-  font-weight: 800;
+  font-weight: 600;
   text-transform: uppercase;
 }
 
@@ -5239,7 +5252,7 @@ textarea {
 .autorole-preview-group > span {
   color: var(--muted);
   font-size: 12px;
-  font-weight: 750;
+  font-weight: 600;
   text-transform: uppercase;
 }
 
@@ -5446,7 +5459,7 @@ textarea {
 .level-preview-heading > div > span {
   color: var(--blue);
   font-size: 12px;
-  font-weight: 800;
+  font-weight: 600;
   text-transform: uppercase;
 }
 
@@ -5664,7 +5677,7 @@ textarea {
 .counting-preview-heading > div > span {
   color: var(--blue);
   font-size: 12px;
-  font-weight: 800;
+  font-weight: 600;
   text-transform: uppercase;
 }
 
@@ -5728,7 +5741,7 @@ textarea {
   border-radius: 50%;
   color: #fff;
   background: #a85f8c;
-  font-weight: 800;
+  font-weight: 600;
 }
 
 .counting-avatar.blue {
@@ -5990,7 +6003,7 @@ textarea {
 .planned-card span {
   color: var(--blue);
   font-size: 12px;
-  font-weight: 800;
+  font-weight: 600;
   text-transform: uppercase;
 }
 
@@ -7438,7 +7451,7 @@ textarea {
 .ticket-question-list > div > span {
   color: var(--blue);
   text-align: center;
-  font-weight: 800;
+  font-weight: 600;
 }
 
 .control-user-ids {
@@ -7458,7 +7471,7 @@ textarea {
   margin-bottom: 12px;
   color: #aeb7c7;
   font-size: 12px;
-  font-weight: 800;
+  font-weight: 600;
   text-transform: uppercase;
 }
 
@@ -8315,7 +8328,7 @@ textarea {
   color: #ffffff;
   background: var(--green);
   font-size: 9px;
-  font-weight: 800;
+  font-weight: 600;
 }
 
 @keyframes ai-panel-in {
