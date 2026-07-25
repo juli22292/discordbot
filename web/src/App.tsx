@@ -2451,9 +2451,33 @@ function PublicAiCodeBlock({ language, code }: { language: string; code: string 
     if (resetTimerRef.current !== null) window.clearTimeout(resetTimerRef.current);
   }, []);
 
+  function copyCodeWithFallback(): boolean {
+    const textarea = document.createElement("textarea");
+    textarea.value = code;
+    textarea.setAttribute("readonly", "");
+    textarea.style.position = "fixed";
+    textarea.style.inset = "-9999px auto auto -9999px";
+    document.body.appendChild(textarea);
+    textarea.select();
+
+    try {
+      return document.execCommand("copy");
+    } finally {
+      textarea.remove();
+    }
+  }
+
   async function copyCode() {
     try {
-      await navigator.clipboard.writeText(code);
+      if (navigator.clipboard?.writeText) {
+        try {
+          await navigator.clipboard.writeText(code);
+        } catch {
+          if (!copyCodeWithFallback()) throw new Error("Clipboard unavailable");
+        }
+      } else if (!copyCodeWithFallback()) {
+        throw new Error("Clipboard unavailable");
+      }
       setCopied(true);
       if (resetTimerRef.current !== null) window.clearTimeout(resetTimerRef.current);
       resetTimerRef.current = window.setTimeout(() => {
