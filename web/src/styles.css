@@ -7412,7 +7412,7 @@ textarea {
 
 .ticket-builder-list article {
   display: grid;
-  grid-template-columns: 54px minmax(120px, 0.9fr) minmax(160px, 1.4fr) minmax(120px, 0.8fr) 40px;
+  grid-template-columns: 64px minmax(120px, 0.9fr) minmax(160px, 1.4fr) minmax(120px, 0.8fr) 40px;
   align-items: end;
   gap: 8px;
   padding: 10px;
@@ -7429,10 +7429,102 @@ textarea {
   font-size: 11px;
 }
 
-.ticket-emoji-input {
-  width: 54px;
-  text-align: center;
-  font-size: 18px;
+.bot-emoji {
+  flex: 0 0 auto;
+  display: inline-grid;
+  place-items: center;
+  object-fit: contain;
+  vertical-align: middle;
+}
+
+.bot-emoji.unicode {
+  line-height: 1;
+}
+
+.ticket-emoji-picker {
+  position: relative;
+  align-self: end;
+}
+
+.ticket-emoji-picker > summary {
+  width: 64px;
+  height: 42px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 5px;
+  padding: 7px 8px;
+  list-style: none;
+  color: var(--muted);
+  border: 1px solid var(--border-soft);
+  border-radius: 8px;
+  background: var(--field-bg);
+  cursor: pointer;
+}
+
+.ticket-emoji-picker > summary::-webkit-details-marker,
+.ticket-preview-dropdown > summary::-webkit-details-marker {
+  display: none;
+}
+
+.ticket-emoji-picker[open] > summary {
+  color: var(--blue);
+  border-color: rgba(104, 168, 255, 0.56);
+  box-shadow: 0 0 0 3px rgba(104, 168, 255, 0.1);
+}
+
+.ticket-emoji-picker[open] > summary svg,
+.ticket-preview-dropdown[open] > summary svg {
+  transform: rotate(180deg);
+}
+
+.ticket-emoji-menu {
+  position: absolute;
+  z-index: 20;
+  top: calc(100% + 7px);
+  left: 0;
+  width: min(286px, calc(100vw - 64px));
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--panel-bg-strong);
+  box-shadow: 0 18px 44px rgba(0, 0, 0, 0.42);
+}
+
+.ticket-emoji-menu label {
+  display: grid;
+  gap: 5px;
+  margin-bottom: 9px;
+}
+
+.ticket-emoji-menu input {
+  min-width: 0;
+  width: 100%;
+}
+
+.ticket-emoji-grid {
+  display: grid;
+  grid-template-columns: repeat(6, 36px);
+  gap: 6px;
+  max-height: 204px;
+  overflow-y: auto;
+  padding-right: 3px;
+}
+
+.ticket-emoji-grid button {
+  width: 36px;
+  height: 36px;
+  display: grid;
+  place-items: center;
+  padding: 5px;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  background: rgba(255, 255, 255, 0.045);
+}
+
+.ticket-emoji-grid button:hover {
+  border-color: rgba(104, 168, 255, 0.44);
+  background: rgba(104, 168, 255, 0.12);
 }
 
 .icon-button.danger {
@@ -7508,12 +7600,82 @@ textarea {
   padding: 3px 0;
 }
 
-.ticket-preview > select {
+.ticket-preview-category {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.ticket-preview-dropdown {
+  position: relative;
   width: 100%;
   margin-top: 10px;
+}
+
+.ticket-preview-dropdown > summary {
+  min-height: 42px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 9px 11px;
+  list-style: none;
   color: #f2f3f5;
-  border-color: #111214;
+  border: 1px solid #111214;
+  border-radius: 5px;
   background: #111214;
+  cursor: pointer;
+}
+
+.ticket-preview-dropdown > div {
+  position: absolute;
+  z-index: 12;
+  right: 0;
+  left: 0;
+  top: calc(100% + 5px);
+  display: grid;
+  max-height: 248px;
+  overflow-y: auto;
+  padding: 6px;
+  border: 1px solid #111214;
+  border-radius: 5px;
+  background: #1e1f22;
+  box-shadow: 0 16px 36px rgba(0, 0, 0, 0.44);
+}
+
+.ticket-preview-dropdown button {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: 24px minmax(0, 1fr);
+  align-items: center;
+  gap: 9px;
+  padding: 8px;
+  color: #f2f3f5;
+  text-align: left;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+}
+
+.ticket-preview-dropdown button:hover {
+  background: #35373c;
+}
+
+.ticket-preview-dropdown button > span {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.ticket-preview-dropdown button strong,
+.ticket-preview-dropdown button small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ticket-preview-dropdown button small {
+  color: #b5bac1;
 }
 
 .backup-grid {
@@ -7834,7 +7996,7 @@ textarea {
   }
 
   .ticket-builder-list article {
-    grid-template-columns: 54px minmax(0, 1fr) 40px;
+    grid-template-columns: 64px minmax(0, 1fr) 40px;
   }
 
   .ticket-builder-list article label {
@@ -7888,7 +8050,7 @@ textarea {
     grid-template-columns: minmax(0, 1fr) 40px;
   }
 
-  .ticket-builder-list article > .ticket-emoji-input,
+  .ticket-builder-list article > .ticket-emoji-picker,
   .ticket-builder-list article label {
     grid-column: 1;
   }

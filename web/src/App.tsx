@@ -13,6 +13,7 @@ import {
   BarChart3,
   Bot,
   Check,
+  ChevronDown,
   ChevronRight,
   Clock3,
   ClipboardList,
@@ -361,6 +362,118 @@ type TicketCategory = {
   emoji: string;
   value: string;
 };
+
+const BOT_CUSTOM_EMOJIS = [
+  { name: "accept", id: "1530581247900909699", label: "Bestätigen", asset: "accept.png" },
+  { name: "addaccount", id: "1530581249230503976", label: "Hinzufügen", asset: "addaccount.png" },
+  { name: "benutzerlimit", id: "1530581251042443505", label: "Benutzerlimit", asset: "benutzerlimit.png" },
+  { name: "blockieren", id: "1530581252304801883", label: "Blockieren", asset: "blockieren.png" },
+  { name: "chat", id: "1530581253957619962", label: "Chat", asset: "chat.png" },
+  { name: "deleteaccount", id: "1530581255073300642", label: "Entfernen", asset: "deleteaccount.png" },
+  { name: "einladen", id: "1530581256293716068", label: "Einladen", asset: "einladen.png" },
+  { name: "entblockieren", id: "1530581258780938270", label: "Entblockieren", asset: "entblockieren.png" },
+  { name: "frage", id: "1530581259758075945", label: "Frage", asset: "frage.png" },
+  { name: "hearth", id: "1530581261754568835", label: "Favorit", asset: "hearth.png" },
+  { name: "house", id: "1530581262891487405", label: "Startseite", asset: "house.png" },
+  { name: "info", id: "1530581263830880336", label: "Information", asset: "info.png" },
+  { name: "kreuz", id: "1530581264988635186", label: "Fehler", asset: "kreuz.png" },
+  { name: "memopadfingerprint", id: "1530581266070638592", label: "Protokoll", asset: "memopadfingerprint.png" },
+  { name: "microphonemuted", id: "1530581267521867886", label: "Stumm", asset: "microphonemuted.png" },
+  { name: "ping", id: "1530581268683817140", label: "Status", asset: "ping.png" },
+  { name: "plus", id: "1530581269619146803", label: "Plus", asset: "plus.png" },
+  { name: "securityshield", id: "1530581270654877776", label: "Sicherheit", asset: "securityshield.png" },
+  { name: "tag", id: "1530581273171726456", label: "Tag", asset: "tag.png" },
+  { name: "ticket", id: "1530581274375491794", label: "Ticket", asset: "ticket.png" },
+  { name: "transscript", id: "1530581275717664849", label: "Transkript", asset: "transscript.png" },
+  { name: "trashcan", id: "1530581276652867705", label: "Löschen", asset: "trashcan.png" },
+  { name: "bernehmen", id: "1530581278045241394", label: "Übernehmen", asset: "uebernehmen.png" },
+  { name: "bertragen", id: "1530581279920357448", label: "Übertragen", asset: "uebertragen.png" },
+  { name: "umbenennen", id: "1530581281711067217", label: "Umbenennen", asset: "umbenennen.png" },
+  { name: "user", id: "1530581282801844334", label: "Benutzer", asset: "user.png" },
+  { name: "userbanned", id: "1530581283837837382", label: "Gebannt", asset: "userbanned.png" },
+  { name: "userkickedleftserver", id: "1530581284835819540", label: "Entfernt", asset: "userkickedleftserver.png" },
+  { name: "usershield", id: "1530581286140514314", label: "Benutzerschutz", asset: "usershield.png" },
+  { name: "verbindungtrennen", id: "1530581287687950386", label: "Trennen", asset: "verbindungtrennen.png" },
+  { name: "wartezimmer", id: "1530581288799436891", label: "Wartezimmer", asset: "wartezimmer.png" },
+  { name: "web", id: "1530581289932029972", label: "Web", asset: "web.png" },
+  { name: "world", id: "1530581291005771886", label: "Welt", asset: "world.png" },
+  { name: "zeit", id: "1530581292075450508", label: "Zeit", asset: "zeit.png" }
+] as const;
+
+const CUSTOM_EMOJI_PATTERN = /^<a?:([A-Za-z0-9_]{2,32}):(\d{17,20})>$/;
+const BOT_CUSTOM_EMOJI_BY_NAME = new Map<string, (typeof BOT_CUSTOM_EMOJIS)[number]>(
+  BOT_CUSTOM_EMOJIS.map((emoji) => [emoji.name, emoji])
+);
+
+function botCustomEmojiMarkup(name: string): string {
+  const emoji = BOT_CUSTOM_EMOJI_BY_NAME.get(name);
+  return emoji ? `<:${emoji.name}:${emoji.id}>` : "🎫";
+}
+
+function normalizeTicketEmoji(value: string): string {
+  const trimmed = String(value || "").trim();
+  const customMatch = trimmed.match(CUSTOM_EMOJI_PATTERN);
+  return customMatch && BOT_CUSTOM_EMOJI_BY_NAME.has(customMatch[1])
+    ? botCustomEmojiMarkup(customMatch[1])
+    : trimmed || botCustomEmojiMarkup("ticket");
+}
+
+function BotCustomEmoji({ value, size = 22 }: { value: string; size?: number }) {
+  const normalized = normalizeTicketEmoji(value);
+  const customMatch = normalized.match(CUSTOM_EMOJI_PATTERN);
+  const emoji = customMatch ? BOT_CUSTOM_EMOJI_BY_NAME.get(customMatch[1]) : null;
+
+  if (!emoji) {
+    return <span className="bot-emoji unicode" style={{ width: size, height: size, fontSize: Math.max(14, size - 4) }} aria-hidden="true">{normalized}</span>;
+  }
+
+  return (
+    <img
+      className="bot-emoji"
+      src={`/emojis/${emoji.asset}`}
+      width={size}
+      height={size}
+      alt=""
+      aria-hidden="true"
+    />
+  );
+}
+
+function TicketEmojiPicker({ value, onChange }: { value: string; onChange: (value: string) => void }) {
+  return (
+    <details className="ticket-emoji-picker">
+      <summary title="Emoji auswählen" aria-label="Emoji auswählen">
+        <BotCustomEmoji value={value} size={24} />
+        <ChevronDown size={14} />
+      </summary>
+      <div className="ticket-emoji-menu">
+        <label>
+          Emoji-Code
+          <input
+            aria-label="Emoji-Code"
+            maxLength={100}
+            placeholder="🎫 oder <:name:id>"
+            value={value}
+            onChange={(event) => onChange(event.target.value)}
+          />
+        </label>
+        <div className="ticket-emoji-grid">
+          {BOT_CUSTOM_EMOJIS.map((emoji) => (
+            <button
+              type="button"
+              title={emoji.label}
+              aria-label={`${emoji.label} auswählen`}
+              key={emoji.name}
+              onClick={() => onChange(botCustomEmojiMarkup(emoji.name))}
+            >
+              <BotCustomEmoji value={botCustomEmojiMarkup(emoji.name)} size={24} />
+            </button>
+          ))}
+        </div>
+      </div>
+    </details>
+  );
+}
 
 type TicketSettings = {
   enabled: boolean;
@@ -5784,9 +5897,9 @@ const DEFAULT_TICKET_DRAFT: TicketSettings = {
   formTitle: "Ticket-Fragen",
   formQuestions: [],
   selectCategories: [
-    { label: "Support", description: "Allgemeine Hilfe und Fragen", emoji: "🎫", value: "support" },
-    { label: "Technik", description: "Technische Probleme melden", emoji: "🛠️", value: "technik" },
-    { label: "Sonstiges", description: "Andere Anliegen", emoji: "💬", value: "sonstiges" }
+    { label: "Support", description: "Allgemeine Hilfe und Fragen", emoji: botCustomEmojiMarkup("ticket"), value: "support" },
+    { label: "Technik", description: "Technische Probleme melden", emoji: botCustomEmojiMarkup("memopadfingerprint"), value: "technik" },
+    { label: "Sonstiges", description: "Andere Anliegen", emoji: botCustomEmojiMarkup("chat"), value: "sonstiges" }
   ],
   ratingEnabled: false,
   autoCloseHours: 0,
@@ -8315,7 +8428,9 @@ function TicketSystemPage({ guildId }: { guildId: string }) {
     return {
       enabled: value.enabled, ticketCategoryId: value.ticketCategoryId, panelChannelId: value.panelChannelId, logChannelId: value.logChannelId,
       supportRoleIds: value.supportRoleIds, deleteRoleIds: value.deleteRoleIds, notifyRoleId: value.notifyRoleId, panelTitle: value.panelTitle, panelDescription: value.panelDescription,
-      formTitle: value.formTitle, formQuestions: value.formQuestions, selectCategories: value.selectCategories, ratingEnabled: value.ratingEnabled,
+      formTitle: value.formTitle, formQuestions: value.formQuestions,
+      selectCategories: value.selectCategories.map((category) => ({ ...category, emoji: normalizeTicketEmoji(category.emoji) })),
+      ratingEnabled: value.ratingEnabled,
       autoCloseHours: value.autoCloseHours, reminderHours: value.reminderHours, slaHours: value.slaHours,
       blacklistRoleIds: value.blacklistRoleIds, blacklistUserIds: value.blacklistUserIds
     };
@@ -8377,13 +8492,13 @@ function TicketSystemPage({ guildId }: { guildId: string }) {
             <section className="panel control-panel"><div className="panel-title compact"><div><h2>Supportrollen</h2><p className="muted">Alle ausgewählten Rollen erhalten Zugriff auf neu erstellte Tickets.</p></div><span className="pill neutral">{draft.supportRoleIds.length}/10</span></div><RoleChecklist roles={manageableRoles} selected={draft.supportRoleIds} onToggle={(id) => { if (!draft.supportRoleIds.includes(id) && draft.supportRoleIds.length >= 10) return setStatus("Maximal 10 Supportrollen sind möglich."); toggleList("supportRoleIds", id); }} /></section>
             <section className="panel control-panel"><div className="panel-title compact"><div><h2>Löschberechtigte Rollen</h2><p className="muted">Nur diese Rollen können geschlossene Tickets endgültig löschen. Danach sehen das Ticket nur noch der Ersteller, Supportrollen und diese Rollen.</p></div><span className="pill neutral">{draft.deleteRoleIds.length}/10</span></div><RoleChecklist roles={manageableRoles} selected={draft.deleteRoleIds} onToggle={(id) => { if (!draft.deleteRoleIds.includes(id) && draft.deleteRoleIds.length >= 10) return setStatus("Maximal 10 Löschrollen sind möglich."); toggleList("deleteRoleIds", id); }} /></section>
             <section className="panel control-panel"><div className="panel-title compact"><div><h2>Panel-Inhalt</h2><p className="muted">So erscheint der Einstieg in Discord.</p></div>{draft.panelMessageId && <span className="pill ok">Panel vorhanden</span>}</div><div className="control-field-grid"><label>Titel<input maxLength={100} value={draft.panelTitle} onChange={(event) => setDraft({ ...draft, panelTitle: event.target.value })} /></label><label>Beschreibung<textarea rows={4} maxLength={1000} value={draft.panelDescription} onChange={(event) => setDraft({ ...draft, panelDescription: event.target.value })} /></label></div></section>
-            <section className="panel control-panel"><div className="panel-title compact"><div><h2>Ticket-Kategorien</h2><p className="muted">Bis zu 25 Auswahlpunkte für das Discord-Panel.</p></div><button type="button" className="secondary-action inline" disabled={draft.selectCategories.length >= 25} onClick={() => setDraft({ ...draft, selectCategories: [...draft.selectCategories, { label: "Neue Kategorie", description: "Beschreibe das Anliegen", emoji: "🎫", value: `kategorie-${draft.selectCategories.length + 1}` }] })}><Plus size={16} /> Kategorie</button></div><div className="ticket-builder-list">{draft.selectCategories.map((category, index) => <article key={`${category.value}-${index}`}><input aria-label="Emoji" className="ticket-emoji-input" maxLength={100} placeholder="🎫 oder <:name:id>" value={category.emoji} onChange={(event) => updateCategory(index, { emoji: event.target.value })} /><label>Name<input maxLength={80} value={category.label} onChange={(event) => updateCategory(index, { label: event.target.value })} /></label><label>Beschreibung<input maxLength={100} value={category.description} onChange={(event) => updateCategory(index, { description: event.target.value })} /></label><label>Wert<input maxLength={80} value={category.value} onChange={(event) => updateCategory(index, { value: event.target.value.toLowerCase().replace(/[^a-z0-9_-]/g, "-") })} /></label><button type="button" className="icon-button danger" title="Kategorie entfernen" onClick={() => setDraft({ ...draft, selectCategories: draft.selectCategories.filter((_, position) => position !== index) })}><Trash2 size={16} /></button></article>)}</div></section>
+            <section className="panel control-panel"><div className="panel-title compact"><div><h2>Ticket-Kategorien</h2><p className="muted">Bis zu 25 Auswahlpunkte für das Discord-Panel.</p></div><button type="button" className="secondary-action inline" disabled={draft.selectCategories.length >= 25} onClick={() => setDraft({ ...draft, selectCategories: [...draft.selectCategories, { label: "Neue Kategorie", description: "Beschreibe das Anliegen", emoji: botCustomEmojiMarkup("ticket"), value: `kategorie-${draft.selectCategories.length + 1}` }] })}><Plus size={16} /> Kategorie</button></div><div className="ticket-builder-list">{draft.selectCategories.map((category, index) => <article key={`${category.value}-${index}`}><TicketEmojiPicker value={category.emoji} onChange={(emoji) => updateCategory(index, { emoji })} /><label>Name<input maxLength={80} value={category.label} onChange={(event) => updateCategory(index, { label: event.target.value })} /></label><label>Beschreibung<input maxLength={100} value={category.description} onChange={(event) => updateCategory(index, { description: event.target.value })} /></label><label>Wert<input maxLength={80} value={category.value} onChange={(event) => updateCategory(index, { value: event.target.value.toLowerCase().replace(/[^a-z0-9_-]/g, "-") })} /></label><button type="button" className="icon-button danger" title="Kategorie entfernen" onClick={() => setDraft({ ...draft, selectCategories: draft.selectCategories.filter((_, position) => position !== index) })}><Trash2 size={16} /></button></article>)}</div></section>
           </div>
           <div className="control-stack">
             <section className="panel control-panel"><div className="panel-title compact"><div><h2>Ticket-Formular</h2><p className="muted">Bis zu fünf Fragen werden im neuen Ticket angezeigt.</p></div><button type="button" className="secondary-action inline" disabled={draft.formQuestions.length >= 5} onClick={() => setDraft({ ...draft, formQuestions: [...draft.formQuestions, "Neue Frage"] })}><Plus size={16} /> Frage</button></div><label>Formular-Titel<input maxLength={100} value={draft.formTitle} onChange={(event) => setDraft({ ...draft, formTitle: event.target.value })} /></label><div className="ticket-question-list">{draft.formQuestions.map((question, index) => <div key={index}><span>{index + 1}</span><input maxLength={250} value={question} onChange={(event) => setDraft({ ...draft, formQuestions: draft.formQuestions.map((value, position) => position === index ? event.target.value : value) })} /><button type="button" className="icon-button" title="Frage entfernen" onClick={() => setDraft({ ...draft, formQuestions: draft.formQuestions.filter((_, position) => position !== index) })}><X size={16} /></button></div>)}{!draft.formQuestions.length && <p className="muted">Keine Zusatzfragen eingerichtet.</p>}</div></section>
             <section className="panel control-panel"><div className="panel-title compact"><div><h2>Automationen</h2><p className="muted">Zeiten in Stunden; 0 deaktiviert die jeweilige Funktion.</p></div></div><ControlToggle icon={<Star size={17} />} title="Bewertungen" text="Nach dem Schließen eine 1-5-Sterne-Bewertung anfragen." checked={draft.ratingEnabled} onChange={(value) => setDraft({ ...draft, ratingEnabled: value })} /><div className="control-field-grid"><NumberSetting label="Erinnerung" value={draft.reminderHours} min={0} max={720} suffix="Std." onChange={(value) => setDraft({ ...draft, reminderHours: value })} /><NumberSetting label="Auto-Close" value={draft.autoCloseHours} min={0} max={720} suffix="Std." onChange={(value) => setDraft({ ...draft, autoCloseHours: value })} /><NumberSetting label="SLA-Ziel" value={draft.slaHours} min={0} max={720} suffix="Std." onChange={(value) => setDraft({ ...draft, slaHours: value })} /></div></section>
             <section className="panel control-panel"><div className="panel-title compact"><div><h2>Zugriffssperren</h2><p className="muted">Rollen und einzelne Discord-Nutzer vom Erstellen ausschließen.</p></div></div><h3 className="control-subheading">Gesperrte Rollen</h3><RoleChecklist roles={manageableRoles} selected={draft.blacklistRoleIds} onToggle={(id) => toggleList("blacklistRoleIds", id)} /><label className="control-user-ids">Gesperrte Nutzer-IDs<textarea rows={4} value={draft.blacklistUserIds.join("\n")} onChange={(event) => setDraft({ ...draft, blacklistUserIds: Array.from(new Set(event.target.value.split(/[\s,;]+/).filter((value) => /^\d{17,20}$/.test(value)))) })} placeholder="Eine Discord-ID pro Zeile" /></label></section>
-            <aside className="ticket-preview"><span>Discord Vorschau</span><div className="ticket-preview-embed"><h3>{draft.panelTitle || "Ticketsystem"}</h3><p>{draft.panelDescription || "Wähle eine Kategorie aus."}</p><small>Kategorien</small>{draft.selectCategories.slice(0, 5).map((category) => <div key={category.value}>{category.emoji} {category.label}</div>)}</div><select aria-label="Vorschau Kategorie"><option>Wähle eine Ticketkategorie...</option>{draft.selectCategories.map((category) => <option key={category.value}>{category.emoji} {category.label}</option>)}</select></aside>
+            <aside className="ticket-preview"><span>Discord Vorschau</span><div className="ticket-preview-embed"><h3>{draft.panelTitle || "Ticketsystem"}</h3><p>{draft.panelDescription || "Wähle eine Kategorie aus."}</p><small>Kategorien</small>{draft.selectCategories.slice(0, 5).map((category) => <div className="ticket-preview-category" key={category.value}><BotCustomEmoji value={category.emoji} size={18} /><span>{category.label}</span></div>)}</div><details className="ticket-preview-dropdown"><summary><span>Wähle eine Ticketkategorie...</span><ChevronDown size={16} /></summary><div>{draft.selectCategories.map((category) => <button type="button" key={category.value}><BotCustomEmoji value={category.emoji} size={20} /><span><strong>{category.label}</strong><small>{category.description}</small></span></button>)}</div></details></aside>
           </div>
         </div>
         <div className="control-savebar"><div><strong>{draft.enabled ? "Ticketsystem aktiv" : "Ticketsystem inaktiv"}</strong><small className={status ? "ticket-save-status" : undefined}>{status || "Speichern aktualisiert Regeln; Panel senden veröffentlicht oder aktualisiert die Discord-Nachricht."}</small></div><div className="form-actions"><button className="primary-action inline" onClick={() => void persist()} disabled={saving || sending}>{saving ? <Loader2 className="spin" size={16} /> : <Save size={16} />} Einstellungen speichern</button><button className="secondary-action inline" onClick={() => void sendPanel()} disabled={saving || sending || !draft.enabled || !draft.panelChannelId}>{sending ? <Loader2 className="spin" size={16} /> : <Rocket size={16} />}{sending ? "Panel wird gesendet" : "Panel senden"}</button></div></div>
