@@ -4286,6 +4286,13 @@ textarea {
   color: var(--muted);
 }
 
+.autorole-hero .eyebrow,
+.level-hero .eyebrow,
+.counting-hero .eyebrow,
+.tempvoice-hero .eyebrow {
+  color: var(--muted);
+}
+
 .welcome-switch {
   display: inline-flex;
   grid-auto-flow: column;

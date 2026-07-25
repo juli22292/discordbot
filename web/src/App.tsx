@@ -5489,9 +5489,6 @@ function AutorolePage({ guildId }: { guildId: string }) {
           <p>Vergib mehrere Rollen automatisch, mit eigenen Regeln für Mitglieder und neu hinzugefügte Bots.</p>
         </div>
         <div className="control-hero-actions autorole-hero-actions">
-          <span className={`pill ${draft.syncStatus === "failed" ? "danger" : draft.syncStatus === "synced" ? "ok" : "neutral"}`}>
-            {draft.syncStatus === "failed" ? "Sync fehlgeschlagen" : draft.syncStatus === "pending" ? "Wird synchronisiert" : draft.syncStatus === "synced" ? "Synchronisiert" : "Bereit"}
-          </span>
           <label className="welcome-switch">
             <input type="checkbox" checked={draft.enabled} disabled={saving} onChange={(event) => void updateEnabled(event.target.checked)} />
             <span>{draft.enabled ? "Aktiv" : "Inaktiv"}</span>
@@ -5503,7 +5500,7 @@ function AutorolePage({ guildId }: { guildId: string }) {
         </div>
       </header>
 
-      {loading && <LoadingBlock />}
+      {loading && <LoadingBlock text="Autorole wird geladen" />}
       {loadError && <Notice tone="danger" text={loadError} />}
       {draft.syncError && <Notice tone="danger" text={draft.syncError} />}
       <ActionStatus status={status} />
@@ -5754,9 +5751,6 @@ function LevelSystemPage({ guildId }: { guildId: string }) {
           <p>Nachrichten werden zu Fortschritt. Aufstiege landen im richtigen Kanal und Rollen werden automatisch vergeben.</p>
         </div>
         <div className="control-hero-actions level-hero-actions">
-          <span className={`pill ${draft.syncStatus === "failed" ? "danger" : draft.syncStatus === "synced" ? "ok" : "neutral"}`}>
-            {draft.syncStatus === "failed" ? "Sync fehlgeschlagen" : draft.syncStatus === "pending" ? "Wird synchronisiert" : draft.syncStatus === "synced" ? "Synchronisiert" : "Bereit"}
-          </span>
           <label className="welcome-switch">
             <input type="checkbox" checked={draft.enabled} disabled={saving} onChange={(event) => void updateEnabled(event.target.checked)} />
             <span>{draft.enabled ? "Aktiv" : "Inaktiv"}</span>
@@ -5768,7 +5762,7 @@ function LevelSystemPage({ guildId }: { guildId: string }) {
         </div>
       </header>
 
-      {loading && <LoadingBlock />}
+      {loading && <LoadingBlock text="Level-System wird geladen" />}
       {loadError && <Notice tone="danger" text={loadError} />}
       {draft.syncError && <Notice tone="danger" text={draft.syncError} />}
       <ActionStatus status={status} />
@@ -6005,9 +5999,6 @@ function CountingPage({ guildId }: { guildId: string }) {
           <p>Eine saubere Zahlenkette für deinen Server, mit Reihenfolgeschutz, Rekord und Spielerstatistiken.</p>
         </div>
         <div className="control-hero-actions counting-hero-actions">
-          <span className={`pill ${draft.syncStatus === "failed" ? "danger" : draft.syncStatus === "synced" ? "ok" : "neutral"}`}>
-            {draft.syncStatus === "failed" ? "Sync fehlgeschlagen" : draft.syncStatus === "pending" ? "Wird synchronisiert" : draft.syncStatus === "synced" ? "Synchronisiert" : "Bereit"}
-          </span>
           <label className="welcome-switch">
             <input type="checkbox" checked={draft.enabled} disabled={saving || resetting} onChange={(event) => void updateEnabled(event.target.checked)} />
             <span>{draft.enabled ? "Aktiv" : "Inaktiv"}</span>
@@ -6019,7 +6010,7 @@ function CountingPage({ guildId }: { guildId: string }) {
         </div>
       </header>
 
-      {loading && <LoadingBlock />}
+      {loading && <LoadingBlock text="Counting wird geladen" />}
       {loadError && <Notice tone="danger" text={loadError} />}
       {draft.syncError && <Notice tone="danger" text={draft.syncError} />}
       <ActionStatus status={status} />
@@ -6266,9 +6257,6 @@ function TempVoicePage({ guildId }: { guildId: string }) {
           <p>Join-to-create, Besitzerrechte und das komplette Discord-Interface an einem Ort konfigurieren.</p>
         </div>
         <div className="control-hero-actions tempvoice-hero-actions">
-          <span className={`pill ${draft.syncStatus === "failed" ? "danger" : draft.syncStatus === "synced" ? "ok" : "neutral"}`}>
-            {draft.syncStatus === "failed" ? "Sync fehlgeschlagen" : draft.syncStatus === "pending" ? "Wird synchronisiert" : draft.syncStatus === "synced" ? "Synchronisiert" : "Bereit"}
-          </span>
           <label className="welcome-switch">
             <input
               type="checkbox"
@@ -6285,7 +6273,7 @@ function TempVoicePage({ guildId }: { guildId: string }) {
         </div>
       </header>
 
-      {loading && <LoadingBlock />}
+      {loading && <LoadingBlock text="TempVoice wird geladen" />}
       {loadError && <Notice tone="danger" text={loadError} />}
       {draft.syncError && <Notice tone="danger" text={draft.syncError} />}
       <ActionStatus status={status} />
@@ -7116,7 +7104,7 @@ function CommandsPage({ guildId }: { guildId: string }) {
         </div>
       </header>
       <ActionStatus status={status} />
-      {commands.loading && !commands.data && <LoadingBlock />}
+      {commands.loading && !commands.data && <LoadingBlock text="Slash-Befehle werden geladen" />}
       {commands.error && <Notice tone="danger" text={commands.error} />}
       {!commands.loading && commands.data?.commands.length === 0 && (
         <EmptyState title="Noch kein Bot-Snapshot" text="Sobald der Python-Bot die interne Schnittstelle erreicht, erscheinen hier seine echten Slash-Befehle." />
@@ -7222,7 +7210,7 @@ function CustomCommandsPage({ guildId }: { guildId: string }) {
       </header>
 
       <ActionStatus status={status} />
-      {commands.loading && !commands.data && <LoadingBlock />}
+      {commands.loading && !commands.data && <LoadingBlock text="Custom Commands werden geladen" />}
       {commands.error && <Notice tone="danger" text={commands.error} />}
 
       <div className="control-columns">
@@ -7375,7 +7363,7 @@ function AuditLogPage({ guildId }: { guildId: string }) {
           <RefreshButton loading={audit.loading} onClick={audit.reload} />
         </div>
       </header>
-      {audit.loading && !audit.data && <LoadingBlock />}
+      {audit.loading && !audit.data && <LoadingBlock text="Audit-Log wird geladen" />}
       {audit.error && <Notice tone="danger" text={audit.error} />}
       {audit.data?.auditLog.length === 0 && <EmptyState title="Noch keine Änderungen" text="Sobald Einstellungen geändert werden, erscheinen die Einträge hier." />}
       {audit.data && audit.data.auditLog.length > 0 && (
@@ -7794,7 +7782,7 @@ function SecurityPage({ guildId }: { guildId: string }) {
         <div><p className="eyebrow"><ShieldCheck size={15} /> Guild Protection</p><h2>Security Center</h2><p>Alle aktiven Schutzregeln, Prüfungen und Eskalationen in einer sauberen Sicherheitszentrale.</p></div>
         <div className="control-hero-actions"><SyncPill status={draft.syncStatus} /><RefreshButton loading={settings.loading} onClick={async () => { await Promise.all([settings.reload(), channels.reload(), roles.reload()]); }} /></div>
       </header>
-      {loading && <LoadingBlock />}
+      {loading && <LoadingBlock text="Security Center wird geladen" />}
       {loadError && <Notice tone="danger" text={loadError} />}
       {draft.syncError && <Notice tone="danger" text={draft.syncError} />}
       <ActionStatus status={status} />
@@ -7890,7 +7878,7 @@ function RaidmodePage({ guildId }: { guildId: string }) {
   return (
     <section className="control-page raid-control">
       <header className="control-hero raid"><div><p className="eyebrow"><AlertTriangle size={15} /> Incident Response</p><h2>Raidmode</h2><p>Schutzprofile kontrolliert aktivieren und bei einem laufenden Angriff sofort den Panic-Modus auslösen.</p></div><div className="control-hero-actions"><SyncPill status={draft.syncStatus} /><RefreshButton loading={settings.loading} onClick={settings.reload} /></div></header>
-      {settings.loading && !settings.data && <LoadingBlock />}{settings.error && <Notice tone="danger" text={settings.error} />}{draft.syncError && <Notice tone="danger" text={draft.syncError} />}<ActionStatus status={status} />
+      {settings.loading && !settings.data && <LoadingBlock text="Raidmode wird geladen" />}{settings.error && <Notice tone="danger" text={settings.error} />}{draft.syncError && <Notice tone="danger" text={draft.syncError} />}<ActionStatus status={status} />
       {settings.data && <>
         <div className="control-stat-grid"><StatusTile icon={<Activity size={19} />} label="Raidmode" value={draft.raidmodeEnabled ? "aktiv" : "inaktiv"} tone={draft.raidmodeEnabled ? "warn" : "ok"} /><StatusTile icon={<AlertTriangle size={19} />} label="Panic" value={draft.panicEnabled ? "aktiv" : "bereit"} tone={draft.panicEnabled ? "warn" : "ok"} /><StatusTile icon={<UsersRound size={19} />} label="Mitglieder" value={String(draft.memberCount)} /><StatusTile icon={<Hash size={19} />} label="Textkanäle" value={String(draft.textChannelCount)} /></div>
         <section className="panel control-panel"><div className="panel-title compact"><div><h2>Schutzprofil</h2><p className="muted">Ein Profil setzt die zusammengehörigen Security-Regeln atomar.</p></div></div><div className="raid-profile-grid">{profiles.map((profile) => { const Icon = profile.icon; return <button type="button" className={draft.profile === profile.key ? "selected" : ""} onClick={() => setDraft({ ...draft, profile: profile.key })} key={profile.key}><span><Icon size={19} /></span><strong>{profile.title}</strong><small>{profile.text}</small>{draft.profile === profile.key && <Check size={17} />}</button>; })}</div></section>
@@ -7959,7 +7947,7 @@ function TicketSystemPage({ guildId }: { guildId: string }) {
   return (
     <section className="control-page ticket-control">
       <header className="control-hero"><div><p className="eyebrow"><LifeBuoy size={15} /> Support Operations</p><h2>Ticket-System</h2><p>Panel, Teamrollen, Formular, Kategorien und Ticket-Automationen vollständig an einem Ort steuern.</p></div><div className="control-hero-actions"><SyncPill status={draft.syncStatus} /><label className="welcome-switch"><input type="checkbox" checked={draft.enabled} disabled={saving || sending} onChange={(event) => void updateEnabled(event.target.checked)} /><span>{draft.enabled ? "Aktiv" : "Inaktiv"}</span></label><RefreshButton loading={settings.loading || channels.loading || roles.loading} onClick={async () => { await Promise.all([settings.reload(), channels.reload(), roles.reload()]); }} /></div></header>
-      {loading && <LoadingBlock />}{loadError && <Notice tone="danger" text={loadError} />}{draft.syncError && <Notice tone="danger" text={draft.syncError} />}<ActionStatus status={status} />
+      {loading && <LoadingBlock text="Ticket-System wird geladen" />}{loadError && <Notice tone="danger" text={loadError} />}{draft.syncError && <Notice tone="danger" text={draft.syncError} />}<ActionStatus status={status} />
       {!loading && !loadError && !draft.enabled && <ModuleInactiveState icon={<LifeBuoy size={22} />} title="Ticket-System ist ausgeschaltet" text="Aktiviere das Modul, um Supportrollen, Ticket-Kategorien, Formulare und Automationen einzurichten." onEnable={() => void updateEnabled(true)} disabled={saving || sending} />}
       {!loading && !loadError && draft.enabled && <>
         <div className="control-stat-grid"><StatusTile icon={<LifeBuoy size={19} />} label="Offen" value={String(draft.openTickets)} tone={draft.openTickets ? "warn" : "ok"} /><StatusTile icon={<Check size={19} />} label="Geschlossen" value={String(draft.closedTickets)} /><StatusTile icon={<ClipboardList size={19} />} label="Gesamt" value={String(draft.totalTickets)} /><StatusTile icon={<Star size={19} />} label="Bewertung" value={draft.averageRating === null ? "keine" : `${draft.averageRating}/5`} tone={draft.averageRating !== null && draft.averageRating >= 4 ? "ok" : undefined} /></div>
@@ -8009,7 +7997,7 @@ function BackupsPage({ guildId }: { guildId: string }) {
   return (
     <section className="control-page backup-control">
       <header className="control-hero"><div><p className="eyebrow"><Database size={15} /> Recovery Center</p><h2>Server-Backups</h2><p>Serverstruktur sichern, vorhandene Stände prüfen und fehlende Rollen oder Kanäle kontrolliert wiederherstellen.</p></div><div className="control-hero-actions"><SyncPill status={state.syncStatus} /><RefreshButton loading={backups.loading} onClick={backups.reload} /></div></header>
-      {backups.loading && !backups.data && <LoadingBlock />}{backups.error && <Notice tone="danger" text={backups.error} />}{state.syncError && <Notice tone="danger" text={state.syncError} />}<ActionStatus status={status} />
+      {backups.loading && !backups.data && <LoadingBlock text="Backups werden geladen" />}{backups.error && <Notice tone="danger" text={backups.error} />}{state.syncError && <Notice tone="danger" text={state.syncError} />}<ActionStatus status={status} />
       {backups.data && <>
         <div className="control-stat-grid"><StatusTile icon={<BadgeCheck size={19} />} label="Live-Rollen" value={String(state.guildRoleCount)} /><StatusTile icon={<Hash size={19} />} label="Live-Kanäle" value={String(state.guildChannelCount)} /><StatusTile icon={<Database size={19} />} label="Backup-Bereiche" value={String(state.items.length)} tone={state.items.length ? "ok" : "warn"} /><StatusTile icon={<Clock3 size={19} />} label="Letzte Sicherung" value={state.lastSavedAt ? formatDateTime(state.lastSavedAt) : "keine"} /></div>
         <div className="backup-grid">{scopes.map((scope) => { const Icon = scope.icon; const item = state.items.find((entry) => entry.scope === scope.key); return <article className="backup-card" key={scope.key}><header><span><Icon size={19} /></span><div><h2>{scope.title}</h2><p>{scope.text}</p></div><span className={`pill ${item ? "ok" : "neutral"}`}>{item ? "gesichert" : "leer"}</span></header><dl><div><dt>Live</dt><dd>{scope.live} Einträge</dd></div><div><dt>Backup</dt><dd>{item ? `${item.itemCount} Einträge` : "Noch keines"}</dd></div><div><dt>Stand</dt><dd>{item?.savedAt ? formatDateTime(item.savedAt) : "-"}</dd></div></dl><div className="backup-actions"><button className="primary-action inline" onClick={() => void action("create", scope.key)} disabled={Boolean(running)}>{running === `create:${scope.key}` ? <Loader2 className="spin" size={16} /> : <Save size={16} />}{item ? "Neu sichern" : "Backup erstellen"}</button>{scope.key !== "full" && <button className="secondary-action inline" onClick={() => void action("restore", scope.key)} disabled={!item || Boolean(running)}>{running === `restore:${scope.key}` ? <Loader2 className="spin" size={16} /> : <RotateCcw size={16} />} Wiederherstellen</button>}<button className="icon-button danger" title={`${scope.title}-Backup löschen`} onClick={() => void action("delete", scope.key)} disabled={!item || Boolean(running)}><Trash2 size={16} /></button></div></article>; })}</div>
