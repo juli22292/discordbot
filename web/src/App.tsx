@@ -1811,6 +1811,35 @@ async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
   return data as T;
 }
 
+type GuildSyncEventProgress = {
+  event: {
+    status: string;
+    attempts: number;
+    maxAttempts: number;
+    lastError: string | null;
+  };
+};
+
+async function waitForGuildSyncEvent(
+  guildId: string,
+  eventId: string,
+  timeoutMs = 30_000
+): Promise<GuildSyncEventProgress["event"] | null> {
+  const deadline = Date.now() + timeoutMs;
+
+  while (Date.now() < deadline) {
+    await new Promise((resolve) => window.setTimeout(resolve, 800));
+    const response = await api<GuildSyncEventProgress>(
+      `/api/guilds/${encodeURIComponent(guildId)}/sync-events/${encodeURIComponent(eventId)}`
+    );
+    if (response.event.status === "completed" || response.event.status === "failed") {
+      return response.event;
+    }
+  }
+
+  return null;
+}
+
 function useApi<T>(path: string | null, deps: React.DependencyList = []) {
   const [data, setData] = useState<T | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -8310,8 +8339,27 @@ function TicketSystemPage({ guildId }: { guildId: string }) {
     setSending(true); setStatus(null);
     try {
       if (!(await persist())) return;
-      await api(`/api/guilds/${guildId}/tickets/panel`, { method: "POST", body: JSON.stringify({ channelId: draft.panelChannelId }) });
-      setStatus("Das Ticket-Panel wird jetzt vom Bot in Discord gesendet."); await settings.reload();
+      setStatus("Konfiguration gespeichert. Der Bot sendet jetzt das Ticket-Panel.");
+      const response = await api<{ eventId?: string }>(`/api/guilds/${guildId}/tickets/panel`, {
+        method: "POST",
+        body: JSON.stringify({ channelId: draft.panelChannelId })
+      });
+      if (!response.eventId) {
+        setStatus("Demo: Das Ticket-Panel wurde erfolgreich simuliert.");
+        return;
+      }
+
+      const event = await waitForGuildSyncEvent(guildId, response.eventId);
+      await settings.reload();
+
+      if (event?.status === "failed") {
+        throw new Error(event.lastError || "Der Bot konnte das Ticket-Panel nicht in Discord senden.");
+      }
+      if (!event) {
+        setStatus("Das Ticket-Panel liegt noch in der Bot-Queue. Der Status wird beim Aktualisieren angezeigt.");
+        return;
+      }
+      setStatus("Ticket-Panel erfolgreich in Discord gesendet.");
     } catch (error) { setStatus(error instanceof Error ? error.message : "Ticket-Panel konnte nicht gesendet werden."); }
     finally { setSending(false); }
   }
@@ -8338,7 +8386,7 @@ function TicketSystemPage({ guildId }: { guildId: string }) {
             <aside className="ticket-preview"><span>Discord Vorschau</span><div className="ticket-preview-embed"><h3>{draft.panelTitle || "Ticketsystem"}</h3><p>{draft.panelDescription || "Wähle eine Kategorie aus."}</p><small>Kategorien</small>{draft.selectCategories.slice(0, 5).map((category) => <div key={category.value}>{category.emoji} {category.label}</div>)}</div><select aria-label="Vorschau Kategorie"><option>Wähle eine Ticketkategorie...</option>{draft.selectCategories.map((category) => <option key={category.value}>{category.emoji} {category.label}</option>)}</select></aside>
           </div>
         </div>
-        <div className="control-savebar"><div><strong>{draft.enabled ? "Ticketsystem aktiv" : "Ticketsystem inaktiv"}</strong><small>Speichern aktualisiert Regeln; Panel senden veröffentlicht eine neue Discord-Nachricht.</small></div><div className="form-actions"><button className="primary-action inline" onClick={() => void persist()} disabled={saving || sending}>{saving ? <Loader2 className="spin" size={16} /> : <Save size={16} />} Einstellungen speichern</button><button className="secondary-action inline" onClick={() => void sendPanel()} disabled={saving || sending || !draft.enabled || !draft.panelChannelId}>{sending ? <Loader2 className="spin" size={16} /> : <Rocket size={16} />} Panel senden</button></div></div>
+        <div className="control-savebar"><div><strong>{draft.enabled ? "Ticketsystem aktiv" : "Ticketsystem inaktiv"}</strong><small className={status ? "ticket-save-status" : undefined}>{status || "Speichern aktualisiert Regeln; Panel senden veröffentlicht oder aktualisiert die Discord-Nachricht."}</small></div><div className="form-actions"><button className="primary-action inline" onClick={() => void persist()} disabled={saving || sending}>{saving ? <Loader2 className="spin" size={16} /> : <Save size={16} />} Einstellungen speichern</button><button className="secondary-action inline" onClick={() => void sendPanel()} disabled={saving || sending || !draft.enabled || !draft.panelChannelId}>{sending ? <Loader2 className="spin" size={16} /> : <Rocket size={16} />}{sending ? "Panel wird gesendet" : "Panel senden"}</button></div></div>
       </>}
     </section>
   );

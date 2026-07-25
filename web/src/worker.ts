@@ -3546,7 +3546,11 @@ app.post("/api/guilds/:guildId/tickets/panel", async (c) => {
   });
   const eventId = await enqueueSyncEvent(c.env, access.guild, "ticket.panel.send", {
     discordGuildId: access.guild.discordGuildId,
-    channelId: data.channelId
+    channelId: data.channelId,
+    settings: {
+      ...currentConfiguration,
+      panelChannelId: data.channelId
+    }
   });
   await audit(c.env, access.guild.id, access.session.user.discordUserId, "ticket.panel.send", data.channelId, null, { eventId });
   return json(c, { ok: true, eventId });
@@ -4169,6 +4173,44 @@ app.get("/api/guilds/:guildId/audit-log", async (c) => {
     ).bind(access.guild.id)
   );
   return json(c, { auditLog: rows });
+});
+
+app.get("/api/guilds/:guildId/sync-events/:eventId", async (c) => {
+  const access = await requireGuildManagementAccess(c, c.req.param("guildId"));
+  const eventId = c.req.param("eventId");
+
+  if (!/^evt_[a-f0-9]{32}$/.test(eventId)) {
+    throw new HttpError(400, "event_id_invalid", "Die Sync-Event-ID ist ungültig.");
+  }
+
+  const event = await first<{
+    id: string;
+    action: string;
+    status: string;
+    attempts: number;
+    maxAttempts: number;
+    lastError: string | null;
+    completedAt: string | null;
+  }>(
+    c.env.DB.prepare(
+      `SELECT id, action, status, attempts, max_attempts AS maxAttempts,
+              last_error AS lastError, completed_at AS completedAt
+         FROM sync_events
+        WHERE id = ? AND guild_id = ?`
+    ).bind(eventId, access.guild.id)
+  );
+
+  if (!event) {
+    throw new HttpError(404, "event_not_found", "Sync-Event nicht gefunden.");
+  }
+
+  return json(c, {
+    event: {
+      ...event,
+      attempts: Number(event.attempts ?? 0),
+      maxAttempts: Number(event.maxAttempts ?? 0)
+    }
+  });
 });
 
 app.get("/api/admin/bot", async (c) => {
