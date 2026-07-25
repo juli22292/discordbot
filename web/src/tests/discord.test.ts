@@ -88,7 +88,7 @@ describe("Discord bot helpers", () => {
       });
     }) as typeof fetch;
 
-    await expect(fetchDiscordGuilds({ accessToken: "token", tokenType: "Bearer", scope: "guilds", expiresAt: Date.now() + 1000 })).resolves.toEqual([]);
+    await expect(fetchDiscordGuilds({ clientId: "123456789012345678", accessToken: "token", tokenType: "Bearer", scope: "guilds", expiresAt: Date.now() + 1000 })).resolves.toEqual([]);
     expect(calls).toBe(2);
   });
 

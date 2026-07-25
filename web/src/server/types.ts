@@ -36,6 +36,7 @@ export interface DiscordGuild {
 }
 
 export interface TokenData {
+  clientId: string;
   accessToken: string;
   refreshToken?: string;
   tokenType: string;

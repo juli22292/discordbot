@@ -591,6 +591,10 @@ async function getSession(c: HonoContext): Promise<ActiveSession | null> {
         return null;
       }
 
+      if (cookieSession.tokenData.clientId !== c.env.DISCORD_CLIENT_ID) {
+        return null;
+      }
+
       if (cookieSession.tokenData.expiresAt <= Date.now()) {
         return null;
       }
@@ -620,6 +624,10 @@ async function getSession(c: HonoContext): Promise<ActiveSession | null> {
   if (!row) return null;
 
   let tokenData = await decryptJson<TokenData>(row.encrypted_token_data, c.env.ENCRYPTION_KEY);
+  if (tokenData.clientId !== c.env.DISCORD_CLIENT_ID) {
+    return null;
+  }
+
   if (tokenData.expiresAt < Date.now() + 60_000) {
     tokenData = await refreshStoredSessionToken(c.env, row.id);
   }
@@ -2532,7 +2540,11 @@ async function enqueueSyncEvent(
 
 app.onError((error, c) => {
   if (error instanceof HttpError) {
-    return json(c, { error: { code: error.code, message: error.message } }, error.status);
+    const response = json(c, { error: { code: error.code, message: error.message } }, error.status);
+    if (error.status === 401 && error.code === "session_required") {
+      response.headers.append("Set-Cookie", clearCookieHeader(SESSION_COOKIE, c.env));
+    }
+    return response;
   }
 
   if (error instanceof ZodError) {

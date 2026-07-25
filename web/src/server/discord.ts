@@ -178,6 +178,7 @@ export async function exchangeDiscordCode(env: Env, code: string): Promise<Token
   });
 
   return {
+    clientId: env.DISCORD_CLIENT_ID,
     accessToken: token.access_token,
     refreshToken: token.refresh_token,
     tokenType: token.token_type,
@@ -203,6 +204,7 @@ export async function refreshDiscordToken(env: Env, tokenData: TokenData): Promi
   });
 
   return {
+    clientId: env.DISCORD_CLIENT_ID,
     accessToken: token.access_token,
     refreshToken: token.refresh_token ?? tokenData.refreshToken,
     tokenType: token.token_type,
