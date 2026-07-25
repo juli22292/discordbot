@@ -2443,6 +2443,52 @@ function readPublicAiMessages(): PublicAiMessage[] {
   }
 }
 
+function PublicAiCodeBlock({ language, code }: { language: string; code: string }) {
+  const [copied, setCopied] = useState(false);
+  const resetTimerRef = useRef<number | null>(null);
+
+  useEffect(() => () => {
+    if (resetTimerRef.current !== null) window.clearTimeout(resetTimerRef.current);
+  }, []);
+
+  async function copyCode() {
+    try {
+      await navigator.clipboard.writeText(code);
+      setCopied(true);
+      if (resetTimerRef.current !== null) window.clearTimeout(resetTimerRef.current);
+      resetTimerRef.current = window.setTimeout(() => {
+        setCopied(false);
+        resetTimerRef.current = null;
+      }, 1800);
+    } catch {
+      notify({
+        tone: "warning",
+        title: "Kopieren nicht möglich",
+        text: "Der Code konnte nicht in die Zwischenablage kopiert werden."
+      });
+    }
+  }
+
+  return (
+    <div className="public-ai-code">
+      <div className="public-ai-code-header">
+        <span>{language || "Code"}</span>
+        <button
+          type="button"
+          className={copied ? "is-copied" : ""}
+          aria-label={copied ? "Code kopiert" : "Code kopieren"}
+          title={copied ? "Kopiert" : "Code kopieren"}
+          onClick={() => void copyCode()}
+        >
+          {copied ? <Check size={14} /> : <Copy size={14} />}
+          <span>{copied ? "Kopiert" : "Kopieren"}</span>
+        </button>
+      </div>
+      <pre><code>{code}</code></pre>
+    </div>
+  );
+}
+
 function PublicAiContent({ content }: { content: string }) {
   const parts: React.ReactNode[] = [];
   const codeBlockPattern = /```([^\n`]*)\n?([\s\S]*?)```/g;
@@ -2472,10 +2518,11 @@ function PublicAiContent({ content }: { content: string }) {
     }
     const language = match[1]?.trim();
     parts.push(
-      <div className="public-ai-code" key={`code-${match.index}`}>
-        {language && <span>{language}</span>}
-        <pre><code>{match[2].trimEnd()}</code></pre>
-      </div>
+      <PublicAiCodeBlock
+        code={match[2].trimEnd()}
+        key={`code-${match.index}`}
+        language={language}
+      />
     );
     cursor = match.index + match[0].length;
   }

@@ -9412,14 +9412,53 @@ textarea {
   background: var(--bg-strong);
 }
 
-.public-ai-code > span {
-  display: block;
-  padding: 7px 12px;
+.public-ai-code-header {
+  display: flex;
+  min-height: 38px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 5px 7px 5px 12px;
   border-bottom: 1px solid var(--border-soft);
   color: var(--muted);
   background: var(--surface);
+}
+
+.public-ai-code-header > span {
   font-size: 11px;
   text-transform: uppercase;
+}
+
+.public-ai-code-header button {
+  display: inline-flex;
+  width: 88px;
+  min-height: 28px;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border: 1px solid transparent;
+  border-radius: 5px;
+  color: var(--muted);
+  background: transparent;
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+  transition: color 140ms ease, background 140ms ease, border-color 140ms ease;
+}
+
+.public-ai-code-header button:hover {
+  border-color: var(--border-soft);
+  color: var(--text);
+  background: var(--hover-bg);
+}
+
+.public-ai-code-header button:focus-visible {
+  outline: 2px solid var(--blue);
+  outline-offset: 1px;
+}
+
+.public-ai-code-header button.is-copied {
+  color: var(--green);
 }
 
 .public-ai-code pre {
