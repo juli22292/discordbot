@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { buildPublicAiSystemPrompt, publicAiChatSchema } from "../server/public-ai";
 
 describe("public AI chat helpers", () => {
-  it("accepts a bounded conversation ending with a user message", () => {
+  it("accepts a conversation ending with a user message", () => {
     const parsed = publicAiChatSchema.parse({
       messages: [
         { role: "user", content: "Erkläre mir TypeScript." },
@@ -23,15 +23,15 @@ describe("public AI chat helpers", () => {
     expect(parsed.success).toBe(false);
   });
 
-  it("rejects oversized conversation history", () => {
+  it("does not impose an artificial message or character limit", () => {
     const parsed = publicAiChatSchema.safeParse({
-      messages: Array.from({ length: 5 }, (_, index) => ({
-        role: index === 4 ? "user" : "assistant",
-        content: "x".repeat(5000)
+      messages: Array.from({ length: 50 }, (_, index) => ({
+        role: index === 49 ? "user" : "assistant",
+        content: "x".repeat(10_000)
       }))
     });
 
-    expect(parsed.success).toBe(false);
+    expect(parsed.success).toBe(true);
   });
 
   it("builds a general assistant prompt without panel actions", () => {

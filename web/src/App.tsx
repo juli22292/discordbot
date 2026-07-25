@@ -7,6 +7,7 @@ import type {
   PublicCountingPlayer
 } from "./server/counting-leaderboard";
 import type { PublicGuildCounter, PublicGuildCounterSummary } from "./server/guild-counters";
+import { isAiDeleteCommand } from "./ai-chat";
 import { parsePublicAiInlineMarkdown } from "./public-ai-markdown";
 import {
   Activity,
@@ -844,8 +845,6 @@ type PublicAiMessage = {
 
 type PublicAiReply = {
   answer: string;
-  remaining: number;
-  resetAt: string;
 };
 
 type ThemeMode = "dark" | "light";
@@ -2176,6 +2175,9 @@ function AiAssistant({ path, panelEnabled = true }: { path: string; panelEnabled
   const [error, setError] = useState<string | null>(null);
   const messageListRef = useRef<HTMLDivElement | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const requestAbortRef = useRef<AbortController | null>(null);
+
+  useEffect(() => () => requestAbortRef.current?.abort(), []);
 
   useEffect(() => {
     if (!open) return;
@@ -2202,14 +2204,22 @@ function AiAssistant({ path, panelEnabled = true }: { path: string; panelEnabled
 
   async function sendMessage(value = draft) {
     const content = value.trim();
-    if (!content || sending) return;
+    if (!content) return;
+    if (isAiDeleteCommand(content)) {
+      resetConversation();
+      return;
+    }
+    if (sending) return;
 
     const userMessage: AssistantMessage = {
       id: assistantMessageId(),
       role: "user",
-      content: content.slice(0, 2400)
+      content
     };
-    const conversation = [...messages, userMessage].slice(-12);
+    const conversation = [...messages, userMessage];
+    const controller = new AbortController();
+    requestAbortRef.current?.abort();
+    requestAbortRef.current = controller;
     setMessages(conversation);
     setDraft("");
     setError(null);
@@ -2223,20 +2233,26 @@ function AiAssistant({ path, panelEnabled = true }: { path: string; panelEnabled
           body: JSON.stringify({
             messages: conversation.map(({ role, content: messageContent }) => ({ role, content: messageContent })),
             context
-          })
+          }),
+          signal: controller.signal
         });
 
+      if (controller.signal.aborted) return;
       const assistantMessage: AssistantMessage = {
         id: assistantMessageId(),
         role: "assistant",
         content: response.answer,
         actions: response.actions
       };
-      setMessages((current) => [...current, assistantMessage].slice(-12));
+      setMessages((current) => [...current, assistantMessage]);
     } catch (requestError) {
+      if (controller.signal.aborted) return;
       setError(requestError instanceof Error ? requestError.message : "Der KI-Helfer konnte nicht antworten.");
     } finally {
-      setSending(false);
+      if (requestAbortRef.current === controller) {
+        requestAbortRef.current = null;
+        setSending(false);
+      }
     }
   }
 
@@ -2263,9 +2279,13 @@ function AiAssistant({ path, panelEnabled = true }: { path: string; panelEnabled
   }
 
   function resetConversation() {
+    requestAbortRef.current?.abort();
+    requestAbortRef.current = null;
     setMessages([ASSISTANT_STARTER_MESSAGE]);
     setDraft("");
     setError(null);
+    setSending(false);
+    window.setTimeout(() => textareaRef.current?.focus(), 0);
   }
 
   return (
@@ -2352,7 +2372,6 @@ function AiAssistant({ path, panelEnabled = true }: { path: string; panelEnabled
               <textarea
                 ref={textareaRef}
                 rows={2}
-                maxLength={2400}
                 value={draft}
                 placeholder="Frag etwas zum Webpanel..."
                 aria-label="Nachricht an den KI-Helfer"
@@ -2418,8 +2437,7 @@ function readPublicAiMessages(): PublicAiMessage[] {
         && (message.role === "user" || message.role === "assistant")
         && "content" in message
         && typeof message.content === "string"
-      ))
-      .slice(-20);
+      ));
   } catch {
     return [];
   }
@@ -2477,10 +2495,13 @@ function PublicAiPage() {
   const [error, setError] = useState<string | null>(null);
   const threadRef = useRef<HTMLDivElement | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const requestAbortRef = useRef<AbortController | null>(null);
+
+  useEffect(() => () => requestAbortRef.current?.abort(), []);
 
   useEffect(() => {
     try {
-      window.sessionStorage.setItem(PUBLIC_AI_STORAGE_KEY, JSON.stringify(messages.slice(-20)));
+      window.sessionStorage.setItem(PUBLIC_AI_STORAGE_KEY, JSON.stringify(messages));
     } catch {
       // The chat still works if session storage is unavailable.
     }
@@ -2500,14 +2521,33 @@ function PublicAiPage() {
 
   async function sendPublicAiMessage() {
     const content = draft.trim();
-    if (!content || sending) return;
+    if (!content) return;
+    if (isAiDeleteCommand(content)) {
+      requestAbortRef.current?.abort();
+      requestAbortRef.current = null;
+      setMessages([]);
+      setDraft("");
+      setError(null);
+      setSending(false);
+      try {
+        window.sessionStorage.removeItem(PUBLIC_AI_STORAGE_KEY);
+      } catch {
+        // The in-memory conversation is still cleared.
+      }
+      window.setTimeout(() => textareaRef.current?.focus(), 0);
+      return;
+    }
+    if (sending) return;
 
     const userMessage: PublicAiMessage = {
       id: assistantMessageId(),
       role: "user",
-      content: content.slice(0, 6000)
+      content
     };
-    const conversation = [...messages, userMessage].slice(-20);
+    const conversation = [...messages, userMessage];
+    const controller = new AbortController();
+    requestAbortRef.current?.abort();
+    requestAbortRef.current = controller;
     setMessages(conversation);
     setDraft("");
     setError(null);
@@ -2521,8 +2561,10 @@ function PublicAiPage() {
             role,
             content: messageContent
           }))
-        })
+        }),
+        signal: controller.signal
       });
+      if (controller.signal.aborted) return;
       const assistantMessage: PublicAiMessage = {
         id: assistantMessageId(),
         role: "assistant",
@@ -2531,13 +2573,17 @@ function PublicAiPage() {
       setMessages((current) => [
         ...current,
         assistantMessage
-      ].slice(-20));
+      ]);
     } catch (requestError) {
+      if (controller.signal.aborted) return;
       setMessages((current) => current.filter((message) => message.id !== userMessage.id));
       setDraft(content);
       setError(requestError instanceof Error ? requestError.message : "ModmailBot KI konnte gerade nicht antworten.");
     } finally {
-      setSending(false);
+      if (requestAbortRef.current === controller) {
+        requestAbortRef.current = null;
+        setSending(false);
+      }
     }
   }
 
@@ -2591,7 +2637,6 @@ function PublicAiPage() {
                 id="public-ai-message"
                 ref={textareaRef}
                 rows={1}
-                maxLength={6000}
                 value={draft}
                 placeholder="ModmailBot KI fragen"
                 aria-label="Nachricht an ModmailBot KI"

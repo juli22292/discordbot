@@ -30,9 +30,9 @@ Cloudflare-Secret gesetzt:
 wrangler secret put GROQ_API_KEY
 ```
 
-Optionale Worker-Variablen sind `GROQ_MODEL` (Standard:
-`llama-3.3-70b-versatile`), `GROQ_TIMEOUT_SECONDS`,
-`GROQ_MAX_COMPLETION_TOKENS`.
+Die optionale Worker-Variable `GROQ_MODEL` waehlt das Modell aus (Standard:
+`llama-3.3-70b-versatile`). Das Webpanel setzt weder ein Nachrichtenlimit noch
+eine eigene Begrenzung fuer die Antwortlaenge.
 
 ## Bot-Server
 

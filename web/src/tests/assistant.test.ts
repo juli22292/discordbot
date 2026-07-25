@@ -6,7 +6,7 @@ import {
 } from "../server/assistant";
 
 describe("assistant server helpers", () => {
-  it("accepts a bounded conversation with page context", () => {
+  it("accepts a conversation with page context", () => {
     const parsed = assistantChatSchema.parse({
       messages: [{ role: "user", content: "Wie richte ich Counting ein?" }],
       context: {
@@ -28,6 +28,18 @@ describe("assistant server helpers", () => {
     });
 
     expect(parsed.success).toBe(false);
+  });
+
+  it("does not impose an artificial conversation limit", () => {
+    const parsed = assistantChatSchema.safeParse({
+      messages: Array.from({ length: 30 }, (_, index) => ({
+        role: index === 29 ? "user" : "assistant",
+        content: "x".repeat(10_000)
+      })),
+      context: { path: "/panel", demoMode: false }
+    });
+
+    expect(parsed.success).toBe(true);
   });
 
   it("parses validated answers and navigation actions", () => {

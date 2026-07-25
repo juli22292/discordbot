@@ -42,24 +42,16 @@ export type AssistantTarget = (typeof assistantTargets)[number];
 export const assistantChatSchema = z.object({
   messages: z.array(z.object({
     role: z.enum(["user", "assistant"]),
-    content: z.string().trim().min(1).max(2400)
-  })).min(1).max(12),
+    content: z.string().trim().min(1)
+  })).min(1),
   context: z.object({
-    path: z.string().trim().min(1).max(300),
+    path: z.string().trim().min(1),
     guildId: z.string().regex(/^\d{17,20}$/).nullable().optional(),
-    guildName: z.string().trim().max(120).nullable().optional(),
-    section: z.string().trim().max(80).nullable().optional(),
+    guildName: z.string().trim().nullable().optional(),
+    section: z.string().trim().nullable().optional(),
     demoMode: z.boolean().default(false)
   })
 }).superRefine((value, context) => {
-  const totalCharacters = value.messages.reduce((sum, message) => sum + message.content.length, 0);
-  if (totalCharacters > 12_000) {
-    context.addIssue({
-      code: z.ZodIssueCode.custom,
-      path: ["messages"],
-      message: "Der Gesprächsverlauf ist zu lang. Bitte starte einen neuen Chat."
-    });
-  }
   if (value.messages.at(-1)?.role !== "user") {
     context.addIssue({
       code: z.ZodIssueCode.custom,
@@ -76,7 +68,7 @@ const assistantActionSchema = z.object({
 });
 
 const assistantModelResponseSchema = z.object({
-  answer: z.string().trim().min(1).max(6000),
+  answer: z.string().trim().min(1),
   actions: z.array(assistantActionSchema).max(3).default([])
 });
 
@@ -120,11 +112,11 @@ export function parseAssistantModelResponse(content: string): AssistantModelResp
 
     const fallback = JSON.parse(trimmed) as { answer?: unknown };
     if (typeof fallback.answer === "string" && fallback.answer.trim()) {
-      return { answer: fallback.answer.trim().slice(0, 6000), actions: [] };
+      return { answer: fallback.answer.trim(), actions: [] };
     }
   } catch {
     // A plain-text model response remains useful and is rendered without HTML.
   }
 
-  return { answer: trimmed.slice(0, 6000), actions: [] };
+  return { answer: trimmed, actions: [] };
 }
