@@ -26,6 +26,11 @@ import {
 } from "./server/counting-leaderboard";
 import { combineMediaChunks, detectImageMimeType, imageExtension, splitMediaBytes } from "./server/media";
 import {
+  buildPublicAiSystemPrompt,
+  publicAiChatSchema,
+  type PublicAiChatInput
+} from "./server/public-ai";
+import {
   DiscordApiError,
   createDiscordChannelInvite,
   deleteDiscordInvite,
@@ -622,7 +627,7 @@ async function loadPublicGuildCounters(env: Env): Promise<PublicGuildCounter[]> 
   return rows.map((row) => normalizePublicGuildCounter(row, day));
 }
 
-async function publicCounterVisitorHash(c: HonoContext): Promise<string> {
+async function publicVisitorHash(c: HonoContext): Promise<string> {
   const forwarded = c.req.header("CF-Connecting-IP")
     || c.req.header("X-Forwarded-For")?.split(",")[0]?.trim()
     || "unknown";
@@ -652,7 +657,7 @@ async function registerPublicGuildClick(c: HonoContext, discordGuildId: string):
 
   const timestamp = nowIso();
   const cooldownCutoff = new Date(Date.now() - 30_000).toISOString();
-  const visitorHash = await publicCounterVisitorHash(c);
+  const visitorHash = await publicVisitorHash(c);
   const cooldown = await db.prepare(
     `INSERT INTO guild_click_cooldowns (guild_id, visitor_hash, last_clicked_at)
      VALUES (?, ?, ?)
@@ -727,6 +732,143 @@ function boundedEnvNumber(value: string | undefined, fallback: number, min: numb
   const parsed = Number(value ?? "");
   if (!Number.isFinite(parsed)) return fallback;
   return Math.max(min, Math.min(max, Math.round(parsed)));
+}
+
+let aiAssistantUsageStorageReady: Promise<void> | null = null;
+
+async function ensureAiAssistantUsageStorage(env: Env): Promise<void> {
+  if (!aiAssistantUsageStorageReady) {
+    aiAssistantUsageStorageReady = (async () => {
+      const db = requireDb(env);
+      await db.batch([
+        db.prepare(
+          `CREATE TABLE IF NOT EXISTS ai_assistant_usage (
+             user_id TEXT NOT NULL,
+             window_start TEXT NOT NULL,
+             request_count INTEGER NOT NULL DEFAULT 0,
+             updated_at TEXT NOT NULL,
+             PRIMARY KEY (user_id, window_start)
+           )`
+        ),
+        db.prepare(
+          `CREATE INDEX IF NOT EXISTS idx_ai_assistant_usage_updated_at
+             ON ai_assistant_usage(updated_at)`
+        )
+      ]);
+    })().catch((error) => {
+      aiAssistantUsageStorageReady = null;
+      throw error;
+    });
+  }
+
+  await aiAssistantUsageStorageReady;
+}
+
+async function consumePublicAiRateLimit(c: HonoContext): Promise<{ remaining: number; resetAt: string }> {
+  await ensureAiAssistantUsageStorage(c.env);
+  const limit = 15;
+  const windowMs = 10 * 60 * 1000;
+  const timestampMs = Date.now();
+  const windowStart = new Date(Math.floor(timestampMs / windowMs) * windowMs).toISOString();
+  const resetAt = new Date(Math.floor(timestampMs / windowMs) * windowMs + windowMs).toISOString();
+  const visitorHash = await publicVisitorHash(c);
+  const timestamp = nowIso();
+  const result = await requireDb(c.env).prepare(
+    `INSERT INTO ai_assistant_usage (user_id, window_start, request_count, updated_at)
+     VALUES (?, ?, 1, ?)
+     ON CONFLICT(user_id, window_start) DO UPDATE SET
+       request_count = ai_assistant_usage.request_count + 1,
+       updated_at = excluded.updated_at
+     WHERE ai_assistant_usage.request_count < ?`
+  ).bind(`public:${visitorHash}`, windowStart, timestamp, limit).run();
+
+  if (Number(result.meta?.changes ?? 0) === 0) {
+    const retrySeconds = Math.max(1, Math.ceil((Date.parse(resetAt) - Date.now()) / 1000));
+    throw new HttpError(
+      429,
+      "public_ai_rate_limited",
+      `Du hast das Nachrichtenlimit erreicht. Bitte versuche es in ${retrySeconds} Sekunden erneut.`
+    );
+  }
+
+  const row = await first<{ request_count: number }>(
+    requireDb(c.env).prepare(
+      "SELECT request_count FROM ai_assistant_usage WHERE user_id = ? AND window_start = ?"
+    ).bind(`public:${visitorHash}`, windowStart)
+  );
+  return {
+    remaining: Math.max(0, limit - Number(row?.request_count ?? 1)),
+    resetAt
+  };
+}
+
+async function requestGroqPublicChat(
+  env: Env,
+  input: PublicAiChatInput
+): Promise<{ answer: string }> {
+  const apiKey = env.GROQ_API_KEY?.trim();
+  if (!apiKey) {
+    throw new HttpError(503, "public_ai_not_configured", "ModmailBot KI ist noch nicht konfiguriert.");
+  }
+
+  const model = env.GROQ_MODEL?.trim() || "llama-3.3-70b-versatile";
+  const timeoutSeconds = boundedEnvNumber(env.GROQ_TIMEOUT_SECONDS, 25, 5, 45);
+  const maxCompletionTokens = boundedEnvNumber(env.GROQ_MAX_COMPLETION_TOKENS, 1400, 300, 2400);
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutSeconds * 1000);
+
+  try {
+    const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${apiKey}`,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        model,
+        temperature: 0.55,
+        max_completion_tokens: maxCompletionTokens,
+        messages: [
+          { role: "system", content: buildPublicAiSystemPrompt() },
+          ...input.messages
+        ]
+      }),
+      signal: controller.signal
+    });
+
+    if (!response.ok) {
+      if (response.status === 429) {
+        const retryAfter = response.headers.get("Retry-After");
+        throw new HttpError(
+          429,
+          "groq_rate_limited",
+          retryAfter ? `Groq ist ausgelastet. Bitte in ${retryAfter} Sekunden erneut versuchen.` : "Groq ist gerade ausgelastet. Bitte kurz warten."
+        );
+      }
+      if (response.status === 401 || response.status === 403) {
+        throw new HttpError(503, "public_ai_credentials_invalid", "Der Groq API-Key ist ungültig oder nicht mehr aktiv.");
+      }
+      throw new HttpError(502, "groq_unavailable", "Groq konnte gerade keine Antwort liefern.");
+    }
+
+    const payload = await response.json() as {
+      choices?: Array<{ message?: { content?: unknown } }>;
+    };
+    const content = payload.choices?.[0]?.message?.content;
+    if (typeof content !== "string" || !content.trim()) {
+      throw new HttpError(502, "groq_response_invalid", "Groq hat keine verwertbare Antwort geliefert.");
+    }
+
+    return { answer: content.trim().slice(0, 12_000) };
+  } catch (error) {
+    if (error instanceof HttpError) throw error;
+    if (error instanceof DOMException && error.name === "AbortError") {
+      throw new HttpError(504, "groq_timeout", "Groq hat zu lange gebraucht. Bitte versuche es erneut.");
+    }
+    throw new HttpError(502, "groq_unavailable", "ModmailBot KI ist gerade nicht erreichbar.");
+  } finally {
+    clearTimeout(timeout);
+  }
 }
 
 async function requestGroqAssistant(
@@ -2996,6 +3138,17 @@ app.get("/api/public/counting-leaderboard", async (c) => {
     generatedAt: nowIso()
   });
   response.headers.set("Cache-Control", "no-store");
+  return response;
+});
+
+app.post("/api/public/ai/chat", async (c) => {
+  const input = publicAiChatSchema.parse(await readJsonBody(c));
+  const rateLimit = await consumePublicAiRateLimit(c);
+  const reply = await requestGroqPublicChat(c.env, input);
+  const response = json(c, { ...reply, ...rateLimit });
+  response.headers.set("Cache-Control", "no-store");
+  response.headers.set("X-RateLimit-Remaining", String(rateLimit.remaining));
+  response.headers.set("X-RateLimit-Reset", rateLimit.resetAt);
   return response;
 });
 
@@ -6211,6 +6364,10 @@ async function scheduled(_event: ScheduledEvent, env: Env): Promise<void> {
   await ensurePublicGuildCounterStorage(env);
   await env.DB.prepare(
     "DELETE FROM guild_click_cooldowns WHERE last_clicked_at < datetime('now', '-1 day')"
+  ).run();
+  await ensureAiAssistantUsageStorage(env);
+  await env.DB.prepare(
+    "DELETE FROM ai_assistant_usage WHERE updated_at < datetime('now', '-1 day')"
   ).run();
 }
 

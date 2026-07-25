@@ -12,6 +12,7 @@ import {
   AlertTriangle,
   ArrowLeft,
   ArrowRight,
+  ArrowUp,
   AtSign,
   Ban,
   BadgeCheck,
@@ -834,6 +835,18 @@ type AssistantReply = {
   actions: AssistantAction[];
 };
 
+type PublicAiMessage = {
+  id: string;
+  role: "user" | "assistant";
+  content: string;
+};
+
+type PublicAiReply = {
+  answer: string;
+  remaining: number;
+  resetAt: string;
+};
+
 type ThemeMode = "dark" | "light";
 type ToastTone = "success" | "danger" | "warning" | "info";
 type HomeGuildFilter = "all" | "installed" | "missing" | "favorites";
@@ -1351,6 +1364,7 @@ const ASSISTANT_QUICK_PROMPTS = [
   "Prüfe meine nächsten sinnvollen Schritte.",
   "Wo finde ich das Ticket-System?"
 ];
+const PUBLIC_AI_STORAGE_KEY = "modmail-manager-public-ai-chat";
 
 type ToastPayload = {
   tone?: ToastTone;
@@ -2061,6 +2075,7 @@ function App() {
   else if (cleanPath === "/nutzungsbedingungen") page = <TermsPage />;
   else if (cleanPath === "/counters" || cleanPath === "/discord-clicker") page = <DiscordClickerPage />;
   else if (cleanPath === "/countings-topliste") page = <CountingLeaderboardPage />;
+  else if (cleanPath === "/ai") page = <PublicAiPage />;
   else if (cleanPath.startsWith("/admin/discordguilds/view/")) page = <AdminGuildViewPage path={cleanPath} />;
   else if (cleanPath === "/admin") page = <AdminPageModern />;
   else if (cleanPath === "/home" || cleanPath === "/panel") page = <HomePage />;
@@ -2076,7 +2091,7 @@ function App() {
   return (
     <>
       {page}
-      {showAssistant && <AiAssistant path={cleanPath} />}
+      {cleanPath !== "/ai" && <AiAssistant path={cleanPath} panelEnabled={showAssistant} />}
     </>
   );
 }
@@ -2151,7 +2166,7 @@ function demoAssistantReply(question: string, section: string | null): Assistant
   };
 }
 
-function AiAssistant({ path }: { path: string }) {
+function AiAssistant({ path, panelEnabled = true }: { path: string; panelEnabled?: boolean }) {
   const context = useMemo(() => assistantContext(path), [path]);
   const [open, setOpen] = useState(false);
   const [messages, setMessages] = useState<AssistantMessage[]>([ASSISTANT_STARTER_MESSAGE]);
@@ -2165,6 +2180,10 @@ function AiAssistant({ path }: { path: string }) {
     if (!open) return;
     textareaRef.current?.focus();
   }, [open]);
+
+  useEffect(() => {
+    if (!panelEnabled) setOpen(false);
+  }, [panelEnabled]);
 
   useEffect(() => {
     if (!open) return;
@@ -2249,8 +2268,8 @@ function AiAssistant({ path }: { path: string }) {
   }
 
   return (
-    <aside className={`ai-assistant ${open ? "is-open" : ""}`} aria-label="KI-Helfer">
-      {open && (
+    <aside className={`ai-assistant ${panelEnabled && open ? "is-open" : ""}`} aria-label="KI-Funktionen">
+      {panelEnabled && open && (
         <section className="ai-assistant-panel" role="dialog" aria-label="KI-Helfer Chat">
           <header className="ai-assistant-header">
             <span className="ai-assistant-mark"><Sparkles size={18} /></span>
@@ -2355,17 +2374,237 @@ function AiAssistant({ path }: { path: string }) {
         </section>
       )}
 
-      <button
-        type="button"
-        className="ai-assistant-launcher"
-        aria-label={open ? "KI-Helfer schließen" : "KI-Helfer öffnen"}
-        title={open ? "KI-Helfer schließen" : "KI-Helfer öffnen"}
-        onClick={() => setOpen((current) => !current)}
-      >
-        {open ? <X size={22} /> : <MessageCircle size={23} />}
-        {!open && <span>AI</span>}
-      </button>
+      <div className="ai-assistant-launchers">
+        <button
+          type="button"
+          className="ai-plus-launcher"
+          aria-label="ModmailBot KI öffnen"
+          title="ModmailBot KI öffnen"
+          onClick={() => navigate("/ai")}
+        >
+          AI+
+        </button>
+        {panelEnabled && (
+          <button
+            type="button"
+            className="ai-assistant-launcher"
+            aria-label={open ? "KI-Helfer schließen" : "KI-Helfer öffnen"}
+            title={open ? "KI-Helfer schließen" : "KI-Helfer öffnen"}
+            onClick={() => setOpen((current) => !current)}
+          >
+            {open ? <X size={22} /> : <MessageCircle size={23} />}
+            {!open && <span>AI</span>}
+          </button>
+        )}
+      </div>
     </aside>
+  );
+}
+
+function readPublicAiMessages(): PublicAiMessage[] {
+  try {
+    const stored = window.sessionStorage.getItem(PUBLIC_AI_STORAGE_KEY);
+    if (!stored) return [];
+    const parsed = JSON.parse(stored) as unknown;
+    if (!Array.isArray(parsed)) return [];
+    return parsed
+      .filter((message): message is PublicAiMessage => Boolean(
+        message
+        && typeof message === "object"
+        && "id" in message
+        && typeof message.id === "string"
+        && "role" in message
+        && (message.role === "user" || message.role === "assistant")
+        && "content" in message
+        && typeof message.content === "string"
+      ))
+      .slice(-20);
+  } catch {
+    return [];
+  }
+}
+
+function PublicAiContent({ content }: { content: string }) {
+  const parts: React.ReactNode[] = [];
+  const codeBlockPattern = /```([^\n`]*)\n?([\s\S]*?)```/g;
+  let cursor = 0;
+  let match: RegExpExecArray | null;
+
+  while ((match = codeBlockPattern.exec(content)) !== null) {
+    const prose = content.slice(cursor, match.index);
+    if (prose.trim()) {
+      parts.push(<p key={`text-${cursor}`}>{prose.trim()}</p>);
+    }
+    const language = match[1]?.trim();
+    parts.push(
+      <div className="public-ai-code" key={`code-${match.index}`}>
+        {language && <span>{language}</span>}
+        <pre><code>{match[2].trimEnd()}</code></pre>
+      </div>
+    );
+    cursor = match.index + match[0].length;
+  }
+
+  const remainder = content.slice(cursor);
+  if (remainder.trim() || parts.length === 0) {
+    parts.push(<p key={`text-${cursor}`}>{remainder.trim()}</p>);
+  }
+
+  return <div className="public-ai-answer-content">{parts}</div>;
+}
+
+function PublicAiPage() {
+  const [messages, setMessages] = useState<PublicAiMessage[]>(readPublicAiMessages);
+  const [draft, setDraft] = useState("");
+  const [sending, setSending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const threadRef = useRef<HTMLDivElement | null>(null);
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+
+  useEffect(() => {
+    try {
+      window.sessionStorage.setItem(PUBLIC_AI_STORAGE_KEY, JSON.stringify(messages.slice(-20)));
+    } catch {
+      // The chat still works if session storage is unavailable.
+    }
+  }, [messages]);
+
+  useEffect(() => {
+    const thread = threadRef.current;
+    if (thread) thread.scrollTop = thread.scrollHeight;
+  }, [messages, sending]);
+
+  useEffect(() => {
+    const textarea = textareaRef.current;
+    if (!textarea) return;
+    textarea.style.height = "auto";
+    textarea.style.height = `${Math.min(textarea.scrollHeight, 180)}px`;
+  }, [draft]);
+
+  async function sendPublicAiMessage() {
+    const content = draft.trim();
+    if (!content || sending) return;
+
+    const userMessage: PublicAiMessage = {
+      id: assistantMessageId(),
+      role: "user",
+      content: content.slice(0, 6000)
+    };
+    const conversation = [...messages, userMessage].slice(-20);
+    setMessages(conversation);
+    setDraft("");
+    setError(null);
+    setSending(true);
+
+    try {
+      const response = await api<PublicAiReply>("/api/public/ai/chat", {
+        method: "POST",
+        body: JSON.stringify({
+          messages: conversation.map(({ role, content: messageContent }) => ({
+            role,
+            content: messageContent
+          }))
+        })
+      });
+      const assistantMessage: PublicAiMessage = {
+        id: assistantMessageId(),
+        role: "assistant",
+        content: response.answer
+      };
+      setMessages((current) => [
+        ...current,
+        assistantMessage
+      ].slice(-20));
+    } catch (requestError) {
+      setMessages((current) => current.filter((message) => message.id !== userMessage.id));
+      setDraft(content);
+      setError(requestError instanceof Error ? requestError.message : "ModmailBot KI konnte gerade nicht antworten.");
+    } finally {
+      setSending(false);
+    }
+  }
+
+  return (
+    <div className="app-shell public-ai-shell">
+      <TopNav />
+      <main className={`public-ai-page ${messages.length > 0 ? "has-conversation" : ""}`}>
+        <section className="public-ai-stage" aria-label="ModmailBot KI Chat">
+          {messages.length === 0 ? (
+            <div className="public-ai-intro">
+              <span className="public-ai-brand-mark">AI+</span>
+              <h1>Wie kann ich dir helfen?</h1>
+              <p>Frag nach Wissen, Ideen, Texten, Code oder allem, wobei du gerade Unterstützung brauchst.</p>
+            </div>
+          ) : (
+            <div className="public-ai-thread" ref={threadRef} aria-live="polite">
+              {messages.map((message) => (
+                <article className={`public-ai-message ${message.role}`} key={message.id}>
+                  <span className="public-ai-message-author">
+                    {message.role === "assistant" ? <Sparkles size={16} /> : <UserRound size={16} />}
+                    {message.role === "assistant" ? "ModmailBot KI" : "Du"}
+                  </span>
+                  {message.role === "assistant"
+                    ? <PublicAiContent content={message.content} />
+                    : <p>{message.content}</p>}
+                </article>
+              ))}
+              {sending && (
+                <article className="public-ai-message assistant is-thinking">
+                  <span className="public-ai-message-author"><Sparkles size={16} /> ModmailBot KI</span>
+                  <div className="public-ai-thinking" aria-label="Antwort wird erstellt">
+                    <span />
+                    <span />
+                    <span />
+                  </div>
+                </article>
+              )}
+            </div>
+          )}
+
+          <form
+            className="public-ai-composer"
+            onSubmit={(event) => {
+              event.preventDefault();
+              void sendPublicAiMessage();
+            }}
+          >
+            <label htmlFor="public-ai-message">ModmailBot KI fragen</label>
+            <div>
+              <textarea
+                id="public-ai-message"
+                ref={textareaRef}
+                rows={1}
+                maxLength={6000}
+                value={draft}
+                placeholder="ModmailBot KI fragen"
+                aria-label="Nachricht an ModmailBot KI"
+                onChange={(event) => setDraft(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter" && !event.shiftKey) {
+                    event.preventDefault();
+                    void sendPublicAiMessage();
+                  }
+                }}
+              />
+              <button
+                type="submit"
+                disabled={!draft.trim() || sending}
+                aria-label="Nachricht senden"
+                title="Nachricht senden"
+              >
+                {sending ? <Loader2 className="spin" size={20} /> : <ArrowUp size={20} />}
+              </button>
+            </div>
+            {error && (
+              <p className="public-ai-error" role="alert">
+                <AlertTriangle size={15} />
+                {error}
+              </p>
+            )}
+          </form>
+        </section>
+      </main>
+    </div>
   );
 }
 
