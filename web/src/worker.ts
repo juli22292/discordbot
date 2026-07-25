@@ -14,6 +14,11 @@ import {
 } from "./server/cookies";
 import { decryptJson, encryptJson, randomToken, verifyInternalBotRequest } from "./server/crypto";
 import { all, asJson, first, newId, nowIso, parseJson } from "./server/db";
+import {
+  berlinDateKey,
+  buildGuildCounterSummary,
+  type PublicGuildCounter
+} from "./server/guild-counters";
 import { combineMediaChunks, detectImageMimeType, imageExtension, splitMediaBytes } from "./server/media";
 import {
   DiscordApiError,
@@ -134,6 +139,19 @@ interface GuildRow {
   name: string;
   icon: string | null;
   bot_joined_at: string | null;
+}
+
+interface PublicGuildCounterRow {
+  guild_id: string;
+  discord_guild_id: string;
+  name: string;
+  icon: string | null;
+  total_clicks: number | null;
+  daily_clicks: number | null;
+  current_day: string | null;
+  best_daily_clicks: number | null;
+  best_day: string | null;
+  last_clicked_at: string | null;
 }
 
 interface SettingsRow {
@@ -492,6 +510,191 @@ function requireDb(env: Env): D1Database {
   }
 
   return env.DB;
+}
+
+let publicGuildCounterStorageReady: Promise<void> | null = null;
+
+async function ensurePublicGuildCounterStorage(env: Env): Promise<void> {
+  if (!publicGuildCounterStorageReady) {
+    publicGuildCounterStorageReady = (async () => {
+      const db = requireDb(env);
+      await db.batch([
+        db.prepare(
+          `CREATE TABLE IF NOT EXISTS guild_click_counters (
+             guild_id TEXT PRIMARY KEY REFERENCES guilds(id) ON DELETE CASCADE,
+             total_clicks INTEGER NOT NULL DEFAULT 0,
+             daily_clicks INTEGER NOT NULL DEFAULT 0,
+             current_day TEXT,
+             best_daily_clicks INTEGER NOT NULL DEFAULT 0,
+             best_day TEXT,
+             last_clicked_at TEXT,
+             updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+           )`
+        ),
+        db.prepare(
+          `CREATE INDEX IF NOT EXISTS idx_guild_click_counters_total
+             ON guild_click_counters(total_clicks DESC, best_daily_clicks DESC)`
+        ),
+        db.prepare(
+          `CREATE TABLE IF NOT EXISTS guild_click_cooldowns (
+             guild_id TEXT NOT NULL REFERENCES guilds(id) ON DELETE CASCADE,
+             visitor_hash TEXT NOT NULL,
+             last_clicked_at TEXT NOT NULL,
+             PRIMARY KEY (guild_id, visitor_hash)
+           )`
+        ),
+        db.prepare(
+          `CREATE INDEX IF NOT EXISTS idx_guild_click_cooldowns_clicked
+             ON guild_click_cooldowns(last_clicked_at)`
+        )
+      ]);
+    })().catch((error) => {
+      publicGuildCounterStorageReady = null;
+      throw error;
+    });
+  }
+
+  await publicGuildCounterStorageReady;
+}
+
+function normalizePublicGuildCounter(row: PublicGuildCounterRow, day: string): PublicGuildCounter {
+  return {
+    id: row.discord_guild_id,
+    name: row.name,
+    icon: row.icon,
+    totalClicks: Math.max(0, Number(row.total_clicks ?? 0)),
+    todayClicks: row.current_day === day ? Math.max(0, Number(row.daily_clicks ?? 0)) : 0,
+    bestDailyClicks: Math.max(0, Number(row.best_daily_clicks ?? 0)),
+    bestDay: row.best_day,
+    lastClickedAt: row.last_clicked_at
+  };
+}
+
+async function loadPublicGuildCounters(env: Env): Promise<PublicGuildCounter[]> {
+  await ensurePublicGuildCounterStorage(env);
+  const day = berlinDateKey();
+  const rows = await all<PublicGuildCounterRow>(
+    requireDb(env).prepare(
+      `SELECT g.id AS guild_id,
+              g.discord_guild_id,
+              g.name,
+              g.icon,
+              counters.total_clicks,
+              counters.daily_clicks,
+              counters.current_day,
+              counters.best_daily_clicks,
+              counters.best_day,
+              counters.last_clicked_at
+         FROM guilds g
+         LEFT JOIN guild_click_counters counters ON counters.guild_id = g.id
+        WHERE g.bot_joined_at IS NOT NULL
+        ORDER BY COALESCE(counters.total_clicks, 0) DESC,
+                 COALESCE(counters.daily_clicks, 0) DESC,
+                 g.name COLLATE NOCASE ASC`
+    )
+  );
+  return rows.map((row) => normalizePublicGuildCounter(row, day));
+}
+
+async function publicCounterVisitorHash(c: HonoContext): Promise<string> {
+  const forwarded = c.req.header("CF-Connecting-IP")
+    || c.req.header("X-Forwarded-For")?.split(",")[0]?.trim()
+    || "unknown";
+  const userAgent = c.req.header("User-Agent") ?? "unknown";
+  const language = c.req.header("Accept-Language") ?? "";
+  const digest = await crypto.subtle.digest(
+    "SHA-256",
+    new TextEncoder().encode(`${forwarded}\n${userAgent}\n${language}`)
+  );
+  return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+
+async function registerPublicGuildClick(c: HonoContext, discordGuildId: string): Promise<PublicGuildCounter> {
+  snowflakeSchema.parse(discordGuildId);
+  await ensurePublicGuildCounterStorage(c.env);
+  const db = requireDb(c.env);
+  const guild = await first<GuildRow>(
+    db.prepare(
+      `SELECT id, discord_guild_id, name, icon, bot_joined_at
+         FROM guilds
+        WHERE discord_guild_id = ? AND bot_joined_at IS NOT NULL`
+    ).bind(discordGuildId)
+  );
+  if (!guild) {
+    throw new HttpError(404, "public_guild_not_found", "Diese Guild ist nicht mehr öffentlich verfügbar.");
+  }
+
+  const timestamp = nowIso();
+  const cooldownCutoff = new Date(Date.now() - 30_000).toISOString();
+  const visitorHash = await publicCounterVisitorHash(c);
+  const cooldown = await db.prepare(
+    `INSERT INTO guild_click_cooldowns (guild_id, visitor_hash, last_clicked_at)
+     VALUES (?, ?, ?)
+     ON CONFLICT(guild_id, visitor_hash) DO UPDATE SET
+       last_clicked_at = excluded.last_clicked_at
+     WHERE guild_click_cooldowns.last_clicked_at <= ?`
+  ).bind(guild.id, visitorHash, timestamp, cooldownCutoff).run();
+
+  if (Number(cooldown.meta?.changes ?? 0) === 0) {
+    throw new HttpError(429, "guild_click_cooldown", "Bitte warte 30 Sekunden, bevor du diese Guild erneut anklickst.");
+  }
+
+  const day = berlinDateKey();
+  await db.prepare(
+    `INSERT INTO guild_click_counters (
+       guild_id, total_clicks, daily_clicks, current_day,
+       best_daily_clicks, best_day, last_clicked_at, updated_at
+     )
+     VALUES (?, 1, 1, ?, 1, ?, ?, ?)
+     ON CONFLICT(guild_id) DO UPDATE SET
+       total_clicks = guild_click_counters.total_clicks + 1,
+       daily_clicks = CASE
+         WHEN guild_click_counters.current_day = excluded.current_day
+           THEN guild_click_counters.daily_clicks + 1
+         ELSE 1
+       END,
+       current_day = excluded.current_day,
+       best_daily_clicks = CASE
+         WHEN guild_click_counters.current_day = excluded.current_day
+          AND guild_click_counters.daily_clicks + 1 > guild_click_counters.best_daily_clicks
+           THEN guild_click_counters.daily_clicks + 1
+         WHEN guild_click_counters.current_day <> excluded.current_day
+          AND guild_click_counters.best_daily_clicks < 1
+           THEN 1
+         ELSE guild_click_counters.best_daily_clicks
+       END,
+       best_day = CASE
+         WHEN guild_click_counters.current_day = excluded.current_day
+          AND guild_click_counters.daily_clicks + 1 > guild_click_counters.best_daily_clicks
+           THEN excluded.current_day
+         WHEN guild_click_counters.current_day <> excluded.current_day
+          AND guild_click_counters.best_daily_clicks < 1
+           THEN excluded.current_day
+         ELSE guild_click_counters.best_day
+       END,
+       last_clicked_at = excluded.last_clicked_at,
+       updated_at = excluded.updated_at`
+  ).bind(guild.id, day, day, timestamp, timestamp).run();
+
+  const row = await first<PublicGuildCounterRow>(
+    db.prepare(
+      `SELECT g.id AS guild_id,
+              g.discord_guild_id,
+              g.name,
+              g.icon,
+              counters.total_clicks,
+              counters.daily_clicks,
+              counters.current_day,
+              counters.best_daily_clicks,
+              counters.best_day,
+              counters.last_clicked_at
+         FROM guilds g
+         JOIN guild_click_counters counters ON counters.guild_id = g.id
+        WHERE g.id = ?`
+    ).bind(guild.id)
+  );
+  if (!row) throw new HttpError(500, "guild_click_missing", "Der Klick konnte nicht gelesen werden.");
+  return normalizePublicGuildCounter(row, day);
 }
 
 function boundedEnvNumber(value: string | undefined, fallback: number, min: number, max: number): number {
@@ -2646,6 +2849,24 @@ app.onError((error, c) => {
   const message = error instanceof Error ? error.message : "Unbekannter Fehler.";
   console.error(error);
   return json(c, { error: { code: "internal_error", message } }, 500);
+});
+
+app.get("/api/public/guild-counters", async (c) => {
+  const guilds = await loadPublicGuildCounters(c.env);
+  const response = json(c, {
+    guilds,
+    summary: buildGuildCounterSummary(guilds),
+    generatedAt: nowIso()
+  });
+  response.headers.set("Cache-Control", "no-store");
+  return response;
+});
+
+app.post("/api/public/guild-counters/:guildId/click", async (c) => {
+  const guild = await registerPublicGuildClick(c, c.req.param("guildId"));
+  const response = json(c, { guild, cooldownSeconds: 30 });
+  response.headers.set("Cache-Control", "no-store");
+  return response;
 });
 
 app.get("/api/me", async (c) => {
@@ -5813,6 +6034,10 @@ async function scheduled(_event: ScheduledEvent, env: Env): Promise<void> {
   await env.DB.prepare("DELETE FROM sessions WHERE expires_at <= ?").bind(timestamp).run();
   await env.DB.prepare(
     "DELETE FROM sync_events WHERE status = 'completed' AND completed_at IS NOT NULL AND completed_at < datetime('now', '-30 days')"
+  ).run();
+  await ensurePublicGuildCounterStorage(env);
+  await env.DB.prepare(
+    "DELETE FROM guild_click_cooldowns WHERE last_clicked_at < datetime('now', '-1 day')"
   ).run();
 }
 

@@ -2,6 +2,7 @@ import "@fontsource-variable/inter";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import type { AssistantTarget } from "./server/assistant";
+import type { PublicGuildCounter, PublicGuildCounterSummary } from "./server/guild-counters";
 import {
   Activity,
   AlertTriangle,
@@ -44,6 +45,7 @@ import {
   MessageCircle,
   MessageSquare,
   Mic2,
+  MousePointerClick,
   Moon,
   Music2,
   Palette,
@@ -99,6 +101,12 @@ type GuildDetail = {
   botInstalled: boolean;
   botInstallStatus?: "installed" | "missing" | "unknown";
   permission: string;
+};
+
+type PublicGuildCounterResponse = {
+  guilds: PublicGuildCounter[];
+  summary: PublicGuildCounterSummary;
+  generatedAt: string;
 };
 
 type SettingsRow = {
@@ -2043,6 +2051,7 @@ function App() {
   else if (cleanPath === "/dokumentation") page = <DocumentationPage />;
   else if (cleanPath === "/datenschutz") page = <PrivacyPage />;
   else if (cleanPath === "/nutzungsbedingungen") page = <TermsPage />;
+  else if (cleanPath === "/counters") page = <GuildCountersPage />;
   else if (cleanPath.startsWith("/admin/discordguilds/view/")) page = <AdminGuildViewPage path={cleanPath} />;
   else if (cleanPath === "/admin") page = <AdminPageModern />;
   else if (cleanPath === "/home" || cleanPath === "/panel") page = <HomePage />;
@@ -2517,7 +2526,8 @@ function TopNav({ user, demoMode = false }: { user?: User | null; demoMode?: boo
     { key: "docs", label: "Dokumentation", path: "/dokumentation", icon: <ClipboardList size={17} />, active: cleanPath === "/dokumentation" },
     { key: "privacy", label: "Datenschutz", path: "/datenschutz", icon: <ShieldCheck size={17} />, active: cleanPath === "/datenschutz" },
     { key: "terms", label: "Nutzungsbedingungen", path: "/nutzungsbedingungen", icon: <ClipboardList size={17} />, active: cleanPath === "/nutzungsbedingungen" },
-    { key: "support", label: "Support", href: "https://discord.com/developers/docs/intro", icon: <LifeBuoy size={17} />, active: false }
+    { key: "support", label: "Support", href: "https://discord.com/developers/docs/intro", icon: <LifeBuoy size={17} />, active: false },
+    { key: "counters", label: "Counters", path: "/counters", icon: <BarChart3 size={17} />, active: cleanPath === "/counters" }
   ];
 
   const renderNavItem = (item: NavItem, mobile = false) => {
@@ -2774,6 +2784,11 @@ function PrivacyPage() {
       eyebrow: "Sync",
       title: "Welche technischen Sync-Daten entstehen",
       text: "Für Aufgaben zwischen Webpanel und Bot werden Sync-Events gespeichert. Dazu gehören Status, Anzahl der Versuche, Fehlermeldungen und technische Nutzdaten. Erfolgreich abgeschlossene Sync-Events werden nach einiger Zeit bereinigt."
+    },
+    {
+      eyebrow: "Guild Counters",
+      title: "Welche Daten in der öffentlichen Rangliste stehen",
+      text: "Die öffentliche Counter-Seite zeigt für aktuell verbundene Guilds nur Servername, Server-Icon, Discord-Server-ID und zusammengefasste Klickzahlen. Ein technischer, nicht direkt lesbarer Besucher-Hash verhindert versehentliche Mehrfachklicks und wird nach kurzer Zeit automatisch bereinigt."
     },
     {
       eyebrow: "Kontrolle",
@@ -3069,6 +3084,204 @@ function TermsPage() {
             ))}
           </div>
         </section>
+      </main>
+    </div>
+  );
+}
+
+const guildCounterNumber = new Intl.NumberFormat("de-DE");
+
+function formatGuildClickCount(value: number): string {
+  return `${guildCounterNumber.format(value)} ${value === 1 ? "Klick" : "Klicks"}`;
+}
+
+function formatGuildCounterDay(value: string | null): string {
+  if (!value) return "noch kein Rekord";
+  const [year, month, day] = value.split("-").map(Number);
+  if (!year || !month || !day) return value;
+  return new Date(year, month - 1, day, 12).toLocaleDateString("de-DE", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric"
+  });
+}
+
+function GuildCountersPage() {
+  const counters = useApi<PublicGuildCounterResponse>("/api/public/guild-counters", []);
+  const [search, setSearch] = useState("");
+  const [clickingGuildId, setClickingGuildId] = useState<string | null>(null);
+  const [cooldowns, setCooldowns] = useState<Record<string, number>>({});
+  const [clock, setClock] = useState(() => Date.now());
+  const guilds = counters.data?.guilds ?? [];
+  const summary = counters.data?.summary;
+  const highestTotal = Math.max(1, ...guilds.map((guild) => guild.totalClicks));
+  const filteredGuilds = useMemo(() => {
+    const needle = search.trim().toLocaleLowerCase("de-DE");
+    if (!needle) return guilds;
+    return guilds.filter((guild) =>
+      guild.name.toLocaleLowerCase("de-DE").includes(needle)
+      || guild.id.includes(needle)
+    );
+  }, [guilds, search]);
+
+  useEffect(() => {
+    const timer = window.setInterval(() => setClock(Date.now()), 1000);
+    return () => window.clearInterval(timer);
+  }, []);
+
+  async function registerClick(guild: PublicGuildCounter) {
+    if (clickingGuildId || (cooldowns[guild.id] ?? 0) > Date.now()) return;
+    setClickingGuildId(guild.id);
+    try {
+      const response = await api<{ guild: PublicGuildCounter; cooldownSeconds: number }>(
+        `/api/public/guild-counters/${encodeURIComponent(guild.id)}/click`,
+        { method: "POST" }
+      );
+      setCooldowns((current) => ({
+        ...current,
+        [guild.id]: Date.now() + response.cooldownSeconds * 1000
+      }));
+      notify({
+        tone: "success",
+        title: "Klick gezählt",
+        text: `${guild.name} steht jetzt bei ${formatGuildClickCount(response.guild.totalClicks)}.`
+      });
+      await counters.reload();
+    } catch (error) {
+      notify({
+        tone: "warning",
+        title: "Klick nicht gezählt",
+        text: error instanceof Error ? error.message : "Bitte versuche es gleich erneut."
+      });
+    } finally {
+      setClickingGuildId(null);
+    }
+  }
+
+  return (
+    <div className="app-shell">
+      <TopNav />
+      <main className="counter-page">
+        <section className="counter-hero reveal-card">
+          <div className="counter-hero-copy">
+            <p className="eyebrow"><BarChart3 size={15} /> Public Guild Ranking</p>
+            <h1>Guild Counters</h1>
+            <p>Alle Server, auf denen Modmail Manager aktuell verbunden ist. Gib deiner Guild einen Klick und verfolge live, wer insgesamt und an einem einzelnen Tag vorne liegt.</p>
+            <div className="counter-hero-note">
+              <ShieldCheck size={16} />
+              Öffentlich sichtbar. Ein Klick pro Guild alle 30 Sekunden.
+            </div>
+          </div>
+          <div className="counter-leader-spotlight">
+            <span className="counter-leader-icon"><Trophy size={24} /></span>
+            <small>Aktueller Spitzenreiter</small>
+            {summary?.leader ? (
+              <>
+                <div className="counter-leader-guild">
+                  <GuildIcon guild={summary.leader} />
+                  <strong>{summary.leader.name}</strong>
+                </div>
+                <b>{formatGuildClickCount(summary.leader.totalClicks)}</b>
+              </>
+            ) : (
+              <>
+                <strong>Noch offen</strong>
+                <p>Der erste Klick eröffnet das Ranking.</p>
+              </>
+            )}
+          </div>
+        </section>
+
+        <section className="counter-summary-grid" aria-label="Counter Übersicht">
+          <MetricCard icon={<Server size={18} />} label="Guilds" value={guildCounterNumber.format(summary?.guildCount ?? 0)} />
+          <MetricCard icon={<MousePointerClick size={18} />} label="Alle Klicks" value={guildCounterNumber.format(summary?.totalClicks ?? 0)} />
+          <MetricCard icon={<Activity size={18} />} label="Heute" value={guildCounterNumber.format(summary?.todayClicks ?? 0)} tone="ok" />
+          <MetricCard icon={<Trophy size={18} />} label="Tagesrekord" value={guildCounterNumber.format(summary?.dailyRecord?.bestDailyClicks ?? 0)} tone="warn" />
+        </section>
+
+        <div className="page-heading counter-heading">
+          <div>
+            <p className="eyebrow"><ListOrdered size={15} /> Live Rangliste</p>
+            <h2>Alle Discord-Server</h2>
+            <p>{filteredGuilds.length} von {guilds.length} verbundenen Guilds sichtbar.</p>
+          </div>
+          <RefreshButton loading={counters.loading} onClick={counters.reload} />
+        </div>
+
+        <section className="counter-toolbar">
+          <label className="home-search">
+            <Search size={16} />
+            <input
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+              placeholder="Guild-Name oder Server-ID suchen"
+              aria-label="Öffentliche Guilds durchsuchen"
+            />
+          </label>
+          <span><Globe2 size={15} /> Für jeden ohne Login sichtbar</span>
+        </section>
+
+        {counters.loading && !counters.data && (
+          <LoadingBlock text="Guild Counters werden geladen" detail="Die öffentliche Rangliste wird aus der Datenbank abgefragt." />
+        )}
+        {!counters.loading && counters.error && <Notice tone="danger" text={counters.error} />}
+        {!counters.loading && counters.data && guilds.length === 0 && (
+          <EmptyState title="Noch keine verbundenen Guilds" text="Sobald sich der Bot mit einer Guild synchronisiert, erscheint sie automatisch hier." />
+        )}
+        {!counters.loading && counters.data && guilds.length > 0 && filteredGuilds.length === 0 && (
+          <EmptyState title="Keine Guild gefunden" text="Unter diesem Namen oder dieser Server-ID gibt es aktuell keinen Treffer." />
+        )}
+
+        {filteredGuilds.length > 0 && (
+          <section className="counter-ranking" aria-label="Guild Klick-Rangliste">
+            {filteredGuilds.map((guild) => {
+              const ranking = guilds.findIndex((item) => item.id === guild.id) + 1;
+              const remaining = Math.max(0, Math.ceil(((cooldowns[guild.id] ?? 0) - clock) / 1000));
+              const clicking = clickingGuildId === guild.id;
+              const progress = Math.max(2, Math.round((guild.totalClicks / highestTotal) * 100));
+              return (
+                <article className={`counter-guild-row ${ranking === 1 && guild.totalClicks > 0 ? "is-leader" : ""}`} key={guild.id}>
+                  <span className="counter-rank">{ranking === 1 && guild.totalClicks > 0 ? <Trophy size={18} /> : `#${ranking}`}</span>
+                  <GuildIcon guild={guild} />
+                  <div className="counter-guild-main">
+                    <div className="counter-guild-title">
+                      <div>
+                        <h2>{guild.name}</h2>
+                        <p>{guild.id}</p>
+                      </div>
+                      {ranking === 1 && guild.totalClicks > 0 && <span className="pill warn">Spitzenreiter</span>}
+                    </div>
+                    <div className="counter-progress" aria-label={formatGuildClickCount(guild.totalClicks)}>
+                      <span style={{ "--counter-progress": `${progress}%` } as React.CSSProperties} />
+                    </div>
+                  </div>
+                  <div className="counter-guild-stats">
+                    <span><small>Gesamt</small><strong>{guildCounterNumber.format(guild.totalClicks)}</strong></span>
+                    <span><small>Heute</small><strong>{guildCounterNumber.format(guild.todayClicks)}</strong></span>
+                    <span title={formatGuildCounterDay(guild.bestDay)}>
+                      <small>Tagesrekord</small>
+                      <strong>{guildCounterNumber.format(guild.bestDailyClicks)}</strong>
+                    </span>
+                  </div>
+                  <button
+                    className="primary-action counter-click-action"
+                    type="button"
+                    disabled={clicking || remaining > 0}
+                    onClick={() => void registerClick(guild)}
+                  >
+                    {clicking ? <Loader2 className="spin" size={16} /> : <MousePointerClick size={16} />}
+                    {clicking ? "Zählt" : remaining > 0 ? `${remaining} s` : "Klick geben"}
+                  </button>
+                </article>
+              );
+            })}
+          </section>
+        )}
+
+        <p className="counter-privacy-note">
+          <ShieldCheck size={14} />
+          Öffentlich sind ausschließlich Guild-Name, Icon, Server-ID und aggregierte Klickzahlen. Mitglieder und Einstellungen bleiben privat.
+        </p>
       </main>
     </div>
   );

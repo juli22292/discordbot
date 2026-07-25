@@ -476,9 +476,9 @@ b {
   display: grid;
   grid-template-columns: auto 1fr auto auto auto;
   align-items: center;
-  gap: 16px;
+  gap: 12px;
   min-height: var(--top-nav-height);
-  padding: 14px 22px;
+  padding: 14px 16px;
   border-bottom: 1px solid var(--border-soft);
   background: var(--topbar-bg);
   backdrop-filter: blur(16px);
@@ -513,8 +513,8 @@ b {
 .top-links {
   display: flex;
   min-width: 0;
-  flex-wrap: wrap;
-  gap: 8px;
+  flex-wrap: nowrap;
+  gap: 4px;
   align-items: center;
 }
 
@@ -1004,6 +1004,326 @@ b {
   font-size: 20px;
 }
 
+.counter-page {
+  width: min(1180px, calc(100vw - 32px));
+  margin: 0 auto;
+  padding: 34px 0 72px;
+}
+
+.counter-hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 330px;
+  gap: 22px;
+  align-items: stretch;
+  min-height: 270px;
+  padding: 28px;
+  border: 1px solid rgba(104, 168, 255, 0.2);
+  border-radius: 8px;
+  background:
+    linear-gradient(135deg, rgba(104, 168, 255, 0.12), transparent 40%),
+    linear-gradient(225deg, rgba(244, 189, 99, 0.07), transparent 35%),
+    var(--panel-bg-strong);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05), var(--shadow);
+}
+
+.counter-hero-copy {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  justify-content: center;
+}
+
+.counter-hero h1 {
+  margin: 9px 0 12px;
+  font-size: 46px;
+  line-height: 1;
+  letter-spacing: 0;
+}
+
+.counter-hero-copy > p:not(.eyebrow) {
+  max-width: 690px;
+  margin: 0;
+  color: var(--muted-strong);
+  font-size: 17px;
+  line-height: 1.65;
+}
+
+.counter-hero-note,
+.counter-privacy-note,
+.counter-toolbar > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--muted);
+}
+
+.counter-hero-note {
+  width: fit-content;
+  margin-top: 22px;
+  padding: 9px 11px;
+  border: 1px solid rgba(47, 191, 122, 0.2);
+  border-radius: 8px;
+  color: var(--muted-strong);
+  background: rgba(47, 191, 122, 0.07);
+}
+
+.counter-hero-note svg,
+.counter-privacy-note svg {
+  flex: 0 0 auto;
+  color: var(--green);
+}
+
+.counter-leader-spotlight {
+  display: grid;
+  align-content: center;
+  gap: 10px;
+  min-width: 0;
+  padding: 22px;
+  border: 1px solid rgba(244, 189, 99, 0.22);
+  border-radius: 8px;
+  background:
+    linear-gradient(145deg, rgba(244, 189, 99, 0.1), transparent 48%),
+    var(--field-bg);
+}
+
+.counter-leader-icon {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 8px;
+  color: var(--amber);
+  background: rgba(244, 189, 99, 0.1);
+}
+
+.counter-leader-spotlight small {
+  color: var(--muted);
+}
+
+.counter-leader-spotlight > strong {
+  font-size: 22px;
+}
+
+.counter-leader-spotlight > b {
+  color: var(--amber);
+  font-size: 28px;
+  font-weight: 700;
+}
+
+.counter-leader-spotlight > p {
+  margin: 0;
+  color: var(--muted);
+}
+
+.counter-leader-guild {
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr);
+  align-items: center;
+  gap: 11px;
+}
+
+.counter-leader-guild .guild-icon {
+  width: 44px;
+  height: 44px;
+}
+
+.counter-leader-guild strong {
+  min-width: 0;
+  overflow: hidden;
+  font-size: 21px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.counter-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.counter-summary-grid .metric-card {
+  min-height: 112px;
+}
+
+.counter-heading {
+  margin: 28px 0 14px;
+}
+
+.counter-heading .eyebrow {
+  margin-bottom: 7px;
+}
+
+.counter-heading h2 {
+  margin: 0 0 4px;
+}
+
+.counter-toolbar {
+  display: grid;
+  grid-template-columns: minmax(260px, 1fr) auto;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 14px;
+  padding: 10px;
+  border: 1px solid var(--border-soft);
+  border-radius: 8px;
+  background: var(--panel-bg-soft);
+}
+
+.counter-toolbar > span {
+  padding-right: 6px;
+  white-space: nowrap;
+}
+
+.counter-toolbar > span svg {
+  color: var(--blue);
+}
+
+.counter-ranking {
+  display: grid;
+  gap: 10px;
+}
+
+.counter-guild-row {
+  position: relative;
+  display: grid;
+  grid-template-columns: 42px 52px minmax(180px, 1fr) minmax(245px, 0.75fr) 132px;
+  align-items: center;
+  gap: 14px;
+  min-height: 104px;
+  padding: 14px;
+  overflow: hidden;
+  border: 1px solid var(--border-soft);
+  border-radius: 8px;
+  background:
+    linear-gradient(145deg, rgba(255, 255, 255, 0.035), transparent 48%),
+    var(--panel-bg);
+  transition: border-color 160ms ease, background 160ms ease, transform 160ms ease;
+}
+
+.counter-guild-row:hover {
+  border-color: rgba(104, 168, 255, 0.3);
+  background:
+    linear-gradient(145deg, rgba(104, 168, 255, 0.07), transparent 48%),
+    var(--panel-bg-strong);
+  transform: translateY(-1px);
+}
+
+.counter-guild-row.is-leader {
+  border-color: rgba(244, 189, 99, 0.3);
+  box-shadow: inset 3px 0 0 rgba(244, 189, 99, 0.72);
+}
+
+.counter-guild-row > .guild-icon {
+  width: 52px;
+  height: 52px;
+}
+
+.counter-rank {
+  display: grid;
+  place-items: center;
+  width: 38px;
+  min-height: 38px;
+  border-radius: 8px;
+  color: var(--muted-strong);
+  background: rgba(255, 255, 255, 0.055);
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.counter-guild-row.is-leader .counter-rank {
+  color: var(--amber);
+  background: rgba(244, 189, 99, 0.1);
+}
+
+.counter-guild-main {
+  min-width: 0;
+}
+
+.counter-guild-title {
+  display: flex;
+  min-width: 0;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.counter-guild-title > div {
+  min-width: 0;
+}
+
+.counter-guild-title h2 {
+  margin: 0;
+  overflow: hidden;
+  font-size: 18px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.counter-guild-title p {
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.counter-progress {
+  height: 5px;
+  margin-top: 11px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.counter-progress span {
+  display: block;
+  width: var(--counter-progress);
+  height: 100%;
+  border-radius: inherit;
+  background: var(--blue);
+  transition: width 260ms ease;
+}
+
+.counter-guild-row.is-leader .counter-progress span {
+  background: var(--amber);
+}
+
+.counter-guild-stats {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.counter-guild-stats span {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  padding: 8px 9px;
+  border-left: 1px solid var(--border-soft);
+}
+
+.counter-guild-stats small {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.counter-guild-stats strong {
+  color: var(--text);
+  font-size: 17px;
+}
+
+.counter-click-action {
+  width: 132px;
+  min-width: 132px;
+  min-height: 42px;
+  padding-inline: 12px;
+}
+
+.counter-privacy-note {
+  justify-content: center;
+  margin: 20px auto 0;
+  text-align: center;
+}
+
 .home-hero {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
@@ -1130,7 +1450,7 @@ b {
   justify-content: center;
   gap: 7px;
   min-height: 40px;
-  padding: 8px 10px;
+  padding: 8px;
   border: 1px solid var(--border-soft);
   border-radius: 8px;
   color: var(--muted-strong);
@@ -6106,7 +6426,8 @@ textarea {
 :root[data-theme="light"] .level-hero,
 :root[data-theme="light"] .counting-hero,
 :root[data-theme="light"] .planned-hero,
-:root[data-theme="light"] .docs-hero {
+:root[data-theme="light"] .docs-hero,
+:root[data-theme="light"] .counter-hero {
   border-color: rgba(36, 107, 219, 0.18);
   background:
     linear-gradient(135deg, rgba(36, 107, 219, 0.11), transparent 38%),
@@ -6174,7 +6495,10 @@ textarea {
 :root[data-theme="light"] .home-tools,
 :root[data-theme="light"] .home-filter-tabs button,
 :root[data-theme="light"] .guild-invite-diagnose,
-:root[data-theme="light"] .role-chip {
+:root[data-theme="light"] .role-chip,
+:root[data-theme="light"] .counter-leader-spotlight,
+:root[data-theme="light"] .counter-toolbar,
+:root[data-theme="light"] .counter-guild-row {
   border-color: var(--border-soft);
   background:
     linear-gradient(145deg, rgba(255, 255, 255, 0.44), transparent 48%),
@@ -6203,6 +6527,7 @@ textarea {
 :root[data-theme="light"] .guild-card:hover,
 :root[data-theme="light"] .guild-card.missing,
 :root[data-theme="light"] .guild-card.missing:hover,
+:root[data-theme="light"] .counter-guild-row:hover,
 :root[data-theme="light"] .command-row,
 :root[data-theme="light"] .command-row:hover,
 :root[data-theme="light"] .discord-preview,
@@ -6418,6 +6743,7 @@ textarea {
   .auth-layout,
   .home-hero,
   .docs-hero,
+  .counter-hero,
   .docs-manual,
   .dashboard-layout,
   .section-grid,
@@ -6437,6 +6763,10 @@ textarea {
   .owner-overview-grid,
   .docs-highlight-grid {
     grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .counter-summary-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .owner-health-summary {
@@ -6613,6 +6943,7 @@ textarea {
   .auth-panel,
   .auth-showcase,
   .home-hero,
+  .counter-hero,
   .panel,
   .custom-item,
   .empty-state {
@@ -6621,6 +6952,7 @@ textarea {
 
   .auth-copy h1,
   .docs-hero h1,
+  .counter-hero h1,
   .home-hero h1,
   .page-heading h1,
   .guild-heading h1 {
@@ -6632,6 +6964,7 @@ textarea {
   .docs-highlight-grid,
   .form-grid,
   .home-tools,
+  .counter-toolbar,
   .owner-current-status,
   .owner-overview-grid,
   .owner-presets,
@@ -6644,6 +6977,34 @@ textarea {
   .guild-card,
   .planned-hero {
     grid-template-columns: 1fr;
+  }
+
+  .counter-summary-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .counter-guild-row {
+    grid-template-columns: 38px 48px minmax(0, 1fr);
+    align-items: start;
+  }
+
+  .counter-guild-row > .guild-icon {
+    width: 48px;
+    height: 48px;
+  }
+
+  .counter-guild-stats,
+  .counter-click-action {
+    grid-column: 2 / -1;
+  }
+
+  .counter-click-action {
+    width: 100%;
+  }
+
+  .counter-toolbar > span {
+    padding: 0 2px 2px;
+    white-space: normal;
   }
 
   .owner-source-actions {
@@ -6706,6 +7067,7 @@ textarea {
   }
 
   .docs-hero,
+  .counter-hero,
   .docs-manual {
     padding: 18px;
   }
