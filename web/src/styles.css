@@ -6036,10 +6036,8 @@ textarea {
 
 .loading-block {
   display: grid;
-  grid-template-columns: auto minmax(0, auto);
-  align-items: center;
-  justify-content: center;
-  gap: 4px 10px;
+  place-items: center;
+  gap: 5px;
   min-height: 56px;
   padding: 12px 16px;
   border: 1px solid var(--border-soft);
@@ -6051,7 +6049,15 @@ textarea {
   text-align: left;
 }
 
+.loading-block-title {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+}
+
 .loading-block svg {
+  flex: 0 0 auto;
   color: var(--blue);
 }
 
@@ -6060,7 +6066,6 @@ textarea {
 }
 
 .loading-block small {
-  grid-column: 1 / -1;
   max-width: 42ch;
   color: var(--muted);
   text-align: center;
@@ -8268,12 +8273,6 @@ textarea {
 
 .ai-assistant-composer > small span {
   min-width: 0;
-}
-
-.ai-assistant-composer > small b {
-  flex: 0 0 auto;
-  color: var(--muted-strong);
-  font-weight: 700;
 }
 
 .ai-assistant-launcher {

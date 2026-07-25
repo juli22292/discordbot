@@ -32,7 +32,7 @@ wrangler secret put GROQ_API_KEY
 
 Optionale Worker-Variablen sind `GROQ_MODEL` (Standard:
 `llama-3.3-70b-versatile`), `GROQ_TIMEOUT_SECONDS`,
-`GROQ_MAX_COMPLETION_TOKENS` und `GROQ_REQUESTS_PER_HOUR`.
+`GROQ_MAX_COMPLETION_TOKENS`.
 
 ## Bot-Server
 

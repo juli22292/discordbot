@@ -22,7 +22,6 @@ export interface Env {
   GROQ_MODEL?: string;
   GROQ_TIMEOUT_SECONDS?: string;
   GROQ_MAX_COMPLETION_TOKENS?: string;
-  GROQ_REQUESTS_PER_HOUR?: string;
 }
 
 export interface DiscordUser {

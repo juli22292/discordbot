@@ -397,8 +397,6 @@ interface OAuthStateData {
 
 type BotInstallStatus = "installed" | "missing" | "unknown";
 const sessionTokenRefreshes = new Map<string, Promise<TokenData>>();
-const assistantMemoryUsage = new Map<string, { windowStart: string; requestCount: number }>();
-let assistantStorageReady: Promise<void> | null = null;
 
 function json(c: HonoContext, data: unknown, status = 200): Response {
   return c.json(data, status as 200);
@@ -500,71 +498,6 @@ function boundedEnvNumber(value: string | undefined, fallback: number, min: numb
   const parsed = Number(value ?? "");
   if (!Number.isFinite(parsed)) return fallback;
   return Math.max(min, Math.min(max, Math.round(parsed)));
-}
-
-function currentHourWindow(): string {
-  const window = new Date();
-  window.setUTCMinutes(0, 0, 0);
-  return window.toISOString();
-}
-
-async function ensureAssistantUsageStorage(env: Env): Promise<void> {
-  if (!hasDb(env)) return;
-  if (!assistantStorageReady) {
-    assistantStorageReady = (async () => {
-      await env.DB.prepare(
-        `CREATE TABLE IF NOT EXISTS ai_assistant_usage (
-          user_id TEXT NOT NULL,
-          window_start TEXT NOT NULL,
-          request_count INTEGER NOT NULL DEFAULT 0,
-          updated_at TEXT NOT NULL,
-          PRIMARY KEY (user_id, window_start)
-        )`
-      ).run();
-      await env.DB.prepare(
-        "CREATE INDEX IF NOT EXISTS idx_ai_assistant_usage_updated_at ON ai_assistant_usage(updated_at)"
-      ).run();
-    })().catch((error) => {
-      assistantStorageReady = null;
-      throw error;
-    });
-  }
-  await assistantStorageReady;
-}
-
-async function consumeAssistantQuota(env: Env, userId: string): Promise<{ remaining: number; limit: number }> {
-  const limit = boundedEnvNumber(env.GROQ_REQUESTS_PER_HOUR, 30, 5, 120);
-  const windowStart = currentHourWindow();
-
-  if (!hasDb(env)) {
-    const current = assistantMemoryUsage.get(userId);
-    const requestCount = current?.windowStart === windowStart ? current.requestCount : 0;
-    if (requestCount >= limit) {
-      throw new HttpError(429, "assistant_rate_limited", "Dein KI-Limit für diese Stunde ist erreicht.");
-    }
-    assistantMemoryUsage.set(userId, { windowStart, requestCount: requestCount + 1 });
-    return { remaining: Math.max(0, limit - requestCount - 1), limit };
-  }
-
-  await ensureAssistantUsageStorage(env);
-  const current = await first<{ request_count: number }>(
-    env.DB.prepare(
-      "SELECT request_count FROM ai_assistant_usage WHERE user_id = ? AND window_start = ?"
-    ).bind(userId, windowStart)
-  );
-  const requestCount = Number(current?.request_count ?? 0);
-  if (requestCount >= limit) {
-    throw new HttpError(429, "assistant_rate_limited", "Dein KI-Limit für diese Stunde ist erreicht.");
-  }
-
-  await env.DB.prepare(
-    `INSERT INTO ai_assistant_usage (user_id, window_start, request_count, updated_at)
-     VALUES (?, ?, 1, ?)
-     ON CONFLICT(user_id, window_start)
-     DO UPDATE SET request_count = request_count + 1, updated_at = excluded.updated_at`
-  ).bind(userId, windowStart, nowIso()).run();
-
-  return { remaining: Math.max(0, limit - requestCount - 1), limit };
 }
 
 async function requestGroqAssistant(
@@ -2727,15 +2660,11 @@ app.get("/api/me", async (c) => {
 });
 
 app.post("/api/assistant/chat", async (c) => {
-  const session = await requireSession(c);
+  await requireSession(c);
   const input = assistantChatSchema.parse(await readJsonBody(c));
-  const quota = await consumeAssistantQuota(c.env, session.user.discordUserId);
   const response = await requestGroqAssistant(c.env, input);
 
-  return json(c, {
-    ...response,
-    quota
-  });
+  return json(c, response);
 });
 
 app.get("/api/auth/discord", async (c) => {
@@ -5842,10 +5771,6 @@ async function scheduled(_event: ScheduledEvent, env: Env): Promise<void> {
   await env.DB.prepare("DELETE FROM sessions WHERE expires_at <= ?").bind(timestamp).run();
   await env.DB.prepare(
     "DELETE FROM sync_events WHERE status = 'completed' AND completed_at IS NOT NULL AND completed_at < datetime('now', '-30 days')"
-  ).run();
-  await ensureAssistantUsageStorage(env);
-  await env.DB.prepare(
-    "DELETE FROM ai_assistant_usage WHERE updated_at < datetime('now', '-2 days')"
   ).run();
 }
 

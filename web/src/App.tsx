@@ -702,10 +702,6 @@ type AssistantMessage = {
 type AssistantReply = {
   answer: string;
   actions: AssistantAction[];
-  quota?: {
-    remaining: number;
-    limit: number;
-  };
 };
 
 type ThemeMode = "dark" | "light";
@@ -2001,7 +1997,6 @@ function AiAssistant({ path }: { path: string }) {
   const [draft, setDraft] = useState("");
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [quota, setQuota] = useState<{ remaining: number; limit: number } | null>(null);
   const messageListRef = useRef<HTMLDivElement | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
 
@@ -2057,7 +2052,6 @@ function AiAssistant({ path }: { path: string }) {
         actions: response.actions
       };
       setMessages((current) => [...current, assistantMessage].slice(-12));
-      if (response.quota) setQuota(response.quota);
     } catch (requestError) {
       setError(requestError instanceof Error ? requestError.message : "Der KI-Helfer konnte nicht antworten.");
     } finally {
@@ -2091,7 +2085,6 @@ function AiAssistant({ path }: { path: string }) {
     setMessages([ASSISTANT_STARTER_MESSAGE]);
     setDraft("");
     setError(null);
-    setQuota(null);
   }
 
   return (
@@ -2196,7 +2189,6 @@ function AiAssistant({ path }: { path: string }) {
             </div>
             <small>
               <span>KI kann Fehler machen. Änderungen werden nie automatisch gespeichert.</span>
-              {quota && <b>{quota.remaining}/{quota.limit}</b>}
             </small>
           </footer>
         </section>
@@ -8457,8 +8449,10 @@ function ModuleInactiveState({
 function LoadingBlock({ text = "Laden", detail }: { text?: string; detail?: string }) {
   return (
     <div className="loading-block" role="status" aria-live="polite">
-      <Loader2 className="spin" size={18} />
-      <strong>{text}</strong>
+      <div className="loading-block-title">
+        <Loader2 className="spin" size={18} />
+        <strong>{text}</strong>
+      </div>
       {detail && <small>{detail}</small>}
     </div>
   );
