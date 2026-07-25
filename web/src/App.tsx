@@ -2890,188 +2890,6 @@ function activityLabel(value: string | null | undefined) {
   }
 }
 
-function AdminPage() {
-  const me = useApi<{ user: User }>("/api/me", []);
-  const admin = useApi<AdminData>("/api/admin/bot", []);
-  const runtime = admin.data?.runtime ?? null;
-  const [presence, setPresence] = useState({ status: "online", activityType: "none", text: "", url: "" });
-  const [saving, setSaving] = useState(false);
-  const [status, setStatus] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (!runtime) return;
-    setPresence({
-      status: runtime.status || "online",
-      activityType: runtime.activityType || "none",
-      text: runtime.activityText || "",
-      url: ""
-    });
-  }, [runtime?.updatedAt]);
-
-  const lastSeenAge = runtime?.updatedAt ? Math.max(0, Math.floor((Date.now() - new Date(runtime.updatedAt).getTime()) / 1000)) : null;
-  const onlineTone = lastSeenAge !== null && lastSeenAge < 90 ? "ok" : "warn";
-
-  async function savePresence() {
-    setSaving(true);
-    setStatus(null);
-    try {
-      await api("/api/admin/bot/presence", {
-        method: "POST",
-        body: JSON.stringify(presence)
-      });
-      setStatus("Statusänderung wurde an den Bot gesendet.");
-      window.setTimeout(() => void admin.reload(), 12000);
-    } catch (error) {
-      setStatus(error instanceof Error ? error.message : "Status konnte nicht geändert werden.");
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  return (
-    <div className="app-shell">
-      <TopNav user={me.data?.user} />
-      <main className="content narrow admin-page">
-        <section className="admin-hero">
-          <div>
-            <p className="eyebrow">
-              <Gauge size={15} />
-              Modmail Manager Admin
-            </p>
-            <h1>Bot Control Center</h1>
-            <p>Status setzen, Laufzeitdaten sehen und prüfen, ob Sync, RAM, Latenz und Guild-Snapshot sauber laufen.</p>
-          </div>
-          <RefreshButton loading={admin.loading} onClick={admin.reload} />
-        </section>
-
-        {admin.loading && !admin.data && <LoadingBlock />}
-        {admin.error && <Notice tone="danger" text={admin.error} />}
-
-        {!admin.loading && !runtime && !admin.error && (
-          <EmptyState title="Noch kein Bot-Heartbeat" text="Sobald die aktualisierte bot.py läuft, sendet der Bot seine Live-Daten automatisch ans Webpanel." />
-        )}
-
-        {admin.data && (
-          <>
-            <section className="overview-tiles wide">
-              <StatusTile icon={<Activity size={19} />} label="Bot" value={lastSeenAge === null ? "wartet" : lastSeenAge < 90 ? "online" : "stale"} tone={onlineTone} />
-              <StatusTile icon={<Gauge size={19} />} label="Latenz" value={runtime?.latencyMs !== null && runtime?.latencyMs !== undefined ? `${Math.round(runtime.latencyMs)} ms` : "-"} />
-              <StatusTile icon={<Cpu size={19} />} label="RAM" value={runtime?.ramMb !== null && runtime?.ramMb !== undefined ? `${runtime.ramMb.toFixed(1)} MB` : "-"} />
-              <StatusTile icon={<Server size={19} />} label="Guilds" value={String(runtime?.guildCount ?? admin.data.stats.installedGuilds ?? 0)} tone="ok" />
-            </section>
-
-            <section className="admin-grid">
-              <div className="panel">
-                <div className="panel-title">
-                  <h2>Status ändern</h2>
-                  <span className="pill neutral">wie /status</span>
-                </div>
-                <div className="form-grid">
-                  <label>
-                    Online-Status
-                    <select value={presence.status} onChange={(event) => setPresence({ ...presence, status: event.target.value })}>
-                      <option value="online">Online</option>
-                      <option value="idle">Abwesend</option>
-                      <option value="dnd">Bitte nicht stören</option>
-                      <option value="offline">Offline</option>
-                    </select>
-                  </label>
-                  <label>
-                    Aktivität
-                    <select value={presence.activityType} onChange={(event) => setPresence({ ...presence, activityType: event.target.value })}>
-                      <option value="none">Keine Aktivität</option>
-                      <option value="playing">Spielt</option>
-                      <option value="watching">Schaut</option>
-                      <option value="listening">Hört</option>
-                      <option value="streaming">Streamt</option>
-                      <option value="custom">Eigener Status</option>
-                    </select>
-                  </label>
-                  <label className="wide">
-                    Text
-                    <input value={presence.text} maxLength={128} onChange={(event) => setPresence({ ...presence, text: event.target.value })} placeholder="Minecraft, /help, Wartung..." />
-                  </label>
-                  {presence.activityType === "streaming" && (
-                    <label className="wide">
-                      Streaming-URL
-                      <input value={presence.url} onChange={(event) => setPresence({ ...presence, url: event.target.value })} placeholder="https://twitch.tv/discord" />
-                    </label>
-                  )}
-                </div>
-                <ActionStatus status={status} />
-                <div className="form-actions">
-                  <button className="primary-action inline" onClick={savePresence} disabled={saving}>
-                    {saving ? <Loader2 className="spin" size={16} /> : <Save size={16} />}
-                    Status speichern
-                  </button>
-                </div>
-              </div>
-
-              <div className="panel admin-console">
-                <div className="panel-title">
-                  <h2>Live Runtime</h2>
-                  <span className={lastSeenAge !== null && lastSeenAge < 90 ? "pill ok" : "pill warn"}>
-                    {lastSeenAge === null ? "wartet" : `vor ${lastSeenAge}s`}
-                  </span>
-                </div>
-                <dl className="facts">
-                  <div><dt>Status</dt><dd>{statusLabel(runtime?.status)}</dd></div>
-                  <div><dt>Aktivität</dt><dd>{activityLabel(runtime?.activityType)} {runtime?.activityText ? `- ${runtime.activityText}` : ""}</dd></div>
-                  <div><dt>Bot-Version</dt><dd>{runtime?.botVersion || "-"}</dd></div>
-                  <div><dt>Uptime</dt><dd>{formatDuration(runtime?.uptimeSeconds)}</dd></div>
-                  <div><dt>Python</dt><dd>{runtime?.pythonVersion || "-"}</dd></div>
-                  <div><dt>discord.py</dt><dd>{runtime?.discordPyVersion || "-"}</dd></div>
-                  <div><dt>CPU</dt><dd>{runtime?.cpuPercent !== null && runtime?.cpuPercent !== undefined ? `${runtime.cpuPercent.toFixed(1)}%` : "-"}</dd></div>
-                  <div><dt>Commands</dt><dd>{runtime?.commandCount ?? admin.data.stats.knownCommands}</dd></div>
-                  <div><dt>Letzter Heartbeat</dt><dd>{formatDateTime(runtime?.updatedAt)}</dd></div>
-                </dl>
-              </div>
-            </section>
-
-            <section className="admin-grid">
-              <div className="panel">
-                <div className="panel-title">
-                  <h2>Guilds</h2>
-                  <span className="pill">{runtime?.userCount ?? 0} User</span>
-                </div>
-                <div className="admin-guild-list">
-                  {(runtime?.details.guilds ?? []).slice(0, 12).map((guild) => (
-                    <article key={guild.id}>
-                      <strong>{guild.name}</strong>
-                      <span>{guild.memberCount} Mitglieder</span>
-                      <small>{guild.channelCount} Kanäle · {guild.roleCount} Rollen</small>
-                    </article>
-                  ))}
-                  {(runtime?.details.guilds ?? []).length === 0 && <p className="muted">Noch keine Guild-Details im Heartbeat.</p>}
-                </div>
-              </div>
-
-              <div className="panel">
-                <div className="panel-title">
-                  <h2>Sync-Events</h2>
-                  <span className={admin.data.adminRestricted ? "pill ok" : "pill warn"}>
-                    {admin.data.adminRestricted ? "ID-Lock" : "Login-Lock"}
-                  </span>
-                </div>
-                <div className="event-list">
-                  {admin.data.recentEvents.map((event) => (
-                    <article key={event.id}>
-                      <strong>{event.action}</strong>
-                      <span className={`pill ${event.status === "completed" ? "ok" : event.status === "failed" ? "danger" : "neutral"}`}>{event.status}</span>
-                      <small>{event.guildName || event.guildId || "global"} · {formatDateTime(event.createdAt)}</small>
-                      {event.lastError && <p>{event.lastError}</p>}
-                    </article>
-                  ))}
-                </div>
-              </div>
-            </section>
-          </>
-        )}
-      </main>
-    </div>
-  );
-}
-
 type OwnerTone = "ok" | "warn" | "danger" | "neutral";
 
 function ownerEventStatusLabel(status: string) {
@@ -4887,6 +4705,11 @@ function Dashboard({ path }: { path: string }) {
   const section = parts[2] ?? "overview";
   const plannedSection = getPlannedSection(section);
   const featureDefinition = getFeatureDefinition(section);
+  const knownSection = Boolean(
+    plannedSection ||
+    featureDefinition ||
+    ["overview", "profile", "commands", "custom-commands", "logging", "audit-log", "welcome", "temp-voice", "counting", "level-system", "autorole", "security", "raidmode", "tickets", "backups"].includes(section)
+  );
   const me = useApi<{ user: User }>("/api/me", []);
   const detail = useApi<{ guild: GuildDetail; settings: SettingsRow }>(`/api/guilds/${guildId}`, [guildId]);
 
@@ -5022,6 +4845,15 @@ function Dashboard({ path }: { path: string }) {
                 {section === "backups" && <BackupsPage guildId={guildId} />}
                 {featureDefinition && <FeatureModulePage guildId={guildId} definition={featureDefinition} />}
                 {plannedSection && !featureDefinition && section !== "welcome" && section !== "logging" && section !== "temp-voice" && section !== "counting" && section !== "level-system" && section !== "autorole" && <PlannedPage section={plannedSection} />}
+                {!knownSection && (
+                  <section className="control-page">
+                    <EmptyState title="Kategorie nicht gefunden" text="Diese Dashboard-Kategorie existiert nicht oder wurde inzwischen verschoben." />
+                    <button className="primary-action inline" type="button" onClick={() => navigate(`/dashboard/${guildId}/overview`)}>
+                      <LayoutDashboard size={16} />
+                      Zur Übersicht
+                    </button>
+                  </section>
+                )}
               </fieldset>
             </>
           )}
@@ -5649,14 +5481,14 @@ function AutorolePage({ guildId }: { guildId: string }) {
   const botRoles = selectedRoles(draft.botRoleIds);
 
   return (
-    <section className="autorole-page">
-      <div className="autorole-hero">
+    <section className="control-page autorole-page">
+      <header className="control-hero autorole-hero">
         <div>
           <p className="eyebrow"><UserPlus size={15} /> Member Onboarding</p>
           <h2>Autorole</h2>
           <p>Vergib mehrere Rollen automatisch, mit eigenen Regeln für Mitglieder und neu hinzugefügte Bots.</p>
         </div>
-        <div className="autorole-hero-actions">
+        <div className="control-hero-actions autorole-hero-actions">
           <span className={`pill ${draft.syncStatus === "failed" ? "danger" : draft.syncStatus === "synced" ? "ok" : "neutral"}`}>
             {draft.syncStatus === "failed" ? "Sync fehlgeschlagen" : draft.syncStatus === "pending" ? "Wird synchronisiert" : draft.syncStatus === "synced" ? "Synchronisiert" : "Bereit"}
           </span>
@@ -5664,8 +5496,12 @@ function AutorolePage({ guildId }: { guildId: string }) {
             <input type="checkbox" checked={draft.enabled} disabled={saving} onChange={(event) => void updateEnabled(event.target.checked)} />
             <span>{draft.enabled ? "Aktiv" : "Inaktiv"}</span>
           </label>
+          <RefreshButton
+            loading={settings.loading || roles.loading}
+            onClick={async () => { await Promise.all([settings.reload(), roles.reload()]); }}
+          />
         </div>
-      </div>
+      </header>
 
       {loading && <LoadingBlock />}
       {loadError && <Notice tone="danger" text={loadError} />}
@@ -5673,18 +5509,18 @@ function AutorolePage({ guildId }: { guildId: string }) {
       <ActionStatus status={status} />
 
       {!loading && !loadError && !draft.enabled && (
-        <div className="autorole-inactive">
-          <div className="autorole-inactive-icon"><ShieldCheck size={22} /></div>
-          <div>
-            <strong>Autorole ist ausgeschaltet</strong>
-            <p>Aktiviere das Modul oben. Bestehende Rollenauswahlen bleiben beim Deaktivieren erhalten.</p>
-          </div>
-        </div>
+        <ModuleInactiveState
+          icon={<ShieldCheck size={22} />}
+          title="Autorole ist ausgeschaltet"
+          text="Aktiviere das Modul, um automatische Rollen für Mitglieder und Bots zu konfigurieren."
+          onEnable={() => void updateEnabled(true)}
+          disabled={saving}
+        />
       )}
 
       {!loading && !loadError && draft.enabled && (
         <>
-          <section className="autorole-summary-grid">
+          <section className="control-stat-grid autorole-summary-grid">
             <StatusTile icon={<UsersRound size={19} />} label="Mitgliederrollen" value={String(draft.humanRoleIds.length)} tone={draft.humanRoleIds.length ? "ok" : undefined} />
             <StatusTile icon={<Bot size={19} />} label="Botrollen" value={String(draft.botRoleIds.length)} tone={draft.botRoleIds.length ? "ok" : undefined} />
             <StatusTile icon={<Clock3 size={19} />} label="Verzögerung" value={draft.delaySeconds ? `${draft.delaySeconds} Sek.` : "Sofort"} />
@@ -5693,17 +5529,12 @@ function AutorolePage({ guildId }: { guildId: string }) {
 
           <div className="autorole-layout">
             <div className="autorole-editor">
-              <section className="panel autorole-role-panel">
+              <section className="panel control-panel autorole-role-panel">
                 <div className="panel-title autorole-panel-title">
                   <div>
                     <h2>Automatische Rollen</h2>
                     <p className="muted">Nur Rollen unterhalb der höchsten Bot-Rolle stehen zur Auswahl.</p>
                   </div>
-                  <RefreshButton
-                    loading={(settings.loading && Boolean(settings.data)) || (roles.loading && Boolean(roles.data))}
-                    onClick={async () => { await Promise.all([settings.reload(), roles.reload()]); }}
-                    label="Neu laden"
-                  />
                 </div>
 
                 <div className="autorole-target-tabs" aria-label="Autorole-Ziel auswählen">
@@ -5755,7 +5586,7 @@ function AutorolePage({ guildId }: { guildId: string }) {
                 </div>
               </section>
 
-              <section className="panel autorole-rules-panel">
+              <section className="panel control-panel autorole-rules-panel">
                 <div className="panel-title compact">
                   <div><h2>Vergaberegeln</h2><p className="muted">Timing und Discord-Onboarding zentral festlegen.</p></div>
                 </div>
@@ -5779,7 +5610,7 @@ function AutorolePage({ guildId }: { guildId: string }) {
                 </label>
               </section>
 
-              <section className="panel autorole-save-panel">
+              <section className="panel control-panel autorole-save-panel">
                 <div><strong>{draft.humanRoleIds.length + draft.botRoleIds.length} Rollen ausgewählt</strong><small>Die sichere Sync-Queue überträgt alle Regeln an den laufenden Bot.</small></div>
                 <button className="primary-action inline" onClick={() => void persist()} disabled={saving || !hasRoles}>
                   {saving ? <Loader2 className="spin" size={16} /> : <Save size={16} />}
@@ -5915,14 +5746,14 @@ function LevelSystemPage({ guildId }: { guildId: string }) {
   }
 
   return (
-    <section className="level-page">
-      <div className="level-hero">
+    <section className="control-page level-page">
+      <header className="control-hero level-hero">
         <div>
           <p className="eyebrow"><BarChart3 size={15} /> Community Progress</p>
           <h2>Level-System</h2>
           <p>Nachrichten werden zu Fortschritt. Aufstiege landen im richtigen Kanal und Rollen werden automatisch vergeben.</p>
         </div>
-        <div className="level-hero-actions">
+        <div className="control-hero-actions level-hero-actions">
           <span className={`pill ${draft.syncStatus === "failed" ? "danger" : draft.syncStatus === "synced" ? "ok" : "neutral"}`}>
             {draft.syncStatus === "failed" ? "Sync fehlgeschlagen" : draft.syncStatus === "pending" ? "Wird synchronisiert" : draft.syncStatus === "synced" ? "Synchronisiert" : "Bereit"}
           </span>
@@ -5930,17 +5761,31 @@ function LevelSystemPage({ guildId }: { guildId: string }) {
             <input type="checkbox" checked={draft.enabled} disabled={saving} onChange={(event) => void updateEnabled(event.target.checked)} />
             <span>{draft.enabled ? "Aktiv" : "Inaktiv"}</span>
           </label>
+          <RefreshButton
+            loading={settings.loading || channels.loading || roles.loading}
+            onClick={async () => { await Promise.all([settings.reload(), channels.reload(), roles.reload()]); }}
+          />
         </div>
-      </div>
+      </header>
 
       {loading && <LoadingBlock />}
       {loadError && <Notice tone="danger" text={loadError} />}
       {draft.syncError && <Notice tone="danger" text={draft.syncError} />}
       <ActionStatus status={status} />
 
+      {!loading && !loadError && !draft.enabled && (
+        <ModuleInactiveState
+          icon={<BarChart3 size={22} />}
+          title="Level-System ist ausgeschaltet"
+          text="Aktiviere das Modul, um Aufstiegskanäle und Rollenbelohnungen einzurichten."
+          onEnable={() => void updateEnabled(true)}
+          disabled={saving}
+        />
+      )}
+
       {!loading && !loadError && draft.enabled && (
         <>
-          <section className="level-summary-grid">
+          <section className="control-stat-grid level-summary-grid">
             <StatusTile icon={<MessageSquare size={19} />} label="Nachrichten-XP" value="8-15 XP" tone="ok" />
             <StatusTile icon={<Clock3 size={19} />} label="Cooldown" value="60 Sek." />
             <StatusTile icon={<Trophy size={19} />} label="Levelrollen" value={String(draft.roleRewards.length)} tone={draft.roleRewards.length ? "ok" : undefined} />
@@ -5949,17 +5794,12 @@ function LevelSystemPage({ guildId }: { guildId: string }) {
 
           <div className="level-layout">
             <div className="level-editor">
-              <section className="panel level-control-panel">
+              <section className="panel control-panel level-control-panel">
                 <div className="panel-title">
                   <div>
                     <h2>Levelaufstiege</h2>
                     <p className="muted">Ein fester Kanal ist optional. Ohne Auswahl antwortet der Bot dort, wo das Level erreicht wurde.</p>
                   </div>
-                  <RefreshButton
-                    loading={(settings.loading && Boolean(settings.data)) || (channels.loading && Boolean(channels.data)) || (roles.loading && Boolean(roles.data))}
-                    onClick={async () => { await Promise.all([settings.reload(), channels.reload(), roles.reload()]); }}
-                    label="Neu laden"
-                  />
                 </div>
                 <label>
                   Kanal für Levelaufstiege
@@ -5973,7 +5813,7 @@ function LevelSystemPage({ guildId }: { guildId: string }) {
                 </label>
               </section>
 
-              <section className="panel level-control-panel">
+              <section className="panel control-panel level-control-panel">
                 <div className="panel-title compact">
                   <div>
                     <h2>Rollenbelohnungen</h2>
@@ -6024,7 +5864,7 @@ function LevelSystemPage({ guildId }: { guildId: string }) {
                 </div>
               </section>
 
-              <section className="panel level-save-panel">
+              <section className="panel control-panel level-save-panel">
                 <div>
                   <strong>Konfiguration bereit</strong>
                   <small>Änderungen werden nach dem Speichern über die sichere Bot-Queue synchronisiert.</small>
@@ -6157,14 +5997,14 @@ function CountingPage({ guildId }: { guildId: string }) {
   }
 
   return (
-    <section className="counting-page">
-      <div className="counting-hero">
+    <section className="control-page counting-page">
+      <header className="control-hero counting-hero">
         <div>
           <p className="eyebrow"><ListOrdered size={15} /> Community Game</p>
           <h2>Counting</h2>
           <p>Eine saubere Zahlenkette für deinen Server, mit Reihenfolgeschutz, Rekord und Spielerstatistiken.</p>
         </div>
-        <div className="counting-hero-actions">
+        <div className="control-hero-actions counting-hero-actions">
           <span className={`pill ${draft.syncStatus === "failed" ? "danger" : draft.syncStatus === "synced" ? "ok" : "neutral"}`}>
             {draft.syncStatus === "failed" ? "Sync fehlgeschlagen" : draft.syncStatus === "pending" ? "Wird synchronisiert" : draft.syncStatus === "synced" ? "Synchronisiert" : "Bereit"}
           </span>
@@ -6172,17 +6012,31 @@ function CountingPage({ guildId }: { guildId: string }) {
             <input type="checkbox" checked={draft.enabled} disabled={saving || resetting} onChange={(event) => void updateEnabled(event.target.checked)} />
             <span>{draft.enabled ? "Aktiv" : "Inaktiv"}</span>
           </label>
+          <RefreshButton
+            loading={settings.loading || channels.loading}
+            onClick={async () => { await Promise.all([settings.reload(), channels.reload()]); }}
+          />
         </div>
-      </div>
+      </header>
 
       {loading && <LoadingBlock />}
       {loadError && <Notice tone="danger" text={loadError} />}
       {draft.syncError && <Notice tone="danger" text={draft.syncError} />}
       <ActionStatus status={status} />
 
+      {!loading && !loadError && !draft.enabled && (
+        <ModuleInactiveState
+          icon={<ListOrdered size={22} />}
+          title="Counting ist ausgeschaltet"
+          text="Aktiviere das Modul, um Spielkanal, Zahlenregeln und Meilensteine festzulegen."
+          onEnable={() => void updateEnabled(true)}
+          disabled={saving || resetting}
+        />
+      )}
+
       {!loading && !loadError && draft.enabled && (
         <>
-          <section className="counting-summary-grid">
+          <section className="control-stat-grid counting-summary-grid">
             <StatusTile icon={<ListOrdered size={19} />} label="Aktueller Lauf" value={draft.currentNumber.toLocaleString("de-DE")} tone="ok" />
             <StatusTile icon={<Trophy size={19} />} label="Rekord" value={draft.recordNumber.toLocaleString("de-DE")} />
             <StatusTile icon={<Check size={19} />} label="Richtige Zahlen" value={draft.totalCounts.toLocaleString("de-DE")} tone="ok" />
@@ -6191,17 +6045,12 @@ function CountingPage({ guildId }: { guildId: string }) {
 
           <div className="counting-layout">
             <div className="counting-editor">
-              <section className="panel counting-control-panel">
+              <section className="panel control-panel counting-control-panel">
                 <div className="panel-title">
                   <div>
                     <h2>Spielkanal</h2>
                     <p className="muted">In diesem Kanal überwacht der Bot jede Zahl und reagiert sofort.</p>
                   </div>
-                  <RefreshButton
-                    loading={(settings.loading && Boolean(settings.data)) || (channels.loading && Boolean(channels.data))}
-                    onClick={async () => { await Promise.all([settings.reload(), channels.reload()]); }}
-                    label="Neu laden"
-                  />
                 </div>
                 <label>
                   Counting-Textkanal
@@ -6212,7 +6061,7 @@ function CountingPage({ guildId }: { guildId: string }) {
                 </label>
               </section>
 
-              <section className="panel counting-control-panel">
+              <section className="panel control-panel counting-control-panel">
                 <div className="panel-title compact">
                   <div>
                     <h2>Regeln</h2>
@@ -6243,7 +6092,7 @@ function CountingPage({ guildId }: { guildId: string }) {
                 </div>
               </section>
 
-              <section className="panel counting-control-panel">
+              <section className="panel control-panel counting-control-panel">
                 <div className="counting-save-row">
                   <div>
                     <strong>Nächste gültige Zahl: {nextNumber.toLocaleString("de-DE")}</strong>
@@ -6406,8 +6255,8 @@ function TempVoicePage({ guildId }: { guildId: string }) {
   const loadError = settings.error || channels.error;
 
   return (
-    <section className="tempvoice-page">
-      <div className="tempvoice-hero">
+    <section className="control-page tempvoice-page">
+      <header className="control-hero tempvoice-hero">
         <div>
           <p className="eyebrow">
             <Mic2 size={15} />
@@ -6416,7 +6265,7 @@ function TempVoicePage({ guildId }: { guildId: string }) {
           <h2>TempVoice</h2>
           <p>Join-to-create, Besitzerrechte und das komplette Discord-Interface an einem Ort konfigurieren.</p>
         </div>
-        <div className="tempvoice-hero-actions">
+        <div className="control-hero-actions tempvoice-hero-actions">
           <span className={`pill ${draft.syncStatus === "failed" ? "danger" : draft.syncStatus === "synced" ? "ok" : "neutral"}`}>
             {draft.syncStatus === "failed" ? "Sync fehlgeschlagen" : draft.syncStatus === "pending" ? "Wird synchronisiert" : draft.syncStatus === "synced" ? "Synchronisiert" : "Bereit"}
           </span>
@@ -6429,17 +6278,31 @@ function TempVoicePage({ guildId }: { guildId: string }) {
             />
             <span>{draft.enabled ? "Aktiv" : "Inaktiv"}</span>
           </label>
+          <RefreshButton
+            loading={settings.loading || channels.loading}
+            onClick={async () => { await Promise.all([settings.reload(), channels.reload()]); }}
+          />
         </div>
-      </div>
+      </header>
 
       {loading && <LoadingBlock />}
       {loadError && <Notice tone="danger" text={loadError} />}
       {draft.syncError && <Notice tone="danger" text={draft.syncError} />}
       <ActionStatus status={status} />
 
+      {!loading && !loadError && !draft.enabled && (
+        <ModuleInactiveState
+          icon={<Mic2 size={22} />}
+          title="TempVoice ist ausgeschaltet"
+          text="Aktiviere das Modul, um Creator-Kanäle, Besitzerrechte und das Interface einzurichten."
+          onEnable={() => void updateEnabled(true)}
+          disabled={saving || sending}
+        />
+      )}
+
       {!loading && !loadError && draft.enabled && (
         <>
-          <section className="tempvoice-summary-grid">
+          <section className="control-stat-grid tempvoice-summary-grid">
             <StatusTile icon={<Mic2 size={19} />} label="Status" value={draft.enabled ? "aktiv" : "inaktiv"} tone={draft.enabled ? "ok" : "warn"} />
             <StatusTile icon={<Radio size={19} />} label="Creator" value={String(draft.creatorChannelIds.length)} tone={draft.creatorChannelIds.length ? "ok" : "warn"} />
             <StatusTile icon={<UsersRound size={19} />} label="Standardlimit" value={draft.defaultUserLimit ? String(draft.defaultUserLimit) : "offen"} />
@@ -6448,19 +6311,12 @@ function TempVoicePage({ guildId }: { guildId: string }) {
 
           <div className="tempvoice-layout">
             <div className="tempvoice-editor">
-              <section className="panel tempvoice-control-panel">
+              <section className="panel control-panel tempvoice-control-panel">
                 <div className="panel-title">
                   <div>
                     <h2>Creator-Kanäle</h2>
                     <p className="muted">Mitglieder erhalten beim Beitritt automatisch ihren eigenen Sprachkanal.</p>
                   </div>
-                  <RefreshButton
-                    loading={(settings.loading && Boolean(settings.data)) || (channels.loading && Boolean(channels.data))}
-                    onClick={async () => {
-                      await Promise.all([settings.reload(), channels.reload()]);
-                    }}
-                    label="Neu laden"
-                  />
                 </div>
 
                 {voiceChannels.length ? (
@@ -6496,7 +6352,7 @@ function TempVoicePage({ guildId }: { guildId: string }) {
                 )}
               </section>
 
-              <section className="panel tempvoice-control-panel">
+              <section className="panel control-panel tempvoice-control-panel">
                 <div className="panel-title">
                   <div>
                     <h2>Raum-Standard</h2>
@@ -6549,7 +6405,7 @@ function TempVoicePage({ guildId }: { guildId: string }) {
                 </div>
               </section>
 
-              <section className="panel tempvoice-control-panel">
+              <section className="panel control-panel tempvoice-control-panel">
                 <div className="panel-title compact">
                   <div>
                     <h2>Interface senden</h2>
@@ -6656,6 +6512,8 @@ function LoggingPage({ guildId }: { guildId: string }) {
   const activeEvents = LOG_CATEGORIES.filter((category) => draft.events[category.key]).length;
   const mappedChannels = LOG_CATEGORIES.filter((category) => draft.channelMappings[category.key]).length;
   const defaultChannelId = draft.channelMappings.general;
+  const loading = (logging.loading && !logging.data) || (channels.loading && !channels.data);
+  const loadError = logging.error || channels.error;
 
   function updateChannel(category: LogCategory, channelId: string) {
     setDraft((current) => ({
@@ -6703,22 +6561,31 @@ function LoggingPage({ guildId }: { guildId: string }) {
     }));
   }
 
-  async function save() {
+  async function save(nextDraft: LoggingSettings = draft) {
     setSaving(true);
     setStatus(null);
     try {
       const response = await api<{ logging: LoggingSettings }>(`/api/guilds/${guildId}/logging`, {
         method: "PUT",
-        body: JSON.stringify(draft)
+        body: JSON.stringify(nextDraft)
       });
       setDraft(response.logging);
       setStatus("Logging gespeichert und zur Bot-Synchronisierung vorgemerkt.");
       await logging.reload();
+      return true;
     } catch (error) {
       setStatus(error instanceof Error ? error.message : "Logging konnte nicht gespeichert werden.");
+      return false;
     } finally {
       setSaving(false);
     }
+  }
+
+  async function updateEnabled(enabled: boolean) {
+    const previousDraft = draft;
+    const nextDraft = { ...draft, enabled };
+    setDraft(nextDraft);
+    if (!(await save(nextDraft))) setDraft(previousDraft);
   }
 
   async function sendTest() {
@@ -6738,8 +6605,8 @@ function LoggingPage({ guildId }: { guildId: string }) {
   }
 
   return (
-    <section className="logging-page">
-      <div className="logging-hero">
+    <section className="control-page logging-page">
+      <header className="control-hero logging-hero">
         <div>
           <p className="eyebrow">
             <ListFilter size={15} />
@@ -6748,34 +6615,46 @@ function LoggingPage({ guildId }: { guildId: string }) {
           <h2>Logging</h2>
           <p>Kategorien, Logkanäle und Testlauf zentral steuern. Die Änderungen werden als Sync-Job an den laufenden Bot geschickt.</p>
         </div>
-        <label className="welcome-switch logging-switch">
-          <input type="checkbox" checked={draft.enabled} onChange={(event) => setDraft({ ...draft, enabled: event.target.checked })} />
-          <span>{draft.enabled ? "Aktiv" : "Inaktiv"}</span>
-        </label>
-      </div>
+        <div className="control-hero-actions">
+          <label className="welcome-switch logging-switch">
+            <input type="checkbox" checked={draft.enabled} disabled={saving} onChange={(event) => void updateEnabled(event.target.checked)} />
+            <span>{draft.enabled ? "Aktiv" : "Inaktiv"}</span>
+          </label>
+          <RefreshButton loading={logging.loading || channels.loading} onClick={async () => {
+            await Promise.all([logging.reload(), channels.reload()]);
+          }} />
+        </div>
+      </header>
 
-      {((logging.loading && !logging.data) || (channels.loading && !channels.data)) && <LoadingBlock />}
-      {(logging.error || channels.error) && <Notice tone="danger" text={logging.error || channels.error || "Fehler beim Laden."} />}
+      {loading && <LoadingBlock text="Logging wird geladen" />}
+      {loadError && <Notice tone="danger" text={loadError} />}
+      <ActionStatus status={status} />
 
-      {!logging.loading && (
+      {!loading && !loadError && !draft.enabled && (
+        <ModuleInactiveState
+          icon={<ListFilter size={22} />}
+          title="Logging ist ausgeschaltet"
+          text="Aktiviere das Modul, um Ereignisse ihren Logkanälen zuzuordnen und Testlogs zu senden."
+          onEnable={() => void updateEnabled(true)}
+          disabled={saving}
+        />
+      )}
+
+      {!loading && !loadError && draft.enabled && (
         <>
-          <section className="logging-summary-grid">
+          <section className="control-stat-grid logging-summary-grid">
             <StatusTile icon={<ListFilter size={19} />} label="Status" value={draft.enabled ? "aktiv" : "inaktiv"} tone={draft.enabled ? "ok" : "warn"} />
             <StatusTile icon={<Check size={19} />} label="Events" value={`${activeEvents}/${LOG_CATEGORIES.length}`} />
             <StatusTile icon={<Hash size={19} />} label="Ziele" value={String(mappedChannels)} />
             <StatusTile icon={<MessageSquare size={19} />} label="Kanäle" value={String(textChannels.length)} tone={textChannels.length ? "ok" : "warn"} />
           </section>
 
-          <section className="panel logging-control-panel">
+          <section className="panel control-panel logging-control-panel">
             <div className="panel-title">
               <div>
                 <h2>Steuerung</h2>
                 <p className="muted">Standardkanal setzen, Profile anwenden und einen echten Bot-Test auslösen.</p>
               </div>
-              <RefreshButton loading={(logging.loading && Boolean(logging.data)) || (channels.loading && Boolean(channels.data))} onClick={async () => {
-                await logging.reload();
-                await channels.reload();
-              }} label="Neu laden" />
             </div>
 
             <div className="logging-toolbar">
@@ -6794,7 +6673,7 @@ function LoggingPage({ guildId }: { guildId: string }) {
                 </select>
               </label>
               <div className="logging-action-stack">
-                <button className="primary-action inline" onClick={save} disabled={saving}>
+                <button className="primary-action inline" onClick={() => void save()} disabled={saving}>
                   {saving ? <Loader2 className="spin" size={16} /> : <Save size={16} />}
                   Logging speichern
                 </button>
@@ -6820,7 +6699,6 @@ function LoggingPage({ guildId }: { guildId: string }) {
               </button>
             </div>
 
-            <ActionStatus status={status} />
           </section>
 
           <section className="logging-category-grid">
@@ -6898,6 +6776,8 @@ function WelcomePage({ guildId }: { guildId: string }) {
     [roles.data, draft.embed.allowedRoleIds]
   );
   const imageUrl = draft.embed.imageMediaKey ? `/api/guilds/${guildId}/media?key=${encodeURIComponent(draft.embed.imageMediaKey)}` : draft.embed.imageUrl;
+  const loading = (welcome.loading && !welcome.data) || (channels.loading && !channels.data) || (roles.loading && !roles.data);
+  const loadError = welcome.error || channels.error || roles.error;
 
   function updateEmbed(value: Partial<WelcomeSettings["embed"]>) {
     setDraft((current) => ({ ...current, embed: { ...current.embed, ...value } }));
@@ -6940,27 +6820,36 @@ function WelcomePage({ guildId }: { guildId: string }) {
     }
   }
 
-  async function save() {
+  async function save(nextDraft: WelcomeSettings = draft) {
     setSaving(true);
     setStatus(null);
     try {
       const response = await api<{ welcome: WelcomeSettings }>(`/api/guilds/${guildId}/welcome`, {
         method: "PUT",
-        body: JSON.stringify(draft)
+        body: JSON.stringify(nextDraft)
       });
       setDraft(response.welcome);
       setStatus("Begrüßung gespeichert und zur Bot-Synchronisierung vorgemerkt.");
       await welcome.reload();
+      return true;
     } catch (error) {
       setStatus(error instanceof Error ? error.message : "Speichern fehlgeschlagen.");
+      return false;
     } finally {
       setSaving(false);
     }
   }
 
+  async function updateEnabled(enabled: boolean) {
+    const previousDraft = draft;
+    const nextDraft = { ...draft, enabled };
+    setDraft(nextDraft);
+    if (!(await save(nextDraft))) setDraft(previousDraft);
+  }
+
   return (
-    <section className="welcome-page">
-      <div className="welcome-hero">
+    <section className="control-page welcome-page">
+      <header className="control-hero welcome-hero">
         <div>
           <p className="eyebrow">
             <Sparkles size={15} />
@@ -6969,19 +6858,35 @@ function WelcomePage({ guildId }: { guildId: string }) {
           <h2>Begrüßung</h2>
           <p>Neue Mitglieder landen mit eigener Nachricht, optionalem Embed, Bild, Startrolle und kontrollierten Mentions direkt sauber im richtigen Kanal.</p>
         </div>
-        <label className="welcome-switch">
-          <input type="checkbox" checked={draft.enabled} onChange={(event) => setDraft({ ...draft, enabled: event.target.checked })} />
-          <span>{draft.enabled ? "Aktiv" : "Inaktiv"}</span>
-        </label>
-      </div>
+        <div className="control-hero-actions">
+          <label className="welcome-switch">
+            <input type="checkbox" checked={draft.enabled} disabled={saving} onChange={(event) => void updateEnabled(event.target.checked)} />
+            <span>{draft.enabled ? "Aktiv" : "Inaktiv"}</span>
+          </label>
+          <RefreshButton loading={welcome.loading || channels.loading || roles.loading} onClick={async () => {
+            await Promise.all([welcome.reload(), channels.reload(), roles.reload()]);
+          }} />
+        </div>
+      </header>
 
-      {((welcome.loading && !welcome.data) || (channels.loading && !channels.data) || (roles.loading && !roles.data)) && <LoadingBlock />}
-      {(welcome.error || channels.error || roles.error) && <Notice tone="danger" text={welcome.error || channels.error || roles.error || "Fehler beim Laden."} />}
+      {loading && <LoadingBlock text="Begrüßung wird geladen" />}
+      {loadError && <Notice tone="danger" text={loadError} />}
+      <ActionStatus status={status} />
 
-      {!welcome.loading && (
+      {!loading && !loadError && !draft.enabled && (
+        <ModuleInactiveState
+          icon={<Sparkles size={22} />}
+          title="Begrüßung ist ausgeschaltet"
+          text="Aktiviere das Modul, um Nachricht, Startrolle, Mentions und Discord-Vorschau einzurichten."
+          onEnable={() => void updateEnabled(true)}
+          disabled={saving}
+        />
+      )}
+
+      {!loading && !loadError && draft.enabled && (
         <div className="welcome-grid">
           <div className="welcome-editor">
-            <section className="panel">
+            <section className="panel control-panel">
               <div className="panel-title">
                 <h2>Nachricht & Ziel</h2>
                 <span className={draft.enabled ? "pill ok" : "pill"}>{draft.enabled ? "sendet" : "pausiert"}</span>
@@ -7038,7 +6943,7 @@ function WelcomePage({ guildId }: { guildId: string }) {
               </div>
             </section>
 
-            <section className="panel">
+            <section className="panel control-panel">
               <div className="panel-title">
                 <h2>Embed & Bild</h2>
                 <Palette size={18} />
@@ -7091,7 +6996,7 @@ function WelcomePage({ guildId }: { guildId: string }) {
               </div>
             </section>
 
-            <section className="panel">
+            <section className="panel control-panel">
               <div className="panel-title">
                 <h2>Mentions</h2>
                 <MessageSquare size={18} />
@@ -7135,13 +7040,11 @@ function WelcomePage({ guildId }: { guildId: string }) {
               )}
             </section>
 
-            <ActionStatus status={status} />
             <div className="form-actions">
-              <button className="primary-action inline" onClick={save} disabled={saving}>
+              <button className="primary-action inline" onClick={() => void save()} disabled={saving}>
                 {saving ? <Loader2 className="spin" size={16} /> : <Save size={16} />}
                 Begrüßung speichern
               </button>
-              <RefreshButton loading={welcome.loading && Boolean(welcome.data)} onClick={welcome.reload} label="Neu laden" />
             </div>
           </div>
 
@@ -7201,22 +7104,39 @@ function CommandsPage({ guildId }: { guildId: string }) {
   }
 
   return (
-    <section className="panel">
-      <div className="panel-title">
-        <h2>Slash-Befehle</h2>
-        <RefreshButton loading={commands.loading && Boolean(commands.data)} onClick={commands.reload} label="Neu laden" />
-      </div>
+    <section className="control-page command-control">
+      <header className="control-hero">
+        <div>
+          <p className="eyebrow"><Command size={15} /> Command Center</p>
+          <h2>Slash-Befehle</h2>
+          <p>Befehle, Cooldowns und Zugriffsregeln der Guild zentral prüfen und anpassen.</p>
+        </div>
+        <div className="control-hero-actions">
+          <RefreshButton loading={commands.loading} onClick={commands.reload} />
+        </div>
+      </header>
       <ActionStatus status={status} />
       {commands.loading && !commands.data && <LoadingBlock />}
       {commands.error && <Notice tone="danger" text={commands.error} />}
       {!commands.loading && commands.data?.commands.length === 0 && (
         <EmptyState title="Noch kein Bot-Snapshot" text="Sobald der Python-Bot die interne Schnittstelle erreicht, erscheinen hier seine echten Slash-Befehle." />
       )}
-      <div className="command-list">
-        {commands.data?.commands.map((command) => (
-          <CommandRow key={command.commandName} command={command} onSave={save} />
-        ))}
-      </div>
+      {commands.data && commands.data.commands.length > 0 && (
+        <section className="panel control-panel">
+          <div className="panel-title compact">
+            <div>
+              <h2>Verfügbare Befehle</h2>
+              <p className="muted">{commands.data.commands.length} Slash-Befehle aus dem letzten Bot-Snapshot.</p>
+            </div>
+            <span className="pill neutral">{commands.data.commands.length}</span>
+          </div>
+          <div className="command-list">
+            {commands.data.commands.map((command) => (
+              <CommandRow key={command.commandName} command={command} onSave={save} />
+            ))}
+          </div>
+        </section>
+      )}
     </section>
   );
 }
@@ -7289,34 +7209,54 @@ function CustomCommandsPage({ guildId }: { guildId: string }) {
   }
 
   return (
-    <section className="section-grid">
-      <div className="panel">
-        <div className="panel-title">
-          <h2>Neuer Custom Command</h2>
-        </div>
-        <CommandEditor draft={draft} onChange={setDraft} />
-        <ActionStatus status={status} />
-        <div className="form-actions">
-          <button className="primary-action inline" onClick={create}>
-            <Plus size={16} />
-            Erstellen
-          </button>
-        </div>
-      </div>
-
-      <div className="panel">
-        <div className="panel-title">
+    <section className="control-page custom-command-control">
+      <header className="control-hero">
+        <div>
+          <p className="eyebrow"><ClipboardList size={15} /> Command Builder</p>
           <h2>Custom Commands</h2>
-          <RefreshButton loading={commands.loading && Boolean(commands.data)} onClick={commands.reload} label="Neu laden" />
+          <p>Eigene Antworten erstellen, bestehende Befehle pflegen und den Bot-Snapshot aktuell halten.</p>
         </div>
-        {commands.loading && !commands.data && <LoadingBlock />}
-        {commands.error && <Notice tone="danger" text={commands.error} />}
-        {commands.data?.customCommands.length === 0 && <EmptyState title="Keine Custom Commands" text="Erstelle den ersten Command für diese Guild." />}
-        <div className="custom-list">
-          {commands.data?.customCommands.map((command) => (
-            <EditableCustomCommand key={command.id} guildId={guildId} command={command} onChanged={commands.reload} />
-          ))}
+        <div className="control-hero-actions">
+          <RefreshButton loading={commands.loading} onClick={commands.reload} />
         </div>
+      </header>
+
+      <ActionStatus status={status} />
+      {commands.loading && !commands.data && <LoadingBlock />}
+      {commands.error && <Notice tone="danger" text={commands.error} />}
+
+      <div className="control-columns">
+        <section className="panel control-panel">
+          <div className="panel-title">
+            <div>
+              <h2>Neuer Custom Command</h2>
+              <p className="muted">Name, Antwort und Verhalten in einem Schritt festlegen.</p>
+            </div>
+          </div>
+          <CommandEditor draft={draft} onChange={setDraft} />
+          <div className="form-actions">
+            <button className="primary-action inline" onClick={create}>
+              <Plus size={16} />
+              Erstellen
+            </button>
+          </div>
+        </section>
+
+        <section className="panel control-panel">
+          <div className="panel-title">
+            <div>
+              <h2>Vorhandene Commands</h2>
+              <p className="muted">Direkt bearbeiten oder nicht mehr benötigte Befehle entfernen.</p>
+            </div>
+            <span className="pill neutral">{commands.data?.customCommands.length ?? 0}</span>
+          </div>
+          {commands.data?.customCommands.length === 0 && <EmptyState title="Keine Custom Commands" text="Erstelle den ersten Command für diese Guild." />}
+          <div className="custom-list">
+            {commands.data?.customCommands.map((command) => (
+              <EditableCustomCommand key={command.id} guildId={guildId} command={command} onChanged={commands.reload} />
+            ))}
+          </div>
+        </section>
       </div>
     </section>
   );
@@ -7424,23 +7364,41 @@ function EditableCustomCommand({ guildId, command, onChanged }: { guildId: strin
 function AuditLogPage({ guildId }: { guildId: string }) {
   const audit = useApi<{ auditLog: Array<Record<string, string>> }>(`/api/guilds/${guildId}/audit-log`, [guildId]);
   return (
-    <section className="panel">
-      <div className="panel-title">
-        <h2>Audit-Log</h2>
-        <RefreshButton loading={audit.loading && Boolean(audit.data)} onClick={audit.reload} label="Neu laden" />
-      </div>
+    <section className="control-page audit-control">
+      <header className="control-hero">
+        <div>
+          <p className="eyebrow"><ShieldCheck size={15} /> Änderungsverlauf</p>
+          <h2>Audit-Log</h2>
+          <p>Konfigurationsänderungen und ihre Auslöser in zeitlicher Reihenfolge nachvollziehen.</p>
+        </div>
+        <div className="control-hero-actions">
+          <RefreshButton loading={audit.loading} onClick={audit.reload} />
+        </div>
+      </header>
       {audit.loading && !audit.data && <LoadingBlock />}
       {audit.error && <Notice tone="danger" text={audit.error} />}
-      <div className="audit-table">
-        {audit.data?.auditLog.map((entry) => (
-          <article key={entry.id}>
-            <strong>{entry.action}</strong>
-            <span>{entry.target}</span>
-            <span>{entry.actorDiscordUserId}</span>
-            <time>{new Date(entry.createdAt).toLocaleString("de-DE")}</time>
-          </article>
-        ))}
-      </div>
+      {audit.data?.auditLog.length === 0 && <EmptyState title="Noch keine Änderungen" text="Sobald Einstellungen geändert werden, erscheinen die Einträge hier." />}
+      {audit.data && audit.data.auditLog.length > 0 && (
+        <section className="panel control-panel">
+          <div className="panel-title compact">
+            <div>
+              <h2>Letzte Änderungen</h2>
+              <p className="muted">Neueste Aktionen stehen oben.</p>
+            </div>
+            <span className="pill neutral">{audit.data.auditLog.length}</span>
+          </div>
+          <div className="audit-table">
+            {audit.data.auditLog.map((entry) => (
+              <article key={entry.id}>
+                <strong>{entry.action}</strong>
+                <span>{entry.target}</span>
+                <span>{entry.actorDiscordUserId}</span>
+                <time>{new Date(entry.createdAt).toLocaleString("de-DE")}</time>
+              </article>
+            ))}
+          </div>
+        </section>
+      )}
     </section>
   );
 }
@@ -7603,22 +7561,31 @@ function FeatureModulePage({ guildId, definition }: { guildId: string; definitio
     await Promise.all([settings.reload(), channels.reload(), roles.reload()]);
   }
 
-  async function save() {
+  async function save(nextDraft: FeatureSettings = draft) {
     setSaving(true);
     setStatus(null);
     try {
       const response = await api<{ feature: FeatureSettings }>(`/api/guilds/${guildId}/features/${definition.module}`, {
         method: "PUT",
-        body: JSON.stringify({ enabled: draft.enabled, fields: draft.fields })
+        body: JSON.stringify({ enabled: nextDraft.enabled, fields: nextDraft.fields })
       });
       setDraft(response.feature);
       setStatus(`${definition.label} wurde gespeichert. Der Bot übernimmt die Konfiguration jetzt.`);
       await settings.reload();
+      return true;
     } catch (error) {
       setStatus(error instanceof Error ? error.message : `${definition.label} konnte nicht gespeichert werden.`);
+      return false;
     } finally {
       setSaving(false);
     }
+  }
+
+  async function updateEnabled(enabled: boolean) {
+    const previousDraft = draft;
+    const nextDraft = { ...draft, enabled };
+    setDraft(nextDraft);
+    if (!(await save(nextDraft))) setDraft(previousDraft);
   }
 
   function renderField(field: FeatureFieldDefinition) {
@@ -7714,7 +7681,7 @@ function FeatureModulePage({ guildId, definition }: { guildId: string; definitio
         <div className="control-hero-actions">
           <SyncPill status={draft.syncStatus} />
           <label className="feature-master-toggle">
-            <input type="checkbox" checked={draft.enabled} onChange={(event) => setDraft({ ...draft, enabled: event.target.checked })} />
+            <input type="checkbox" checked={draft.enabled} disabled={saving} onChange={(event) => void updateEnabled(event.target.checked)} />
             <span>{draft.enabled ? "Aktiv" : "Inaktiv"}</span>
           </label>
           <RefreshButton loading={settings.loading || channels.loading || roles.loading} onClick={() => void reload()} />
@@ -7727,11 +7694,13 @@ function FeatureModulePage({ guildId, definition }: { guildId: string; definitio
       <ActionStatus status={status} />
 
       {!loading && !draft.enabled && (
-        <section className="feature-inactive">
-          <span>{definition.icon}</span>
-          <div><h3>{definition.label} ist inaktiv</h3><p>Aktiviere das Modul oben. Danach werden alle Einstellungen eingeblendet und können gemeinsam gespeichert werden.</p></div>
-          <button className="primary-action inline" type="button" onClick={() => setDraft({ ...draft, enabled: true })}><Power size={16} /> Aktivieren</button>
-        </section>
+        <ModuleInactiveState
+          icon={definition.icon}
+          title={`${definition.label} ist inaktiv`}
+          text="Aktiviere das Modul, um alle Einstellungen einzublenden und gemeinsam zu speichern."
+          onEnable={() => void updateEnabled(true)}
+          disabled={saving}
+        />
       )}
 
       {!loading && draft.enabled && (
@@ -7962,13 +7931,19 @@ function TicketSystemPage({ guildId }: { guildId: string }) {
       blacklistRoleIds: value.blacklistRoleIds, blacklistUserIds: value.blacklistUserIds
     };
   }
-  async function persist(): Promise<boolean> {
+  async function persist(nextDraft: TicketSettings = draft): Promise<boolean> {
     setSaving(true); setStatus(null);
     try {
-      const response = await api<{ tickets: TicketSettings }>(`/api/guilds/${guildId}/tickets`, { method: "PUT", body: JSON.stringify(ticketPayload(draft)) });
+      const response = await api<{ tickets: TicketSettings }>(`/api/guilds/${guildId}/tickets`, { method: "PUT", body: JSON.stringify(ticketPayload(nextDraft)) });
       setDraft(response.tickets); setStatus("Ticketsystem gespeichert. Der Bot übernimmt die Konfiguration jetzt."); await settings.reload(); return true;
     } catch (error) { setStatus(error instanceof Error ? error.message : "Ticketsystem konnte nicht gespeichert werden."); return false; }
     finally { setSaving(false); }
+  }
+  async function updateEnabled(enabled: boolean) {
+    const previousDraft = draft;
+    const nextDraft = { ...draft, enabled };
+    setDraft(nextDraft);
+    if (!(await persist(nextDraft))) setDraft(previousDraft);
   }
   async function sendPanel() {
     if (!draft.panelChannelId) { setStatus("Wähle zuerst einen Panel-Kanal aus."); return; }
@@ -7983,13 +7958,14 @@ function TicketSystemPage({ guildId }: { guildId: string }) {
 
   return (
     <section className="control-page ticket-control">
-      <header className="control-hero"><div><p className="eyebrow"><LifeBuoy size={15} /> Support Operations</p><h2>Ticket-System</h2><p>Panel, Teamrollen, Formular, Kategorien und Ticket-Automationen vollständig an einem Ort steuern.</p></div><div className="control-hero-actions"><SyncPill status={draft.syncStatus} /><label className="welcome-switch"><input type="checkbox" checked={draft.enabled} onChange={(event) => setDraft({ ...draft, enabled: event.target.checked })} /><span>{draft.enabled ? "Aktiv" : "Inaktiv"}</span></label></div></header>
+      <header className="control-hero"><div><p className="eyebrow"><LifeBuoy size={15} /> Support Operations</p><h2>Ticket-System</h2><p>Panel, Teamrollen, Formular, Kategorien und Ticket-Automationen vollständig an einem Ort steuern.</p></div><div className="control-hero-actions"><SyncPill status={draft.syncStatus} /><label className="welcome-switch"><input type="checkbox" checked={draft.enabled} disabled={saving || sending} onChange={(event) => void updateEnabled(event.target.checked)} /><span>{draft.enabled ? "Aktiv" : "Inaktiv"}</span></label><RefreshButton loading={settings.loading || channels.loading || roles.loading} onClick={async () => { await Promise.all([settings.reload(), channels.reload(), roles.reload()]); }} /></div></header>
       {loading && <LoadingBlock />}{loadError && <Notice tone="danger" text={loadError} />}{draft.syncError && <Notice tone="danger" text={draft.syncError} />}<ActionStatus status={status} />
-      {!loading && !loadError && <>
+      {!loading && !loadError && !draft.enabled && <ModuleInactiveState icon={<LifeBuoy size={22} />} title="Ticket-System ist ausgeschaltet" text="Aktiviere das Modul, um Supportrollen, Ticket-Kategorien, Formulare und Automationen einzurichten." onEnable={() => void updateEnabled(true)} disabled={saving || sending} />}
+      {!loading && !loadError && draft.enabled && <>
         <div className="control-stat-grid"><StatusTile icon={<LifeBuoy size={19} />} label="Offen" value={String(draft.openTickets)} tone={draft.openTickets ? "warn" : "ok"} /><StatusTile icon={<Check size={19} />} label="Geschlossen" value={String(draft.closedTickets)} /><StatusTile icon={<ClipboardList size={19} />} label="Gesamt" value={String(draft.totalTickets)} /><StatusTile icon={<Star size={19} />} label="Bewertung" value={draft.averageRating === null ? "keine" : `${draft.averageRating}/5`} tone={draft.averageRating !== null && draft.averageRating >= 4 ? "ok" : undefined} /></div>
         <div className="control-columns ticket-columns">
           <div className="control-stack">
-            <section className="panel control-panel"><div className="panel-title compact"><div><h2>Grundkonfiguration</h2><p className="muted">Discord-Ziele für neue Tickets, Panel und Protokolle.</p></div><RefreshButton loading={settings.loading || channels.loading || roles.loading} onClick={async () => { await Promise.all([settings.reload(), channels.reload(), roles.reload()]); }} /></div><div className="control-field-grid two"><label>Ticket-Kategorie<select value={draft.ticketCategoryId ?? ""} onChange={(event) => setDraft({ ...draft, ticketCategoryId: event.target.value || null })}><option value="">Kategorie auswählen</option>{categoryChannels.map((channel) => <option value={channel.id} key={channel.id}>{channel.name}</option>)}</select></label><label>Panel-Kanal<select value={draft.panelChannelId ?? ""} onChange={(event) => setDraft({ ...draft, panelChannelId: event.target.value || null })}><ChannelSelectOptions channels={textChannels} noneLabel="Kanal auswählen" /></select></label><label>Log-Kanal<select value={draft.logChannelId ?? ""} onChange={(event) => setDraft({ ...draft, logChannelId: event.target.value || null })}><ChannelSelectOptions channels={textChannels} noneLabel="Kein eigener Log-Kanal" /></select></label><label>Benachrichtigungsrolle<select value={draft.notifyRoleId ?? ""} onChange={(event) => setDraft({ ...draft, notifyRoleId: event.target.value || null })}><option value="">Keine Rolle</option>{manageableRoles.map((role) => <option value={role.id} key={role.id}>{role.name}</option>)}</select></label></div></section>
+            <section className="panel control-panel"><div className="panel-title compact"><div><h2>Grundkonfiguration</h2><p className="muted">Discord-Ziele für neue Tickets, Panel und Protokolle.</p></div></div><div className="control-field-grid two"><label>Ticket-Kategorie<select value={draft.ticketCategoryId ?? ""} onChange={(event) => setDraft({ ...draft, ticketCategoryId: event.target.value || null })}><option value="">Kategorie auswählen</option>{categoryChannels.map((channel) => <option value={channel.id} key={channel.id}>{channel.name}</option>)}</select></label><label>Panel-Kanal<select value={draft.panelChannelId ?? ""} onChange={(event) => setDraft({ ...draft, panelChannelId: event.target.value || null })}><ChannelSelectOptions channels={textChannels} noneLabel="Kanal auswählen" /></select></label><label>Log-Kanal<select value={draft.logChannelId ?? ""} onChange={(event) => setDraft({ ...draft, logChannelId: event.target.value || null })}><ChannelSelectOptions channels={textChannels} noneLabel="Kein eigener Log-Kanal" /></select></label><label>Benachrichtigungsrolle<select value={draft.notifyRoleId ?? ""} onChange={(event) => setDraft({ ...draft, notifyRoleId: event.target.value || null })}><option value="">Keine Rolle</option>{manageableRoles.map((role) => <option value={role.id} key={role.id}>{role.name}</option>)}</select></label></div></section>
             <section className="panel control-panel"><div className="panel-title compact"><div><h2>Supportrollen</h2><p className="muted">Alle ausgewählten Rollen erhalten Zugriff auf neu erstellte Tickets.</p></div><span className="pill neutral">{draft.supportRoleIds.length}/10</span></div><RoleChecklist roles={manageableRoles} selected={draft.supportRoleIds} onToggle={(id) => { if (!draft.supportRoleIds.includes(id) && draft.supportRoleIds.length >= 10) return setStatus("Maximal 10 Supportrollen sind möglich."); toggleList("supportRoleIds", id); }} /></section>
             <section className="panel control-panel"><div className="panel-title compact"><div><h2>Löschberechtigte Rollen</h2><p className="muted">Nur diese Rollen können geschlossene Tickets endgültig löschen. Danach sehen das Ticket nur noch der Ersteller, Supportrollen und diese Rollen.</p></div><span className="pill neutral">{draft.deleteRoleIds.length}/10</span></div><RoleChecklist roles={manageableRoles} selected={draft.deleteRoleIds} onToggle={(id) => { if (!draft.deleteRoleIds.includes(id) && draft.deleteRoleIds.length >= 10) return setStatus("Maximal 10 Löschrollen sind möglich."); toggleList("deleteRoleIds", id); }} /></section>
             <section className="panel control-panel"><div className="panel-title compact"><div><h2>Panel-Inhalt</h2><p className="muted">So erscheint der Einstieg in Discord.</p></div>{draft.panelMessageId && <span className="pill ok">Panel vorhanden</span>}</div><div className="control-field-grid"><label>Titel<input maxLength={100} value={draft.panelTitle} onChange={(event) => setDraft({ ...draft, panelTitle: event.target.value })} /></label><label>Beschreibung<textarea rows={4} maxLength={1000} value={draft.panelDescription} onChange={(event) => setDraft({ ...draft, panelDescription: event.target.value })} /></label></div></section>
@@ -8047,15 +8023,15 @@ function PlannedPage({ section }: { section: PlannedSection }) {
   const isDanger = "tone" in section && section.tone === "danger";
 
   return (
-    <section className="planned-page">
-      <div className={`planned-hero ${isDanger ? "danger" : ""}`}>
+    <section className="control-page planned-page">
+      <header className={`control-hero planned-hero ${isDanger ? "danger" : ""}`}>
         <div className="planned-icon">{plannedIcon(section.section, 24)}</div>
         <div>
           <span className="pill neutral">Geplant</span>
           <h2>{section.headline}</h2>
           <p>{section.description}</p>
         </div>
-      </div>
+      </header>
       <div className="planned-grid">
         {section.items.map((item) => (
           <article className="planned-card" key={item.title}>
@@ -8081,6 +8057,34 @@ function Notice({ tone, text }: { tone: "danger" | "warning"; text: string }) {
 function ActionStatus({ status }: { status: string | null }) {
   if (!status) return null;
   return <p className="action-status">{status}</p>;
+}
+
+function ModuleInactiveState({
+  icon,
+  title,
+  text,
+  onEnable,
+  disabled = false
+}: {
+  icon: React.ReactNode;
+  title: string;
+  text: string;
+  onEnable: () => void;
+  disabled?: boolean;
+}) {
+  return (
+    <section className="module-inactive">
+      <span className="module-inactive-icon">{icon}</span>
+      <div>
+        <h3>{title}</h3>
+        <p>{text}</p>
+      </div>
+      <button className="primary-action inline" type="button" onClick={onEnable} disabled={disabled}>
+        <Power size={16} />
+        Aktivieren
+      </button>
+    </section>
+  );
 }
 
 function LoadingBlock({ text = "Laden", detail }: { text?: string; detail?: string }) {
@@ -8112,4 +8116,9 @@ function SkeletonGrid() {
   );
 }
 
-createRoot(document.getElementById("root") as HTMLElement).render(<App />);
+const rootElement = document.getElementById("root") as HTMLElement;
+const rootWindow = window as Window & { __modmailAppRoot?: ReturnType<typeof createRoot> };
+const appRoot = rootWindow.__modmailAppRoot ?? createRoot(rootElement);
+
+rootWindow.__modmailAppRoot = appRoot;
+appRoot.render(<App />);

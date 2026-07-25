@@ -2360,85 +2360,6 @@ textarea {
   color: var(--text);
 }
 
-.admin-page {
-  display: grid;
-  gap: 18px;
-}
-
-.admin-hero {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 18px;
-  min-height: 156px;
-  padding: 22px;
-  border: 1px solid rgba(104, 168, 255, 0.2);
-  border-radius: 8px;
-  background:
-    linear-gradient(135deg, rgba(104, 168, 255, 0.13), transparent 38%),
-    linear-gradient(315deg, rgba(155, 140, 255, 0.065), transparent 34%),
-    rgba(10, 14, 22, 0.93);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.045), var(--soft-shadow);
-}
-
-.admin-hero h1 {
-  margin: 8px 0 6px;
-  font-size: 34px;
-}
-
-.admin-hero p {
-  max-width: 760px;
-  color: var(--muted);
-}
-
-.admin-grid {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(360px, 0.86fr);
-  gap: 16px;
-  align-items: start;
-}
-
-.admin-console .facts div {
-  padding: 10px 0;
-}
-
-.admin-guild-list,
-.event-list {
-  display: grid;
-  gap: 10px;
-}
-
-.admin-guild-list article,
-.event-list article {
-  display: grid;
-  gap: 5px;
-  padding: 12px;
-  border: 1px solid var(--border-soft);
-  border-radius: 8px;
-  background: rgba(9, 11, 16, 0.52);
-}
-
-.admin-guild-list article strong,
-.event-list article strong {
-  color: var(--text);
-}
-
-.admin-guild-list article span,
-.admin-guild-list article small,
-.event-list article small,
-.event-list article p {
-  color: var(--muted);
-}
-
-.event-list article {
-  grid-template-columns: minmax(0, 1fr) auto;
-}
-
-.event-list article small,
-.event-list article p {
-  grid-column: 1 / -1;
-}
-
 .owner-admin-page {
   display: grid;
   gap: 18px;
@@ -4892,37 +4813,6 @@ textarea {
   gap: 10px;
 }
 
-.autorole-inactive {
-  display: flex;
-  min-height: 118px;
-  align-items: center;
-  gap: 14px;
-  padding: 20px;
-  border: 1px dashed var(--border-soft);
-  border-radius: 8px;
-  background: var(--panel-bg);
-}
-
-.autorole-inactive-icon {
-  display: grid;
-  width: 44px;
-  height: 44px;
-  flex: 0 0 auto;
-  place-items: center;
-  border-radius: 8px;
-  color: var(--green);
-  background: rgba(73, 214, 157, 0.11);
-}
-
-.autorole-inactive strong {
-  font-size: 17px;
-}
-
-.autorole-inactive p {
-  margin: 5px 0 0;
-  color: var(--muted);
-}
-
 .autorole-summary-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -6078,7 +5968,6 @@ textarea {
   color: var(--amber);
 }
 
-.loading-block,
 .empty-state {
   display: grid;
   place-items: center;
@@ -6090,11 +5979,20 @@ textarea {
 }
 
 .loading-block {
+  display: grid;
+  grid-template-columns: auto minmax(0, auto);
+  align-items: center;
+  justify-content: center;
+  gap: 4px 10px;
+  min-height: 56px;
+  padding: 12px 16px;
   border: 1px solid var(--border-soft);
   border-radius: 8px;
+  color: var(--muted);
   background:
     linear-gradient(145deg, rgba(255, 255, 255, 0.035), transparent 48%),
     rgba(21, 25, 34, 0.86);
+  text-align: left;
 }
 
 .loading-block svg {
@@ -6106,8 +6004,10 @@ textarea {
 }
 
 .loading-block small {
+  grid-column: 1 / -1;
   max-width: 42ch;
   color: var(--muted);
+  text-align: center;
   line-height: 1.5;
 }
 
@@ -6122,9 +6022,9 @@ textarea {
 
 :root[data-theme="light"] .home-hero,
 :root[data-theme="light"] .guild-heading,
-:root[data-theme="light"] .admin-hero,
 :root[data-theme="light"] .owner-hero,
 :root[data-theme="light"] .owner-guild-detail-hero,
+:root[data-theme="light"] .control-hero,
 :root[data-theme="light"] .welcome-hero,
 :root[data-theme="light"] .logging-hero,
 :root[data-theme="light"] .tempvoice-hero,
@@ -6161,8 +6061,6 @@ textarea {
 :root[data-theme="light"] .empty-state,
 :root[data-theme="light"] .loading-block,
 :root[data-theme="light"] .audit-table article,
-:root[data-theme="light"] .admin-guild-list article,
-:root[data-theme="light"] .event-list article,
 :root[data-theme="light"] .owner-current-status,
 :root[data-theme="light"] .owner-preset-button,
 :root[data-theme="light"] .owner-health-score,
@@ -6189,7 +6087,7 @@ textarea {
 :root[data-theme="light"] .welcome-preview,
 :root[data-theme="light"] .tempvoice-preview,
 :root[data-theme="light"] .autorole-preview,
-:root[data-theme="light"] .autorole-inactive,
+:root[data-theme="light"] .module-inactive,
 :root[data-theme="light"] .level-preview,
 :root[data-theme="light"] .counting-preview,
 :root[data-theme="light"] .discord-message,
@@ -6315,7 +6213,6 @@ textarea {
 :root[data-theme="light"] .status-tile strong,
 :root[data-theme="light"] .guild-heading h1,
 :root[data-theme="light"] .home-hero h1,
-:root[data-theme="light"] .admin-hero h1,
 :root[data-theme="light"] .owner-hero h1,
 :root[data-theme="light"] .welcome-hero h2,
 :root[data-theme="light"] .logging-hero h2,
@@ -6450,7 +6347,6 @@ textarea {
   .docs-manual,
   .dashboard-layout,
   .section-grid,
-  .admin-grid,
   .owner-admin-grid,
   .owner-admin-grid-wide,
   .owner-tools-grid,
@@ -6790,11 +6686,6 @@ textarea {
     justify-self: start;
   }
 
-  .admin-hero {
-    align-items: flex-start;
-    flex-direction: column;
-  }
-
   .owner-hero {
     grid-template-columns: 1fr;
   }
@@ -7052,6 +6943,10 @@ textarea {
   font-size: 28px;
 }
 
+.control-hero > div:first-child {
+  min-width: 0;
+}
+
 .control-hero p:not(.eyebrow) {
   max-width: 760px;
   margin: 0;
@@ -7061,6 +6956,7 @@ textarea {
 
 .control-hero-actions {
   display: flex;
+  flex: 0 0 auto;
   align-items: center;
   flex-wrap: wrap;
   justify-content: flex-end;
@@ -7689,7 +7585,7 @@ textarea {
   opacity: 0;
 }
 
-.feature-inactive {
+.module-inactive {
   display: grid;
   grid-template-columns: 42px minmax(0, 1fr) auto;
   align-items: center;
@@ -7701,7 +7597,7 @@ textarea {
   background: var(--panel-bg-soft);
 }
 
-.feature-inactive > span {
+.module-inactive-icon {
   width: 42px;
   height: 42px;
   display: grid;
@@ -7711,12 +7607,12 @@ textarea {
   background: var(--control-bg);
 }
 
-.feature-inactive h3,
-.feature-inactive p {
+.module-inactive h3,
+.module-inactive p {
   margin: 0;
 }
 
-.feature-inactive p {
+.module-inactive p {
   margin-top: 4px;
   color: var(--muted);
   line-height: 1.5;
@@ -7938,11 +7834,11 @@ textarea {
     grid-column: 1;
   }
 
-  .feature-inactive {
+  .module-inactive {
     grid-template-columns: 42px minmax(0, 1fr);
   }
 
-  .feature-inactive .primary-action {
+  .module-inactive .primary-action {
     grid-column: 1 / -1;
     width: 100%;
   }
