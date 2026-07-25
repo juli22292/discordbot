@@ -2,6 +2,10 @@ import "@fontsource-variable/inter";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import type { AssistantTarget } from "./server/assistant";
+import type {
+  PublicCountingLeaderboard,
+  PublicCountingPlayer
+} from "./server/counting-leaderboard";
 import type { PublicGuildCounter, PublicGuildCounterSummary } from "./server/guild-counters";
 import {
   Activity,
@@ -106,6 +110,10 @@ type GuildDetail = {
 type PublicGuildCounterResponse = {
   guilds: PublicGuildCounter[];
   summary: PublicGuildCounterSummary;
+  generatedAt: string;
+};
+
+type PublicCountingLeaderboardResponse = PublicCountingLeaderboard & {
   generatedAt: string;
 };
 
@@ -2051,7 +2059,8 @@ function App() {
   else if (cleanPath === "/dokumentation") page = <DocumentationPage />;
   else if (cleanPath === "/datenschutz") page = <PrivacyPage />;
   else if (cleanPath === "/nutzungsbedingungen") page = <TermsPage />;
-  else if (cleanPath === "/counters") page = <GuildCountersPage />;
+  else if (cleanPath === "/counters" || cleanPath === "/discord-clicker") page = <DiscordClickerPage />;
+  else if (cleanPath === "/countings-topliste") page = <CountingLeaderboardPage />;
   else if (cleanPath.startsWith("/admin/discordguilds/view/")) page = <AdminGuildViewPage path={cleanPath} />;
   else if (cleanPath === "/admin") page = <AdminPageModern />;
   else if (cleanPath === "/home" || cleanPath === "/panel") page = <HomePage />;
@@ -2527,7 +2536,8 @@ function TopNav({ user, demoMode = false }: { user?: User | null; demoMode?: boo
     { key: "privacy", label: "Datenschutz", path: "/datenschutz", icon: <ShieldCheck size={17} />, active: cleanPath === "/datenschutz" },
     { key: "terms", label: "Nutzungsbedingungen", path: "/nutzungsbedingungen", icon: <ClipboardList size={17} />, active: cleanPath === "/nutzungsbedingungen" },
     { key: "support", label: "Support", href: "https://discord.com/developers/docs/intro", icon: <LifeBuoy size={17} />, active: false },
-    { key: "counters", label: "Counters", path: "/counters", icon: <BarChart3 size={17} />, active: cleanPath === "/counters" }
+    { key: "discord-clicker", label: "Discord Clicker", path: "/discord-clicker", icon: <MousePointerClick size={17} />, active: cleanPath === "/discord-clicker" || cleanPath === "/counters" },
+    { key: "countings-topliste", label: "Countings Topliste", path: "/countings-topliste", icon: <ListOrdered size={17} />, active: cleanPath === "/countings-topliste" }
   ];
 
   const renderNavItem = (item: NavItem, mobile = false) => {
@@ -2786,9 +2796,9 @@ function PrivacyPage() {
       text: "Für Aufgaben zwischen Webpanel und Bot werden Sync-Events gespeichert. Dazu gehören Status, Anzahl der Versuche, Fehlermeldungen und technische Nutzdaten. Erfolgreich abgeschlossene Sync-Events werden nach einiger Zeit bereinigt."
     },
     {
-      eyebrow: "Guild Counters",
-      title: "Welche Daten in der öffentlichen Rangliste stehen",
-      text: "Die öffentliche Counter-Seite zeigt für aktuell verbundene Guilds nur Servername, Server-Icon, Discord-Server-ID und zusammengefasste Klickzahlen. Ein technischer, nicht direkt lesbarer Besucher-Hash verhindert versehentliche Mehrfachklicks und wird nach kurzer Zeit automatisch bereinigt."
+      eyebrow: "Öffentliche Toplisten",
+      title: "Welche Daten in den öffentlichen Ranglisten stehen",
+      text: "Der Discord Clicker zeigt für aktuell verbundene Guilds Servername, Server-Icon, Discord-Server-ID und zusammengefasste Klickzahlen. Die Countings Topliste zeigt Anzeigenamen, Avatare, richtige Zahlen, Fehlversuche und die Zahl der beteiligten Guilds. Ein technischer, nicht direkt lesbarer Besucher-Hash schützt nur den Discord Clicker vor versehentlichen Mehrfachklicks und wird automatisch bereinigt."
     },
     {
       eyebrow: "Kontrolle",
@@ -3106,7 +3116,7 @@ function formatGuildCounterDay(value: string | null): string {
   });
 }
 
-function GuildCountersPage() {
+function DiscordClickerPage() {
   const counters = useApi<PublicGuildCounterResponse>("/api/public/guild-counters", []);
   const [search, setSearch] = useState("");
   const [clickingGuildId, setClickingGuildId] = useState<string | null>(null);
@@ -3164,8 +3174,8 @@ function GuildCountersPage() {
       <main className="counter-page">
         <section className="counter-hero reveal-card">
           <div className="counter-hero-copy">
-            <p className="eyebrow"><BarChart3 size={15} /> Public Guild Ranking</p>
-            <h1>Guild Counters</h1>
+            <p className="eyebrow"><MousePointerClick size={15} /> Community Klick-Wettbewerb</p>
+            <h1>Discord Clicker</h1>
             <p>Alle Server, auf denen Modmail Manager aktuell verbunden ist. Gib deiner Guild einen Klick und verfolge live, wer insgesamt und an einem einzelnen Tag vorne liegt.</p>
             <div className="counter-hero-note">
               <ShieldCheck size={16} />
@@ -3222,7 +3232,7 @@ function GuildCountersPage() {
         </section>
 
         {counters.loading && !counters.data && (
-          <LoadingBlock text="Guild Counters werden geladen" detail="Die öffentliche Rangliste wird aus der Datenbank abgefragt." />
+          <LoadingBlock text="Discord Clicker wird geladen" detail="Die öffentliche Klick-Rangliste wird aus der Datenbank abgefragt." />
         )}
         {!counters.loading && counters.error && <Notice tone="danger" text={counters.error} />}
         {!counters.loading && counters.data && guilds.length === 0 && (
@@ -3281,6 +3291,215 @@ function GuildCountersPage() {
         <p className="counter-privacy-note">
           <ShieldCheck size={14} />
           Öffentlich sind ausschließlich Guild-Name, Icon, Server-ID und aggregierte Klickzahlen. Mitglieder und Einstellungen bleiben privat.
+        </p>
+      </main>
+    </div>
+  );
+}
+
+const countingLeaderboardNumber = new Intl.NumberFormat("de-DE");
+
+function CountingPlayerAvatar({ player, size = "normal" }: { player: PublicCountingPlayer; size?: "normal" | "large" }) {
+  return player.avatar ? (
+    <img className={`counting-player-avatar ${size}`} src={player.avatar} alt="" />
+  ) : (
+    <span className={`counting-player-avatar fallback ${size}`} aria-hidden="true">
+      {player.displayName.slice(0, 2).toLocaleUpperCase("de-DE")}
+    </span>
+  );
+}
+
+function CountingLeaderboardPage() {
+  const leaderboard = useApi<PublicCountingLeaderboardResponse>("/api/public/counting-leaderboard", []);
+  const [view, setView] = useState<"players" | "guilds">("players");
+  const [search, setSearch] = useState("");
+  const players = leaderboard.data?.players ?? [];
+  const guilds = leaderboard.data?.guilds ?? [];
+  const summary = leaderboard.data?.summary;
+  const topScore = Math.max(1, players[0]?.correctCounts ?? 0);
+  const topGuildTotal = Math.max(1, ...guilds.map((guild) => guild.totalCounts));
+  const needle = search.trim().toLocaleLowerCase("de-DE");
+  const filteredPlayers = useMemo(
+    () => players.filter((player) => !needle || player.displayName.toLocaleLowerCase("de-DE").includes(needle)),
+    [needle, players]
+  );
+  const filteredGuilds = useMemo(
+    () => guilds.filter((guild) =>
+      !needle
+      || guild.name.toLocaleLowerCase("de-DE").includes(needle)
+      || guild.id.includes(needle)
+    ),
+    [guilds, needle]
+  );
+
+  return (
+    <div className="app-shell">
+      <TopNav />
+      <main className="counter-page counting-board-page">
+        <section className="counter-hero counting-board-hero reveal-card">
+          <div className="counter-hero-copy">
+            <p className="eyebrow"><ListOrdered size={15} /> Community Counting</p>
+            <h1>Countings Topliste</h1>
+            <p>Hier zählen die echten richtigen Zahlen aus allen verbundenen Discord-Servern. Die Rangliste zeigt, welche Nutzer die Zahlenketten am stärksten vorangebracht haben.</p>
+            <div className="counter-hero-note">
+              <Activity size={16} />
+              Öffentlich sichtbar und automatisch über den Bot-Snapshot aktualisiert.
+            </div>
+          </div>
+          <div className="counter-leader-spotlight counting-player-spotlight">
+            <span className="counter-leader-icon"><Crown size={24} /></span>
+            <small>Aktuell aktivster Counter</small>
+            {summary?.topPlayer ? (
+              <>
+                <div className="counting-leader-player">
+                  <CountingPlayerAvatar player={summary.topPlayer} size="large" />
+                  <strong>{summary.topPlayer.displayName}</strong>
+                </div>
+                <b>{countingLeaderboardNumber.format(summary.topPlayer.correctCounts)}</b>
+                <p>richtige Zahlen in {summary.topPlayer.guildCount} {summary.topPlayer.guildCount === 1 ? "Guild" : "Guilds"}</p>
+              </>
+            ) : (
+              <>
+                <strong>Noch offen</strong>
+                <p>Die erste synchronisierte Zahl eröffnet die Topliste.</p>
+              </>
+            )}
+          </div>
+        </section>
+
+        <section className="counter-summary-grid" aria-label="Counting Übersicht">
+          <MetricCard icon={<UsersRound size={18} />} label="Aktive Nutzer" value={countingLeaderboardNumber.format(summary?.playerCount ?? 0)} />
+          <MetricCard icon={<Hash size={18} />} label="Richtige Zahlen" value={countingLeaderboardNumber.format(summary?.totalCounts ?? 0)} tone="ok" />
+          <MetricCard icon={<Server size={18} />} label="Counting aktiv" value={`${countingLeaderboardNumber.format(summary?.activeGuildCount ?? 0)} / ${countingLeaderboardNumber.format(summary?.guildCount ?? 0)}`} />
+          <MetricCard icon={<Trophy size={18} />} label="Höchste Kette" value={countingLeaderboardNumber.format(summary?.recordGuild?.recordNumber ?? 0)} tone="warn" />
+        </section>
+
+        <div className="page-heading counter-heading">
+          <div>
+            <p className="eyebrow"><BarChart3 size={15} /> Öffentliche Rangliste</p>
+            <h2>{view === "players" ? "Aktivste Counting-Nutzer" : "Counting nach Discord-Server"}</h2>
+            <p>
+              {view === "players"
+                ? `${filteredPlayers.length} von ${players.length} Nutzern sichtbar.`
+                : `${filteredGuilds.length} von ${guilds.length} verbundenen Guilds sichtbar.`}
+            </p>
+          </div>
+          <RefreshButton loading={leaderboard.loading} onClick={leaderboard.reload} />
+        </div>
+
+        <section className="counting-board-toolbar">
+          <div className="owner-segmented counting-board-tabs" aria-label="Ansicht auswählen">
+            <button className={view === "players" ? "active" : ""} type="button" onClick={() => setView("players")}>
+              <UsersRound size={16} /> Nutzer <span>{players.length}</span>
+            </button>
+            <button className={view === "guilds" ? "active" : ""} type="button" onClick={() => setView("guilds")}>
+              <Server size={16} /> Server <span>{guilds.length}</span>
+            </button>
+          </div>
+          <label className="home-search">
+            <Search size={16} />
+            <input
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+              placeholder={view === "players" ? "Nutzername suchen" : "Guild-Name oder Server-ID suchen"}
+              aria-label={view === "players" ? "Counting-Nutzer durchsuchen" : "Counting-Guilds durchsuchen"}
+            />
+          </label>
+          <span><Globe2 size={15} /> Für jeden ohne Login sichtbar</span>
+        </section>
+
+        {leaderboard.loading && !leaderboard.data && (
+          <LoadingBlock text="Countings Topliste wird geladen" detail="Die aktuellen Nutzer- und Guild-Werte werden aus der Datenbank abgefragt." />
+        )}
+        {!leaderboard.loading && leaderboard.error && <Notice tone="danger" text={leaderboard.error} />}
+
+        {!leaderboard.loading && leaderboard.data && view === "players" && players.length === 0 && (
+          <EmptyState title="Noch keine Counting-Beiträge" text="Sobald der Bot die ersten Nutzerwerte synchronisiert, erscheinen sie automatisch in dieser Topliste." />
+        )}
+        {!leaderboard.loading && leaderboard.data && view === "players" && players.length > 0 && filteredPlayers.length === 0 && (
+          <EmptyState title="Kein Nutzer gefunden" text="Unter diesem Anzeigenamen gibt es aktuell keinen Treffer." />
+        )}
+        {view === "players" && filteredPlayers.length > 0 && (
+          <section className="counting-player-ranking" aria-label="Counting Nutzer-Rangliste">
+            {filteredPlayers.map((player) => {
+              const ranking = players.findIndex((item) => item.userId === player.userId) + 1;
+              const progress = Math.max(2, Math.round((player.correctCounts / topScore) * 100));
+              const attempts = player.correctCounts + player.failures;
+              const successRate = attempts > 0 ? Math.round((player.correctCounts / attempts) * 100) : 0;
+              return (
+                <article className={`counting-player-row ${ranking === 1 ? "is-leader" : ""}`} key={player.userId}>
+                  <span className="counter-rank">{ranking === 1 ? <Crown size={18} /> : `#${ranking}`}</span>
+                  <CountingPlayerAvatar player={player} />
+                  <div className="counting-player-main">
+                    <div>
+                      <h2>{player.displayName}</h2>
+                      <p>Aktiv auf {player.guildCount} {player.guildCount === 1 ? "Guild" : "Guilds"}</p>
+                    </div>
+                    <div className="counter-progress" aria-label={`${player.correctCounts} richtige Zahlen`}>
+                      <span style={{ "--counter-progress": `${progress}%` } as React.CSSProperties} />
+                    </div>
+                  </div>
+                  <div className="counting-player-stats">
+                    <span><small>Richtig</small><strong>{countingLeaderboardNumber.format(player.correctCounts)}</strong></span>
+                    <span><small>Fehlversuche</small><strong>{countingLeaderboardNumber.format(player.failures)}</strong></span>
+                    <span><small>Trefferquote</small><strong>{successRate}%</strong></span>
+                  </div>
+                </article>
+              );
+            })}
+          </section>
+        )}
+
+        {!leaderboard.loading && leaderboard.data && view === "guilds" && guilds.length === 0 && (
+          <EmptyState title="Noch keine verbundenen Guilds" text="Sobald sich der Bot synchronisiert, erscheinen alle verbundenen Server hier." />
+        )}
+        {!leaderboard.loading && leaderboard.data && view === "guilds" && guilds.length > 0 && filteredGuilds.length === 0 && (
+          <EmptyState title="Keine Guild gefunden" text="Unter diesem Namen oder dieser Server-ID gibt es aktuell keinen Treffer." />
+        )}
+        {view === "guilds" && filteredGuilds.length > 0 && (
+          <section className="counting-guild-ranking" aria-label="Counting Guild-Rangliste">
+            {filteredGuilds.map((guild) => {
+              const ranking = guilds.findIndex((item) => item.id === guild.id) + 1;
+              const progress = Math.max(2, Math.round((guild.totalCounts / topGuildTotal) * 100));
+              return (
+                <article className={`counting-guild-board-row ${ranking === 1 && guild.totalCounts > 0 ? "is-leader" : ""}`} key={guild.id}>
+                  <span className="counter-rank">{ranking === 1 && guild.totalCounts > 0 ? <Trophy size={18} /> : `#${ranking}`}</span>
+                  <GuildIcon guild={guild} />
+                  <div className="counting-player-main">
+                    <div className="counting-guild-title">
+                      <div>
+                        <h2>{guild.name}</h2>
+                        <p>{guild.id}</p>
+                      </div>
+                      <span className={`pill ${guild.enabled ? "ok" : ""}`}>{guild.enabled ? "Aktiv" : "Inaktiv"}</span>
+                    </div>
+                    <div className="counter-progress" aria-label={`${guild.totalCounts} richtige Zahlen`}>
+                      <span style={{ "--counter-progress": `${progress}%` } as React.CSSProperties} />
+                    </div>
+                  </div>
+                  <div className="counting-guild-stats">
+                    <span><small>Aktuelle Zahl</small><strong>{countingLeaderboardNumber.format(guild.currentNumber)}</strong></span>
+                    <span><small>Rekord</small><strong>{countingLeaderboardNumber.format(guild.recordNumber)}</strong></span>
+                    <span><small>Alle richtigen</small><strong>{countingLeaderboardNumber.format(guild.totalCounts)}</strong></span>
+                  </div>
+                  <div className="counting-guild-leader">
+                    <small>Top-Counter</small>
+                    {guild.leader ? (
+                      <div>
+                        <CountingPlayerAvatar player={guild.leader} />
+                        <span><strong>{guild.leader.displayName}</strong><small>{countingLeaderboardNumber.format(guild.leader.correctCounts)} richtig</small></span>
+                      </div>
+                    ) : <span className="muted">Noch keine Beiträge</span>}
+                  </div>
+                </article>
+              );
+            })}
+          </section>
+        )}
+
+        <p className="counter-privacy-note">
+          <ShieldCheck size={14} />
+          Öffentlich sind nur Anzeigename, Discord-Avatar und zusammengefasste Counting-Werte. Nachrichteninhalte und private Servereinstellungen werden nicht veröffentlicht.
         </p>
       </main>
     </div>

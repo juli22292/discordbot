@@ -19,6 +19,11 @@ import {
   buildGuildCounterSummary,
   type PublicGuildCounter
 } from "./server/guild-counters";
+import {
+  buildPublicCountingLeaderboard,
+  type PublicCountingContribution,
+  type PublicCountingGuildInput
+} from "./server/counting-leaderboard";
 import { combineMediaChunks, detectImageMimeType, imageExtension, splitMediaBytes } from "./server/media";
 import {
   DiscordApiError,
@@ -152,6 +157,27 @@ interface PublicGuildCounterRow {
   best_daily_clicks: number | null;
   best_day: string | null;
   last_clicked_at: string | null;
+}
+
+interface PublicCountingGuildRow {
+  discord_guild_id: string;
+  name: string;
+  icon: string | null;
+  enabled: number | null;
+  current_number: number | null;
+  record_number: number | null;
+  total_counts: number | null;
+  total_failures: number | null;
+}
+
+interface PublicCountingContributionRow {
+  discord_guild_id: string;
+  user_id: string;
+  display_name: string;
+  avatar: string | null;
+  correct_counts: number;
+  failures: number;
+  updated_at: string | null;
 }
 
 interface SettingsRow {
@@ -1456,6 +1482,28 @@ async function ensureCountingStorage(env: Env): Promise<void> {
       await db.prepare(
         "CREATE INDEX IF NOT EXISTS idx_counting_settings_sync ON counting_settings(sync_status, updated_at)"
       ).run();
+      await db.prepare(
+        `CREATE TABLE IF NOT EXISTS counting_user_stats (
+           guild_id TEXT NOT NULL REFERENCES guilds(id) ON DELETE CASCADE,
+           user_id TEXT NOT NULL,
+           display_name TEXT NOT NULL,
+           avatar TEXT,
+           correct_counts INTEGER NOT NULL DEFAULT 0,
+           failures INTEGER NOT NULL DEFAULT 0,
+           updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+           PRIMARY KEY (guild_id, user_id)
+         )`
+      ).run();
+      await db.batch([
+        db.prepare(
+          `CREATE INDEX IF NOT EXISTS idx_counting_user_stats_score
+             ON counting_user_stats(correct_counts DESC, failures ASC)`
+        ),
+        db.prepare(
+          `CREATE INDEX IF NOT EXISTS idx_counting_user_stats_user
+             ON counting_user_stats(user_id)`
+        )
+      ]);
     })().catch((error) => {
       countingStorageReady = null;
       throw error;
@@ -1463,6 +1511,78 @@ async function ensureCountingStorage(env: Env): Promise<void> {
   }
 
   await countingStorageReady;
+}
+
+function safePublicDiscordAvatar(value: unknown): string | null {
+  if (typeof value !== "string" || !value.trim()) return null;
+  try {
+    const url = new URL(value);
+    if (url.protocol !== "https:") return null;
+    if (!["cdn.discordapp.com", "media.discordapp.net"].includes(url.hostname)) return null;
+    return url.toString();
+  } catch {
+    return null;
+  }
+}
+
+async function loadPublicCountingLeaderboard(env: Env) {
+  await ensureCountingStorage(env);
+  const db = requireDb(env);
+  const [guildRows, contributionRows] = await Promise.all([
+    all<PublicCountingGuildRow>(
+      db.prepare(
+        `SELECT g.discord_guild_id,
+                g.name,
+                g.icon,
+                counting.enabled,
+                counting.current_number,
+                counting.record_number,
+                counting.total_counts,
+                counting.total_failures
+           FROM guilds g
+           LEFT JOIN counting_settings counting ON counting.guild_id = g.id
+          WHERE g.bot_joined_at IS NOT NULL
+          ORDER BY COALESCE(counting.total_counts, 0) DESC,
+                   COALESCE(counting.record_number, 0) DESC,
+                   g.name COLLATE NOCASE ASC`
+      )
+    ),
+    all<PublicCountingContributionRow>(
+      db.prepare(
+        `SELECT g.discord_guild_id,
+                stats.user_id,
+                stats.display_name,
+                stats.avatar,
+                stats.correct_counts,
+                stats.failures,
+                stats.updated_at
+           FROM counting_user_stats stats
+           JOIN guilds g ON g.id = stats.guild_id
+          WHERE g.bot_joined_at IS NOT NULL
+            AND (stats.correct_counts > 0 OR stats.failures > 0)`
+      )
+    )
+  ]);
+  const guilds: PublicCountingGuildInput[] = guildRows.map((row) => ({
+    id: row.discord_guild_id,
+    name: row.name,
+    icon: row.icon,
+    enabled: Boolean(row.enabled),
+    currentNumber: Math.max(0, Number(row.current_number ?? 0)),
+    recordNumber: Math.max(0, Number(row.record_number ?? 0)),
+    totalCounts: Math.max(0, Number(row.total_counts ?? 0)),
+    totalFailures: Math.max(0, Number(row.total_failures ?? 0))
+  }));
+  const contributions: PublicCountingContribution[] = contributionRows.map((row) => ({
+    guildId: row.discord_guild_id,
+    userId: row.user_id,
+    displayName: row.display_name,
+    avatar: safePublicDiscordAvatar(row.avatar),
+    correctCounts: Math.max(0, Number(row.correct_counts ?? 0)),
+    failures: Math.max(0, Number(row.failures ?? 0)),
+    updatedAt: row.updated_at
+  }));
+  return buildPublicCountingLeaderboard(guilds, contributions);
 }
 
 function normalizeCountingSettings(row: CountingSettingsRow | null | undefined): CountingSettingsResponse {
@@ -2865,6 +2985,16 @@ app.get("/api/public/guild-counters", async (c) => {
 app.post("/api/public/guild-counters/:guildId/click", async (c) => {
   const guild = await registerPublicGuildClick(c, c.req.param("guildId"));
   const response = json(c, { guild, cooldownSeconds: 30 });
+  response.headers.set("Cache-Control", "no-store");
+  return response;
+});
+
+app.get("/api/public/counting-leaderboard", async (c) => {
+  const leaderboard = await loadPublicCountingLeaderboard(c.env);
+  const response = json(c, {
+    ...leaderboard,
+    generatedAt: nowIso()
+  });
   response.headers.set("Cache-Control", "no-store");
   return response;
 });
@@ -5240,6 +5370,8 @@ app.post("/api/internal/bot/snapshot", async (c) => {
   const channelRows: Array<Record<string, unknown>> = [];
   const roleRows: Array<Record<string, unknown>> = [];
   const countingRows: Array<Record<string, unknown>> = [];
+  const countingUserRows: Array<Record<string, unknown>> = [];
+  const countingLeaderboardGuildIds: string[] = [];
   const levelRows: Array<Record<string, unknown>> = [];
   const autoroleRows: Array<Record<string, unknown>> = [];
   const controlRows: Array<Record<string, unknown>> = [];
@@ -5300,6 +5432,29 @@ app.post("/api/internal/bot/snapshot", async (c) => {
       lastUserId: /^\d{17,20}$/.test(String(counting.lastUserId ?? "")) ? String(counting.lastUserId) : null,
       timestamp
     });
+    if (Array.isArray(counting.leaderboard)) {
+      countingLeaderboardGuildIds.push(internalGuildId);
+      const usedUsers = new Set<string>();
+      for (const rawEntry of counting.leaderboard.slice(0, 1000)) {
+        if (!rawEntry || typeof rawEntry !== "object") continue;
+        const entry = rawEntry as Record<string, unknown>;
+        const userId = String(entry.userId ?? "");
+        if (!/^\d{17,20}$/.test(userId) || usedUsers.has(userId)) continue;
+        usedUsers.add(userId);
+        const correctCounts = safeInteger(entry.correctCounts);
+        const failures = safeInteger(entry.failures);
+        if (correctCounts === 0 && failures === 0) continue;
+        countingUserRows.push({
+          guildId: internalGuildId,
+          userId,
+          displayName: String(entry.displayName ?? "").trim().slice(0, 100) || `Nutzer ${userId.slice(-4)}`,
+          avatar: safePublicDiscordAvatar(entry.avatar),
+          correctCounts,
+          failures,
+          timestamp
+        });
+      }
+    }
 
     const levelSystem = guild.levelSystem && typeof guild.levelSystem === "object" ? guild.levelSystem : {};
     const rawRewards = Array.isArray(levelSystem.roleRewards) ? levelSystem.roleRewards : [];
@@ -5486,9 +5641,26 @@ app.post("/api/internal/bot/snapshot", async (c) => {
          total_failures = excluded.total_failures,
          last_user_id = excluded.last_user_id,
          sync_status = CASE WHEN counting_settings.sync_status = 'pending' THEN 'pending' ELSE 'synced' END,
-         sync_error = CASE WHEN counting_settings.sync_status = 'pending' THEN counting_settings.sync_error ELSE NULL END,
-         updated_at = excluded.updated_at`
+          sync_error = CASE WHEN counting_settings.sync_status = 'pending' THEN counting_settings.sync_error ELSE NULL END,
+          updated_at = excluded.updated_at`
     ).bind(asJson(countingRows)),
+    db.prepare(
+      "DELETE FROM counting_user_stats WHERE guild_id IN (SELECT CAST(value AS TEXT) FROM json_each(?))"
+    ).bind(asJson(countingLeaderboardGuildIds)),
+    db.prepare(
+      `INSERT INTO counting_user_stats (
+         guild_id, user_id, display_name, avatar, correct_counts, failures, updated_at
+       )
+       SELECT
+         json_extract(value, '$.guildId'),
+         json_extract(value, '$.userId'),
+         json_extract(value, '$.displayName'),
+         json_extract(value, '$.avatar'),
+         json_extract(value, '$.correctCounts'),
+         json_extract(value, '$.failures'),
+         json_extract(value, '$.timestamp')
+       FROM json_each(?)`
+    ).bind(asJson(countingUserRows)),
     db.prepare(
       `INSERT INTO level_settings (
          guild_id, enabled, announcement_channel_id, role_rewards,
@@ -5571,6 +5743,7 @@ app.post("/api/internal/bot/snapshot", async (c) => {
       channels: channelRows.length,
       roles: roleRows.length,
       counting: countingRows.length,
+      countingUsers: countingUserRows.length,
       levelSettings: levelRows.length,
       autoroleSettings: autoroleRows.length,
       controlModules: controlRows.length

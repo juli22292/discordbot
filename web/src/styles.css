@@ -1324,6 +1324,253 @@ b {
   text-align: center;
 }
 
+.counting-player-spotlight > p {
+  margin-top: -4px;
+}
+
+.counting-leader-player {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 12px;
+}
+
+.counting-leader-player strong {
+  overflow: hidden;
+  color: var(--text);
+  font-size: 21px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.counting-player-avatar {
+  display: inline-flex;
+  width: 48px;
+  min-width: 48px;
+  height: 48px;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  border: 1px solid rgba(104, 168, 255, 0.24);
+  border-radius: 8px;
+  background: rgba(104, 168, 255, 0.11);
+  color: var(--blue);
+  object-fit: cover;
+  font-size: 13px;
+  font-weight: 750;
+}
+
+.counting-player-avatar.large {
+  width: 54px;
+  min-width: 54px;
+  height: 54px;
+}
+
+.counting-board-toolbar {
+  display: grid;
+  grid-template-columns: auto minmax(260px, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+  margin-bottom: 14px;
+  padding: 10px;
+  border: 1px solid var(--border-soft);
+  border-radius: 8px;
+  background: var(--panel-bg-soft);
+}
+
+.counting-board-tabs {
+  width: max-content;
+}
+
+.counting-board-tabs button {
+  gap: 8px;
+}
+
+.counting-board-tabs button span {
+  display: inline-flex;
+  min-width: 24px;
+  height: 24px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  background: var(--control-bg);
+  font-size: 12px;
+  font-weight: 750;
+}
+
+.counting-board-toolbar > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--muted);
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+.counting-board-toolbar > span svg {
+  color: var(--blue);
+}
+
+.counting-player-ranking,
+.counting-guild-ranking {
+  display: grid;
+  gap: 10px;
+}
+
+.counting-player-row,
+.counting-guild-board-row {
+  display: grid;
+  gap: 14px;
+  align-items: center;
+  min-width: 0;
+  padding: 14px;
+  border: 1px solid var(--border-soft);
+  border-radius: 8px;
+  background:
+    linear-gradient(110deg, rgba(104, 168, 255, 0.045), transparent 32%),
+    var(--panel-bg-soft);
+  transition: border-color 160ms ease, background 160ms ease, transform 160ms ease;
+}
+
+.counting-player-row {
+  grid-template-columns: 44px 48px minmax(230px, 1fr) minmax(300px, 0.72fr);
+}
+
+.counting-guild-board-row {
+  grid-template-columns: 44px 52px minmax(250px, 1fr) minmax(270px, 0.78fr) minmax(190px, 0.58fr);
+}
+
+.counting-player-row:hover,
+.counting-guild-board-row:hover {
+  border-color: rgba(104, 168, 255, 0.27);
+  background:
+    linear-gradient(110deg, rgba(104, 168, 255, 0.08), transparent 36%),
+    var(--panel-bg-soft);
+  transform: translateY(-1px);
+}
+
+.counting-player-row.is-leader,
+.counting-guild-board-row.is-leader {
+  border-color: rgba(242, 184, 75, 0.43);
+  box-shadow: inset 3px 0 0 rgba(242, 184, 75, 0.78);
+}
+
+.counting-player-row.is-leader .counter-rank,
+.counting-guild-board-row.is-leader .counter-rank {
+  color: var(--amber);
+  background: rgba(242, 184, 75, 0.1);
+}
+
+.counting-guild-board-row > .guild-icon {
+  width: 52px;
+  height: 52px;
+}
+
+.counting-player-main {
+  display: grid;
+  min-width: 0;
+  gap: 11px;
+}
+
+.counting-player-main h2 {
+  overflow: hidden;
+  margin: 0;
+  color: var(--text);
+  font-size: 17px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.counting-player-main p {
+  overflow: hidden;
+  margin: 3px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.counting-player-stats,
+.counting-guild-stats {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.counting-player-stats span,
+.counting-guild-stats span {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+  padding-left: 10px;
+  border-left: 1px solid var(--border-soft);
+}
+
+.counting-player-stats small,
+.counting-guild-stats small,
+.counting-guild-leader > small {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.counting-player-stats strong,
+.counting-guild-stats strong {
+  color: var(--text);
+  font-size: 17px;
+}
+
+.counting-guild-title {
+  display: flex;
+  min-width: 0;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.counting-guild-title > div {
+  min-width: 0;
+}
+
+.counting-guild-leader {
+  display: grid;
+  min-width: 0;
+  gap: 7px;
+  padding-left: 12px;
+  border-left: 1px solid var(--border-soft);
+}
+
+.counting-guild-leader > div {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 9px;
+}
+
+.counting-guild-leader .counting-player-avatar {
+  width: 36px;
+  min-width: 36px;
+  height: 36px;
+  font-size: 10px;
+}
+
+.counting-guild-leader span {
+  display: grid;
+  min-width: 0;
+}
+
+.counting-guild-leader strong {
+  overflow: hidden;
+  color: var(--text);
+  font-size: 13px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.counting-guild-leader span small {
+  color: var(--muted);
+  font-size: 11px;
+}
+
 .home-hero {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
@@ -6769,6 +7016,23 @@ textarea {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
+  .counting-player-row,
+  .counting-guild-board-row {
+    grid-template-columns: 44px 52px minmax(0, 1fr);
+  }
+
+  .counting-player-stats,
+  .counting-guild-stats,
+  .counting-guild-leader {
+    grid-column: 3;
+  }
+
+  .counting-guild-leader {
+    padding: 10px 0 0;
+    border-top: 1px solid var(--border-soft);
+    border-left: 0;
+  }
+
   .owner-health-summary {
     grid-template-columns: minmax(0, 1fr);
   }
@@ -6912,7 +7176,7 @@ textarea {
   }
 }
 
-@media (max-width: 980px) {
+@media (max-width: 1320px) {
   .top-nav {
     grid-template-columns: 1fr auto auto auto auto;
   }
@@ -7005,6 +7269,36 @@ textarea {
   .counter-toolbar > span {
     padding: 0 2px 2px;
     white-space: normal;
+  }
+
+  .counting-board-toolbar {
+    grid-template-columns: 1fr;
+  }
+
+  .counting-board-tabs {
+    width: 100%;
+  }
+
+  .counting-board-tabs button {
+    flex: 1;
+  }
+
+  .counting-player-row,
+  .counting-guild-board-row {
+    grid-template-columns: 38px 46px minmax(0, 1fr);
+  }
+
+  .counting-player-row > .counting-player-avatar,
+  .counting-guild-board-row > .guild-icon {
+    width: 46px;
+    min-width: 46px;
+    height: 46px;
+  }
+
+  .counting-player-stats,
+  .counting-guild-stats,
+  .counting-guild-leader {
+    grid-column: 1 / -1;
   }
 
   .owner-source-actions {
