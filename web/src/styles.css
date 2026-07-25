@@ -9377,6 +9377,33 @@ textarea {
   white-space: pre-wrap;
 }
 
+.public-ai-answer-content strong {
+  color: var(--text);
+  font-weight: 700;
+}
+
+.public-ai-answer-content a {
+  color: var(--blue);
+  text-decoration: underline;
+  text-decoration-color: rgba(104, 168, 255, 0.45);
+  text-underline-offset: 3px;
+}
+
+.public-ai-answer-content a:hover {
+  color: var(--text);
+  text-decoration-color: currentColor;
+}
+
+.public-ai-inline-code {
+  padding: 2px 5px;
+  border: 1px solid var(--border-soft);
+  border-radius: 4px;
+  color: var(--muted-strong);
+  background: var(--surface-strong);
+  font-family: "Cascadia Code", "SFMono-Regular", Consolas, monospace;
+  font-size: 0.9em;
+}
+
 .public-ai-code {
   min-width: 0;
   overflow: hidden;

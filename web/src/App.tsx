@@ -7,6 +7,7 @@ import type {
   PublicCountingPlayer
 } from "./server/counting-leaderboard";
 import type { PublicGuildCounter, PublicGuildCounterSummary } from "./server/guild-counters";
+import { parsePublicAiInlineMarkdown } from "./public-ai-markdown";
 import {
   Activity,
   AlertTriangle,
@@ -2430,10 +2431,26 @@ function PublicAiContent({ content }: { content: string }) {
   let cursor = 0;
   let match: RegExpExecArray | null;
 
+  function renderInlineMarkdown(value: string, keyPrefix: string) {
+    return parsePublicAiInlineMarkdown(value).map((token, index) => {
+      const key = `${keyPrefix}-${index}`;
+      if (token.type === "strong") return <strong key={key}>{token.text}</strong>;
+      if (token.type === "code") return <code className="public-ai-inline-code" key={key}>{token.text}</code>;
+      if (token.type === "link") {
+        return (
+          <a key={key} href={token.href} target="_blank" rel="noreferrer">
+            {token.text}
+          </a>
+        );
+      }
+      return <React.Fragment key={key}>{token.text}</React.Fragment>;
+    });
+  }
+
   while ((match = codeBlockPattern.exec(content)) !== null) {
     const prose = content.slice(cursor, match.index);
     if (prose.trim()) {
-      parts.push(<p key={`text-${cursor}`}>{prose.trim()}</p>);
+      parts.push(<p key={`text-${cursor}`}>{renderInlineMarkdown(prose.trim(), `inline-${cursor}`)}</p>);
     }
     const language = match[1]?.trim();
     parts.push(
@@ -2447,7 +2464,7 @@ function PublicAiContent({ content }: { content: string }) {
 
   const remainder = content.slice(cursor);
   if (remainder.trim() || parts.length === 0) {
-    parts.push(<p key={`text-${cursor}`}>{remainder.trim()}</p>);
+    parts.push(<p key={`text-${cursor}`}>{renderInlineMarkdown(remainder.trim(), `inline-${cursor}`)}</p>);
   }
 
   return <div className="public-ai-answer-content">{parts}</div>;
