@@ -22,6 +22,18 @@ Die Secrets `DISCORD_BOT_TOKEN`, `DISCORD_CLIENT_ID`,
 Repository. `INTERNAL_BOT_API_SECRET` muss exakt mit dem Wert in der Bot-`.env`
 uebereinstimmen.
 
+Der KI-Helfer verwendet Groq ausschliesslich serverseitig. Der API-Key darf
+nicht in `wrangler.jsonc`, JavaScript oder Git stehen, sondern wird als
+Cloudflare-Secret gesetzt:
+
+```bash
+wrangler secret put GROQ_API_KEY
+```
+
+Optionale Worker-Variablen sind `GROQ_MODEL` (Standard:
+`llama-3.3-70b-versatile`), `GROQ_TIMEOUT_SECONDS`,
+`GROQ_MAX_COMPLETION_TOKENS` und `GROQ_REQUESTS_PER_HOUR`.
+
 ## Bot-Server
 
 Der Bot ruft Sync-Jobs signiert vom Worker ab. Hochgeladene Dateien werden nach

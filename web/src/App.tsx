@@ -1,5 +1,6 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
+import type { AssistantTarget } from "./server/assistant";
 import {
   Activity,
   AlertTriangle,
@@ -38,6 +39,7 @@ import {
   Loader2,
   LogOut,
   Menu,
+  MessageCircle,
   MessageSquare,
   Mic2,
   Moon,
@@ -54,6 +56,7 @@ import {
   Rocket,
   Save,
   Search,
+  Send,
   Server,
   Settings,
   Shield,
@@ -683,6 +686,28 @@ type User = {
   ownerAdmin?: boolean;
 };
 
+type AssistantAction = {
+  type: "navigate";
+  target: AssistantTarget;
+  label: string;
+};
+
+type AssistantMessage = {
+  id: string;
+  role: "user" | "assistant";
+  content: string;
+  actions?: AssistantAction[];
+};
+
+type AssistantReply = {
+  answer: string;
+  actions: AssistantAction[];
+  quota?: {
+    remaining: number;
+    limit: number;
+  };
+};
+
 type ThemeMode = "dark" | "light";
 type ToastTone = "success" | "danger" | "warning" | "info";
 type HomeGuildFilter = "all" | "installed" | "missing" | "favorites";
@@ -1157,6 +1182,49 @@ const FAVORITE_GUILDS_STORAGE_KEY = "modmail-manager-favorite-guilds";
 const TOAST_EVENT_NAME = "modmail-manager-toast";
 const LEGACY_THEME_STORAGE_KEY = "eclipsebot-theme";
 const LEGACY_FAVORITE_GUILDS_STORAGE_KEY = "eclipsebot-favorite-guilds";
+const ASSISTANT_SECTION_TARGETS = new Set<AssistantTarget>([
+  "overview",
+  "profile",
+  "welcome",
+  "autorole",
+  "level-system",
+  "counting",
+  "giveaways",
+  "reaction-roles",
+  "suggestions",
+  "starboard",
+  "birthdays",
+  "badges",
+  "community-tools",
+  "tickets",
+  "automations",
+  "auto-nickname",
+  "applications",
+  "server-stats",
+  "commands",
+  "custom-commands",
+  "logging",
+  "audit-log",
+  "temp-voice",
+  "youtube-music",
+  "games",
+  "minecraft",
+  "security",
+  "raidmode",
+  "moderation-center",
+  "onboarding",
+  "backups"
+]);
+const ASSISTANT_STARTER_MESSAGE: AssistantMessage = {
+  id: "assistant-welcome",
+  role: "assistant",
+  content: "Hi, ich bin dein KI-Helfer fürs Webpanel. Frag mich nach Einstellungen, Modulen oder dem schnellsten Weg zu einer Funktion."
+};
+const ASSISTANT_QUICK_PROMPTS = [
+  "Was kann ich auf dieser Seite einstellen?",
+  "Prüfe meine nächsten sinnvollen Schritte.",
+  "Wo finde ich das Ticket-System?"
+];
 
 type ToastPayload = {
   tone?: ToastTone;
@@ -1830,16 +1898,322 @@ function ModuleStatusToggle({
 function App() {
   const path = usePath();
   const cleanPath = path.split("?")[0];
+  let page: React.ReactNode;
 
-  if (cleanPath === "/login" || cleanPath === "/") return <LoginPage />;
-  if (cleanPath === "/dokumentation") return <DocumentationPage />;
-  if (cleanPath === "/datenschutz") return <PrivacyPage />;
-  if (cleanPath === "/nutzungsbedingungen") return <TermsPage />;
-  if (cleanPath.startsWith("/admin/discordguilds/view/")) return <AdminGuildViewPage path={cleanPath} />;
-  if (cleanPath === "/admin") return <AdminPageModern />;
-  if (cleanPath === "/home" || cleanPath === "/panel") return <HomePage />;
-  if (cleanPath.startsWith("/dashboard/")) return <Dashboard path={cleanPath} />;
-  return <LoginPage />;
+  if (cleanPath === "/login" || cleanPath === "/") page = <LoginPage />;
+  else if (cleanPath === "/dokumentation") page = <DocumentationPage />;
+  else if (cleanPath === "/datenschutz") page = <PrivacyPage />;
+  else if (cleanPath === "/nutzungsbedingungen") page = <TermsPage />;
+  else if (cleanPath.startsWith("/admin/discordguilds/view/")) page = <AdminGuildViewPage path={cleanPath} />;
+  else if (cleanPath === "/admin") page = <AdminPageModern />;
+  else if (cleanPath === "/home" || cleanPath === "/panel") page = <HomePage />;
+  else if (cleanPath.startsWith("/dashboard/")) page = <Dashboard path={cleanPath} />;
+  else page = <LoginPage />;
+
+  const showAssistant = cleanPath === "/home"
+    || cleanPath === "/panel"
+    || cleanPath === "/admin"
+    || cleanPath.startsWith("/admin/discordguilds/view/")
+    || cleanPath.startsWith("/dashboard/");
+
+  return (
+    <>
+      {page}
+      {showAssistant && <AiAssistant path={cleanPath} />}
+    </>
+  );
+}
+
+function assistantMessageId(): string {
+  return typeof crypto.randomUUID === "function"
+    ? crypto.randomUUID()
+    : `assistant-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+}
+
+function decodeRouteSegment(value: string | undefined): string | null {
+  if (!value) return null;
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return value;
+  }
+}
+
+function assistantContext(path: string) {
+  const dashboardMatch = path.match(/^\/dashboard\/([^/]+)(?:\/([^/]+))?/);
+  if (dashboardMatch) {
+    const routeGuildId = dashboardMatch[1];
+    const demoMode = routeGuildId === DEMO_GUILD_ID;
+    return {
+      path,
+      guildId: demoMode || /^\d{17,20}$/.test(routeGuildId) ? routeGuildId : null,
+      guildName: demoMode ? "Modmail Manager Demo" : null,
+      section: dashboardMatch[2] ?? "overview",
+      demoMode
+    };
+  }
+
+  const adminGuildMatch = path.match(/^\/admin\/discordguilds\/view\/(\d{17,20})\/([^/]+)/);
+  return {
+    path,
+    guildId: adminGuildMatch?.[1] ?? null,
+    guildName: decodeRouteSegment(adminGuildMatch?.[2]),
+    section: path === "/admin" || adminGuildMatch ? "admin" : "panel",
+    demoMode: false
+  };
+}
+
+function assistantTargetPath(target: AssistantTarget, guildId: string | null): string {
+  if (target === "panel") return "/panel";
+  if (target === "admin") return "/admin";
+  if (target === "documentation") return "/dokumentation";
+  if (!guildId || !ASSISTANT_SECTION_TARGETS.has(target)) return "/panel";
+  return `/dashboard/${guildId}/${target}`;
+}
+
+function demoAssistantReply(question: string, section: string | null): AssistantReply {
+  const normalized = question.toLocaleLowerCase("de-DE");
+  if (normalized.includes("ticket")) {
+    return {
+      answer: "Im Ticket-System stellst du Supportrollen, Kategorien, Formularfragen, Logs und Löschrechte ein. In der Demo kannst du dir den kompletten Aufbau ansehen.",
+      actions: [{ type: "navigate", target: "tickets", label: "Ticket-System öffnen" }]
+    };
+  }
+  if (normalized.includes("security") || normalized.includes("sicher")) {
+    return {
+      answer: "Das Security Center bündelt Antispam, Linkschutz, Verifizierung, Anti-Nuke und Audit-Watch. Starte mit den aktiven Schutzmodulen und prüfe danach die Rollenrechte des Bots.",
+      actions: [{ type: "navigate", target: "security", label: "Security Center öffnen" }]
+    };
+  }
+
+  return {
+    answer: section
+      ? `Du befindest dich gerade im Bereich „${section}“. Ich kann dir erklären, welche Einstellung was bewirkt, oder dich direkt zu einem anderen Modul bringen.`
+      : "Ich kann dir Module erklären und dich direkt zur passenden Stelle im Webpanel bringen.",
+    actions: [{ type: "navigate", target: "overview", label: "Zur Übersicht" }]
+  };
+}
+
+function AiAssistant({ path }: { path: string }) {
+  const context = useMemo(() => assistantContext(path), [path]);
+  const [open, setOpen] = useState(false);
+  const [messages, setMessages] = useState<AssistantMessage[]>([ASSISTANT_STARTER_MESSAGE]);
+  const [draft, setDraft] = useState("");
+  const [sending, setSending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [quota, setQuota] = useState<{ remaining: number; limit: number } | null>(null);
+  const messageListRef = useRef<HTMLDivElement | null>(null);
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    textareaRef.current?.focus();
+  }, [open]);
+
+  useEffect(() => {
+    if (!open) return;
+    const list = messageListRef.current;
+    if (list) list.scrollTop = list.scrollHeight;
+  }, [messages, open, sending]);
+
+  useEffect(() => {
+    function onKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") setOpen(false);
+    }
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, []);
+
+  async function sendMessage(value = draft) {
+    const content = value.trim();
+    if (!content || sending) return;
+
+    const userMessage: AssistantMessage = {
+      id: assistantMessageId(),
+      role: "user",
+      content: content.slice(0, 2400)
+    };
+    const conversation = [...messages, userMessage].slice(-12);
+    setMessages(conversation);
+    setDraft("");
+    setError(null);
+    setSending(true);
+
+    try {
+      const response = context.demoMode
+        ? demoAssistantReply(content, context.section)
+        : await api<AssistantReply>("/api/assistant/chat", {
+          method: "POST",
+          body: JSON.stringify({
+            messages: conversation.map(({ role, content: messageContent }) => ({ role, content: messageContent })),
+            context
+          })
+        });
+
+      const assistantMessage: AssistantMessage = {
+        id: assistantMessageId(),
+        role: "assistant",
+        content: response.answer,
+        actions: response.actions
+      };
+      setMessages((current) => [...current, assistantMessage].slice(-12));
+      if (response.quota) setQuota(response.quota);
+    } catch (requestError) {
+      setError(requestError instanceof Error ? requestError.message : "Der KI-Helfer konnte nicht antworten.");
+    } finally {
+      setSending(false);
+    }
+  }
+
+  function runAction(action: AssistantAction) {
+    const targetPath = assistantTargetPath(action.target, context.guildId);
+    if (ASSISTANT_SECTION_TARGETS.has(action.target) && !context.guildId) {
+      notify({
+        tone: "info",
+        title: "Server auswählen",
+        text: "Wähle zuerst eine Guild aus, dann öffnet der Helfer das gewünschte Modul."
+      });
+    }
+    setOpen(false);
+    navigate(targetPath);
+  }
+
+  async function copyMessage(content: string) {
+    try {
+      await navigator.clipboard.writeText(content);
+      notify({ tone: "success", title: "Antwort kopiert" });
+    } catch {
+      notify({ tone: "warning", title: "Kopieren nicht möglich" });
+    }
+  }
+
+  function resetConversation() {
+    setMessages([ASSISTANT_STARTER_MESSAGE]);
+    setDraft("");
+    setError(null);
+    setQuota(null);
+  }
+
+  return (
+    <aside className={`ai-assistant ${open ? "is-open" : ""}`} aria-label="KI-Helfer">
+      {open && (
+        <section className="ai-assistant-panel" role="dialog" aria-label="KI-Helfer Chat">
+          <header className="ai-assistant-header">
+            <span className="ai-assistant-mark"><Sparkles size={18} /></span>
+            <div>
+              <strong>KI-Helfer</strong>
+              <small><i /> {context.demoMode ? "Demo-Antworten" : "Groq verbunden"}</small>
+            </div>
+            <button type="button" title="Chat leeren" aria-label="Chat leeren" onClick={resetConversation}>
+              <Trash2 size={16} />
+            </button>
+            <button type="button" title="KI-Helfer schließen" aria-label="KI-Helfer schließen" onClick={() => setOpen(false)}>
+              <X size={17} />
+            </button>
+          </header>
+
+          <div className="ai-assistant-context">
+            <span><Bot size={14} /> Aktuelle Seite</span>
+            <strong>{context.section === "panel" ? "Serverauswahl" : context.section === "admin" ? "Owner-Bereich" : context.section}</strong>
+          </div>
+
+          <div className="ai-assistant-messages" ref={messageListRef} aria-live="polite">
+            {messages.map((message) => (
+              <article className={`ai-message ${message.role}`} key={message.id}>
+                <span className="ai-message-avatar">
+                  {message.role === "assistant" ? <Sparkles size={15} /> : <UserRound size={15} />}
+                </span>
+                <div>
+                  <p>{message.content}</p>
+                  {message.actions && message.actions.length > 0 && (
+                    <div className="ai-message-actions">
+                      {message.actions.map((action) => (
+                        <button type="button" key={`${message.id}-${action.target}`} onClick={() => runAction(action)}>
+                          {action.label}
+                          <ArrowRight size={14} />
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                  {message.role === "assistant" && message.id !== ASSISTANT_STARTER_MESSAGE.id && (
+                    <button className="ai-copy-message" type="button" onClick={() => void copyMessage(message.content)}>
+                      <Copy size={13} />
+                      Kopieren
+                    </button>
+                  )}
+                </div>
+              </article>
+            ))}
+            {sending && (
+              <article className="ai-message assistant thinking">
+                <span className="ai-message-avatar"><Sparkles size={15} /></span>
+                <div><span /><span /><span /></div>
+              </article>
+            )}
+          </div>
+
+          {messages.length === 1 && (
+            <div className="ai-quick-prompts">
+              {ASSISTANT_QUICK_PROMPTS.map((prompt) => (
+                <button type="button" key={prompt} onClick={() => void sendMessage(prompt)}>
+                  <Sparkles size={14} />
+                  {prompt}
+                </button>
+              ))}
+            </div>
+          )}
+
+          {error && (
+            <div className="ai-assistant-error">
+              <AlertTriangle size={15} />
+              <span>{error}</span>
+              <button type="button" onClick={() => void sendMessage(messages.filter((message) => message.role === "user").at(-1)?.content ?? "")}>
+                Nochmal
+              </button>
+            </div>
+          )}
+
+          <footer className="ai-assistant-composer">
+            <div>
+              <textarea
+                ref={textareaRef}
+                rows={2}
+                maxLength={2400}
+                value={draft}
+                placeholder="Frag etwas zum Webpanel..."
+                aria-label="Nachricht an den KI-Helfer"
+                onChange={(event) => setDraft(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter" && !event.shiftKey) {
+                    event.preventDefault();
+                    void sendMessage();
+                  }
+                }}
+              />
+              <button type="button" disabled={!draft.trim() || sending} aria-label="Nachricht senden" title="Nachricht senden" onClick={() => void sendMessage()}>
+                {sending ? <Loader2 className="spin" size={17} /> : <Send size={17} />}
+              </button>
+            </div>
+            <small>
+              <span>KI kann Fehler machen. Änderungen werden nie automatisch gespeichert.</span>
+              {quota && <b>{quota.remaining}/{quota.limit}</b>}
+            </small>
+          </footer>
+        </section>
+      )}
+
+      <button
+        type="button"
+        className="ai-assistant-launcher"
+        aria-label={open ? "KI-Helfer schließen" : "KI-Helfer öffnen"}
+        title={open ? "KI-Helfer schließen" : "KI-Helfer öffnen"}
+        onClick={() => setOpen((current) => !current)}
+      >
+        {open ? <X size={22} /> : <MessageCircle size={23} />}
+        {!open && <span>AI</span>}
+      </button>
+    </aside>
+  );
 }
 
 function LoginPage() {

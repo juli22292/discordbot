@@ -1,6 +1,11 @@
 import { Hono, type Context } from "hono";
 import { ZodError } from "zod";
 import {
+  assistantChatSchema,
+  buildAssistantSystemPrompt,
+  parseAssistantModelResponse
+} from "./server/assistant";
+import {
   clearCookieHeader,
   cookieHeader,
   OAUTH_STATE_COOKIE,
@@ -392,6 +397,8 @@ interface OAuthStateData {
 
 type BotInstallStatus = "installed" | "missing" | "unknown";
 const sessionTokenRefreshes = new Map<string, Promise<TokenData>>();
+const assistantMemoryUsage = new Map<string, { windowStart: string; requestCount: number }>();
+let assistantStorageReady: Promise<void> | null = null;
 
 function json(c: HonoContext, data: unknown, status = 200): Response {
   return c.json(data, status as 200);
@@ -487,6 +494,147 @@ function requireDb(env: Env): D1Database {
   }
 
   return env.DB;
+}
+
+function boundedEnvNumber(value: string | undefined, fallback: number, min: number, max: number): number {
+  const parsed = Number(value ?? "");
+  if (!Number.isFinite(parsed)) return fallback;
+  return Math.max(min, Math.min(max, Math.round(parsed)));
+}
+
+function currentHourWindow(): string {
+  const window = new Date();
+  window.setUTCMinutes(0, 0, 0);
+  return window.toISOString();
+}
+
+async function ensureAssistantUsageStorage(env: Env): Promise<void> {
+  if (!hasDb(env)) return;
+  if (!assistantStorageReady) {
+    assistantStorageReady = (async () => {
+      await env.DB.prepare(
+        `CREATE TABLE IF NOT EXISTS ai_assistant_usage (
+          user_id TEXT NOT NULL,
+          window_start TEXT NOT NULL,
+          request_count INTEGER NOT NULL DEFAULT 0,
+          updated_at TEXT NOT NULL,
+          PRIMARY KEY (user_id, window_start)
+        )`
+      ).run();
+      await env.DB.prepare(
+        "CREATE INDEX IF NOT EXISTS idx_ai_assistant_usage_updated_at ON ai_assistant_usage(updated_at)"
+      ).run();
+    })().catch((error) => {
+      assistantStorageReady = null;
+      throw error;
+    });
+  }
+  await assistantStorageReady;
+}
+
+async function consumeAssistantQuota(env: Env, userId: string): Promise<{ remaining: number; limit: number }> {
+  const limit = boundedEnvNumber(env.GROQ_REQUESTS_PER_HOUR, 30, 5, 120);
+  const windowStart = currentHourWindow();
+
+  if (!hasDb(env)) {
+    const current = assistantMemoryUsage.get(userId);
+    const requestCount = current?.windowStart === windowStart ? current.requestCount : 0;
+    if (requestCount >= limit) {
+      throw new HttpError(429, "assistant_rate_limited", "Dein KI-Limit für diese Stunde ist erreicht.");
+    }
+    assistantMemoryUsage.set(userId, { windowStart, requestCount: requestCount + 1 });
+    return { remaining: Math.max(0, limit - requestCount - 1), limit };
+  }
+
+  await ensureAssistantUsageStorage(env);
+  const current = await first<{ request_count: number }>(
+    env.DB.prepare(
+      "SELECT request_count FROM ai_assistant_usage WHERE user_id = ? AND window_start = ?"
+    ).bind(userId, windowStart)
+  );
+  const requestCount = Number(current?.request_count ?? 0);
+  if (requestCount >= limit) {
+    throw new HttpError(429, "assistant_rate_limited", "Dein KI-Limit für diese Stunde ist erreicht.");
+  }
+
+  await env.DB.prepare(
+    `INSERT INTO ai_assistant_usage (user_id, window_start, request_count, updated_at)
+     VALUES (?, ?, 1, ?)
+     ON CONFLICT(user_id, window_start)
+     DO UPDATE SET request_count = request_count + 1, updated_at = excluded.updated_at`
+  ).bind(userId, windowStart, nowIso()).run();
+
+  return { remaining: Math.max(0, limit - requestCount - 1), limit };
+}
+
+async function requestGroqAssistant(
+  env: Env,
+  input: ReturnType<typeof assistantChatSchema.parse>
+): Promise<ReturnType<typeof parseAssistantModelResponse>> {
+  const apiKey = env.GROQ_API_KEY?.trim();
+  if (!apiKey) {
+    throw new HttpError(503, "assistant_not_configured", "Der KI-Helfer ist noch nicht konfiguriert.");
+  }
+
+  const model = env.GROQ_MODEL?.trim() || "llama-3.3-70b-versatile";
+  const timeoutSeconds = boundedEnvNumber(env.GROQ_TIMEOUT_SECONDS, 20, 5, 45);
+  const maxCompletionTokens = boundedEnvNumber(env.GROQ_MAX_COMPLETION_TOKENS, 900, 200, 2000);
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutSeconds * 1000);
+
+  try {
+    const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${apiKey}`,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        model,
+        temperature: 0.25,
+        max_completion_tokens: maxCompletionTokens,
+        response_format: { type: "json_object" },
+        messages: [
+          { role: "system", content: buildAssistantSystemPrompt(input.context) },
+          ...input.messages
+        ]
+      }),
+      signal: controller.signal
+    });
+
+    if (!response.ok) {
+      if (response.status === 429) {
+        const retryAfter = response.headers.get("Retry-After");
+        throw new HttpError(
+          429,
+          "groq_rate_limited",
+          retryAfter ? `Groq ist ausgelastet. Bitte in ${retryAfter} Sekunden erneut versuchen.` : "Groq ist gerade ausgelastet. Bitte kurz warten."
+        );
+      }
+      if (response.status === 401 || response.status === 403) {
+        throw new HttpError(503, "assistant_credentials_invalid", "Der Groq API-Key ist ungültig oder nicht mehr aktiv.");
+      }
+      throw new HttpError(502, "groq_unavailable", "Groq konnte gerade keine Antwort liefern.");
+    }
+
+    const payload = await response.json() as {
+      choices?: Array<{ message?: { content?: unknown } }>;
+    };
+    const content = payload.choices?.[0]?.message?.content;
+    if (typeof content !== "string" || !content.trim()) {
+      throw new HttpError(502, "groq_response_invalid", "Groq hat keine verwertbare Antwort geliefert.");
+    }
+
+    return parseAssistantModelResponse(content);
+  } catch (error) {
+    if (error instanceof HttpError) throw error;
+    if (error instanceof DOMException && error.name === "AbortError") {
+      throw new HttpError(504, "groq_timeout", "Groq hat zu lange gebraucht. Bitte versuche es erneut.");
+    }
+    throw new HttpError(502, "groq_unavailable", "Der KI-Helfer ist gerade nicht erreichbar.");
+  } finally {
+    clearTimeout(timeout);
+  }
 }
 
 async function encryptedCookieState(env: Env, data: OAuthStateData): Promise<string> {
@@ -2575,6 +2723,18 @@ app.get("/api/me", async (c) => {
       ownerAdmin: canUseOwnerAdmin(session.user.discordUserId)
     },
     expiresAt: session.expiresAt
+  });
+});
+
+app.post("/api/assistant/chat", async (c) => {
+  const session = await requireSession(c);
+  const input = assistantChatSchema.parse(await readJsonBody(c));
+  const quota = await consumeAssistantQuota(c.env, session.user.discordUserId);
+  const response = await requestGroqAssistant(c.env, input);
+
+  return json(c, {
+    ...response,
+    quota
   });
 });
 
@@ -5682,6 +5842,10 @@ async function scheduled(_event: ScheduledEvent, env: Env): Promise<void> {
   await env.DB.prepare("DELETE FROM sessions WHERE expires_at <= ?").bind(timestamp).run();
   await env.DB.prepare(
     "DELETE FROM sync_events WHERE status = 'completed' AND completed_at IS NOT NULL AND completed_at < datetime('now', '-30 days')"
+  ).run();
+  await ensureAssistantUsageStorage(env);
+  await env.DB.prepare(
+    "DELETE FROM ai_assistant_usage WHERE updated_at < datetime('now', '-2 days')"
   ).run();
 }
 
