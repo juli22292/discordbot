@@ -1797,6 +1797,36 @@ function RefreshButton({
   );
 }
 
+function ModuleStatusToggle({
+  checked,
+  disabled = false,
+  onChange,
+  activeLabel = "Aktiv",
+  inactiveLabel = "Inaktiv"
+}: {
+  checked: boolean;
+  disabled?: boolean;
+  onChange: (checked: boolean) => void;
+  activeLabel?: string;
+  inactiveLabel?: string;
+}) {
+  const label = checked ? activeLabel : inactiveLabel;
+
+  return (
+    <label className={`module-status-toggle ${checked ? "is-active" : "is-inactive"} ${disabled ? "is-disabled" : ""}`}>
+      <input
+        type="checkbox"
+        checked={checked}
+        disabled={disabled}
+        aria-label={`Modul ${label}`}
+        onChange={(event) => onChange(event.target.checked)}
+      />
+      <span className="module-status-toggle-icon" aria-hidden="true"><Power size={15} /></span>
+      <span>{label}</span>
+    </label>
+  );
+}
+
 function App() {
   const path = usePath();
   const cleanPath = path.split("?")[0];
@@ -5489,10 +5519,7 @@ function AutorolePage({ guildId }: { guildId: string }) {
           <p>Vergib mehrere Rollen automatisch, mit eigenen Regeln für Mitglieder und neu hinzugefügte Bots.</p>
         </div>
         <div className="control-hero-actions autorole-hero-actions">
-          <label className="welcome-switch">
-            <input type="checkbox" checked={draft.enabled} disabled={saving} onChange={(event) => void updateEnabled(event.target.checked)} />
-            <span>{draft.enabled ? "Aktiv" : "Inaktiv"}</span>
-          </label>
+          <ModuleStatusToggle checked={draft.enabled} disabled={saving} onChange={(checked) => void updateEnabled(checked)} />
           <RefreshButton
             loading={settings.loading || roles.loading}
             onClick={async () => { await Promise.all([settings.reload(), roles.reload()]); }}
@@ -5751,10 +5778,7 @@ function LevelSystemPage({ guildId }: { guildId: string }) {
           <p>Nachrichten werden zu Fortschritt. Aufstiege landen im richtigen Kanal und Rollen werden automatisch vergeben.</p>
         </div>
         <div className="control-hero-actions level-hero-actions">
-          <label className="welcome-switch">
-            <input type="checkbox" checked={draft.enabled} disabled={saving} onChange={(event) => void updateEnabled(event.target.checked)} />
-            <span>{draft.enabled ? "Aktiv" : "Inaktiv"}</span>
-          </label>
+          <ModuleStatusToggle checked={draft.enabled} disabled={saving} onChange={(checked) => void updateEnabled(checked)} />
           <RefreshButton
             loading={settings.loading || channels.loading || roles.loading}
             onClick={async () => { await Promise.all([settings.reload(), channels.reload(), roles.reload()]); }}
@@ -5999,10 +6023,7 @@ function CountingPage({ guildId }: { guildId: string }) {
           <p>Eine saubere Zahlenkette für deinen Server, mit Reihenfolgeschutz, Rekord und Spielerstatistiken.</p>
         </div>
         <div className="control-hero-actions counting-hero-actions">
-          <label className="welcome-switch">
-            <input type="checkbox" checked={draft.enabled} disabled={saving || resetting} onChange={(event) => void updateEnabled(event.target.checked)} />
-            <span>{draft.enabled ? "Aktiv" : "Inaktiv"}</span>
-          </label>
+          <ModuleStatusToggle checked={draft.enabled} disabled={saving || resetting} onChange={(checked) => void updateEnabled(checked)} />
           <RefreshButton
             loading={settings.loading || channels.loading}
             onClick={async () => { await Promise.all([settings.reload(), channels.reload()]); }}
@@ -6257,15 +6278,7 @@ function TempVoicePage({ guildId }: { guildId: string }) {
           <p>Join-to-create, Besitzerrechte und das komplette Discord-Interface an einem Ort konfigurieren.</p>
         </div>
         <div className="control-hero-actions tempvoice-hero-actions">
-          <label className="welcome-switch">
-            <input
-              type="checkbox"
-              checked={draft.enabled}
-              disabled={saving || sending}
-              onChange={(event) => void updateEnabled(event.target.checked)}
-            />
-            <span>{draft.enabled ? "Aktiv" : "Inaktiv"}</span>
-          </label>
+          <ModuleStatusToggle checked={draft.enabled} disabled={saving || sending} onChange={(checked) => void updateEnabled(checked)} />
           <RefreshButton
             loading={settings.loading || channels.loading}
             onClick={async () => { await Promise.all([settings.reload(), channels.reload()]); }}
@@ -6604,10 +6617,7 @@ function LoggingPage({ guildId }: { guildId: string }) {
           <p>Kategorien, Logkanäle und Testlauf zentral steuern. Die Änderungen werden als Sync-Job an den laufenden Bot geschickt.</p>
         </div>
         <div className="control-hero-actions">
-          <label className="welcome-switch logging-switch">
-            <input type="checkbox" checked={draft.enabled} disabled={saving} onChange={(event) => void updateEnabled(event.target.checked)} />
-            <span>{draft.enabled ? "Aktiv" : "Inaktiv"}</span>
-          </label>
+          <ModuleStatusToggle checked={draft.enabled} disabled={saving} onChange={(checked) => void updateEnabled(checked)} />
           <RefreshButton loading={logging.loading || channels.loading} onClick={async () => {
             await Promise.all([logging.reload(), channels.reload()]);
           }} />
@@ -6847,10 +6857,7 @@ function WelcomePage({ guildId }: { guildId: string }) {
           <p>Neue Mitglieder landen mit eigener Nachricht, optionalem Embed, Bild, Startrolle und kontrollierten Mentions direkt sauber im richtigen Kanal.</p>
         </div>
         <div className="control-hero-actions">
-          <label className="welcome-switch">
-            <input type="checkbox" checked={draft.enabled} disabled={saving} onChange={(event) => void updateEnabled(event.target.checked)} />
-            <span>{draft.enabled ? "Aktiv" : "Inaktiv"}</span>
-          </label>
+          <ModuleStatusToggle checked={draft.enabled} disabled={saving} onChange={(checked) => void updateEnabled(checked)} />
           <RefreshButton loading={welcome.loading || channels.loading || roles.loading} onClick={async () => {
             await Promise.all([welcome.reload(), channels.reload(), roles.reload()]);
           }} />
@@ -7392,8 +7399,10 @@ function AuditLogPage({ guildId }: { guildId: string }) {
 }
 
 function SyncPill({ status }: { status: string }) {
-  const tone = status === "failed" ? "danger" : status === "synced" ? "ok" : "neutral";
-  const label = status === "failed" ? "Sync fehlgeschlagen" : status === "pending" ? "Wird synchronisiert" : status === "synced" ? "Synchronisiert" : "Bereit";
+  if (status !== "pending" && status !== "failed") return null;
+
+  const tone = status === "failed" ? "danger" : "neutral";
+  const label = status === "failed" ? "Sync fehlgeschlagen" : "Wird synchronisiert";
   return <span className={`pill ${tone}`}>{label}</span>;
 }
 
@@ -7660,18 +7669,14 @@ function FeatureModulePage({ guildId, definition }: { guildId: string; definitio
   return (
     <section className="control-page feature-control">
       <header className="control-hero feature-hero">
-        <div className="feature-hero-icon">{definition.icon}</div>
         <div>
-          <p className="eyebrow">{definition.kicker}</p>
+          <p className="eyebrow">{definition.icon} {definition.kicker}</p>
           <h2>{definition.label}</h2>
           <p>{definition.description}</p>
         </div>
         <div className="control-hero-actions">
           <SyncPill status={draft.syncStatus} />
-          <label className="feature-master-toggle">
-            <input type="checkbox" checked={draft.enabled} disabled={saving} onChange={(event) => void updateEnabled(event.target.checked)} />
-            <span>{draft.enabled ? "Aktiv" : "Inaktiv"}</span>
-          </label>
+          <ModuleStatusToggle checked={draft.enabled} disabled={saving} onChange={(checked) => void updateEnabled(checked)} />
           <RefreshButton loading={settings.loading || channels.loading || roles.loading} onClick={() => void reload()} />
         </div>
       </header>
@@ -7882,7 +7887,7 @@ function RaidmodePage({ guildId }: { guildId: string }) {
       {settings.data && <>
         <div className="control-stat-grid"><StatusTile icon={<Activity size={19} />} label="Raidmode" value={draft.raidmodeEnabled ? "aktiv" : "inaktiv"} tone={draft.raidmodeEnabled ? "warn" : "ok"} /><StatusTile icon={<AlertTriangle size={19} />} label="Panic" value={draft.panicEnabled ? "aktiv" : "bereit"} tone={draft.panicEnabled ? "warn" : "ok"} /><StatusTile icon={<UsersRound size={19} />} label="Mitglieder" value={String(draft.memberCount)} /><StatusTile icon={<Hash size={19} />} label="Textkanäle" value={String(draft.textChannelCount)} /></div>
         <section className="panel control-panel"><div className="panel-title compact"><div><h2>Schutzprofil</h2><p className="muted">Ein Profil setzt die zusammengehörigen Security-Regeln atomar.</p></div></div><div className="raid-profile-grid">{profiles.map((profile) => { const Icon = profile.icon; return <button type="button" className={draft.profile === profile.key ? "selected" : ""} onClick={() => setDraft({ ...draft, profile: profile.key })} key={profile.key}><span><Icon size={19} /></span><strong>{profile.title}</strong><small>{profile.text}</small>{draft.profile === profile.key && <Check size={17} />}</button>; })}</div></section>
-        <section className={`panel panic-panel ${draft.panicEnabled ? "active" : ""}`}><div className="panic-copy"><span><AlertTriangle size={21} /></span><div><h2>Panic-Modus</h2><p>Aktiviert das strenge Profil und setzt den gewählten Slowmode auf alle Textkanäle. Beim Ausschalten stellt der Bot die vorherigen Werte wieder her.</p></div></div><label className="welcome-switch"><input type="checkbox" checked={draft.panicEnabled} onChange={(event) => setDraft({ ...draft, panicEnabled: event.target.checked })} /><span>{draft.panicEnabled ? "Aktiv" : "Bereit"}</span></label><NumberSetting label="Slowmode" value={draft.panicSlowmodeSeconds} min={0} max={21600} suffix="Sek." onChange={(value) => setDraft({ ...draft, panicSlowmodeSeconds: value })} /></section>
+        <section className={`panel panic-panel ${draft.panicEnabled ? "active" : ""}`}><div className="panic-copy"><span><AlertTriangle size={21} /></span><div><h2>Panic-Modus</h2><p>Aktiviert das strenge Profil und setzt den gewählten Slowmode auf alle Textkanäle. Beim Ausschalten stellt der Bot die vorherigen Werte wieder her.</p></div></div><ModuleStatusToggle checked={draft.panicEnabled} inactiveLabel="Bereit" onChange={(checked) => setDraft({ ...draft, panicEnabled: checked })} /><NumberSetting label="Slowmode" value={draft.panicSlowmodeSeconds} min={0} max={21600} suffix="Sek." onChange={(value) => setDraft({ ...draft, panicSlowmodeSeconds: value })} /></section>
         <div className="control-savebar"><div><strong>Profil: {profiles.find((profile) => profile.key === draft.profile)?.title}</strong><small>{draft.panicEnabled ? "Panic wird beim Speichern sofort ausgelöst." : "Änderungen werden nach dem Speichern vom Bot angewendet."}</small></div><button className={draft.panicEnabled ? "danger-action inline" : "primary-action inline"} onClick={() => void save()} disabled={saving}>{saving ? <Loader2 className="spin" size={16} /> : <Save size={16} />}{draft.panicEnabled ? "Panic aktivieren" : "Raidmode speichern"}</button></div>
       </>}
     </section>
@@ -7946,7 +7951,7 @@ function TicketSystemPage({ guildId }: { guildId: string }) {
 
   return (
     <section className="control-page ticket-control">
-      <header className="control-hero"><div><p className="eyebrow"><LifeBuoy size={15} /> Support Operations</p><h2>Ticket-System</h2><p>Panel, Teamrollen, Formular, Kategorien und Ticket-Automationen vollständig an einem Ort steuern.</p></div><div className="control-hero-actions"><SyncPill status={draft.syncStatus} /><label className="welcome-switch"><input type="checkbox" checked={draft.enabled} disabled={saving || sending} onChange={(event) => void updateEnabled(event.target.checked)} /><span>{draft.enabled ? "Aktiv" : "Inaktiv"}</span></label><RefreshButton loading={settings.loading || channels.loading || roles.loading} onClick={async () => { await Promise.all([settings.reload(), channels.reload(), roles.reload()]); }} /></div></header>
+      <header className="control-hero"><div><p className="eyebrow"><LifeBuoy size={15} /> Support Operations</p><h2>Ticket-System</h2><p>Panel, Teamrollen, Formular, Kategorien und Ticket-Automationen vollständig an einem Ort steuern.</p></div><div className="control-hero-actions"><SyncPill status={draft.syncStatus} /><ModuleStatusToggle checked={draft.enabled} disabled={saving || sending} onChange={(checked) => void updateEnabled(checked)} /><RefreshButton loading={settings.loading || channels.loading || roles.loading} onClick={async () => { await Promise.all([settings.reload(), channels.reload(), roles.reload()]); }} /></div></header>
       {loading && <LoadingBlock text="Ticket-System wird geladen" />}{loadError && <Notice tone="danger" text={loadError} />}{draft.syncError && <Notice tone="danger" text={draft.syncError} />}<ActionStatus status={status} />
       {!loading && !loadError && !draft.enabled && <ModuleInactiveState icon={<LifeBuoy size={22} />} title="Ticket-System ist ausgeschaltet" text="Aktiviere das Modul, um Supportrollen, Ticket-Kategorien, Formulare und Automationen einzurichten." onEnable={() => void updateEnabled(true)} disabled={saving || sending} />}
       {!loading && !loadError && draft.enabled && <>

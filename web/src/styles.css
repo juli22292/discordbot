@@ -4289,28 +4289,81 @@ textarea {
 .autorole-hero .eyebrow,
 .level-hero .eyebrow,
 .counting-hero .eyebrow,
-.tempvoice-hero .eyebrow {
+.tempvoice-hero .eyebrow,
+.feature-hero .eyebrow {
   color: var(--muted);
 }
 
-.welcome-switch {
-  display: inline-flex;
-  grid-auto-flow: column;
-  align-items: center;
-  gap: 10px;
-  min-width: 126px;
-  padding: 10px 12px;
-  border: 1px solid rgba(47, 191, 122, 0.24);
-  border-radius: 8px;
-  color: var(--green);
-  background: rgba(47, 191, 122, 0.055);
+.feature-hero .eyebrow svg {
+  width: 15px;
+  height: 15px;
 }
 
-.welcome-switch input {
-  width: 18px;
-  height: 18px;
-  min-height: 18px;
-  accent-color: var(--green);
+.module-status-toggle {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-width: 112px;
+  min-height: 42px;
+  padding: 0 13px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--muted-strong);
+  background: var(--control-bg);
+  cursor: pointer;
+  transition: border-color 160ms ease, color 160ms ease, background 160ms ease, transform 160ms ease;
+}
+
+.module-status-toggle:hover:not(.is-disabled) {
+  border-color: rgba(104, 168, 255, 0.42);
+  color: var(--text);
+  background: rgba(104, 168, 255, 0.07);
+  transform: translateY(-1px);
+}
+
+.module-status-toggle.is-active {
+  border-color: rgba(47, 191, 122, 0.38);
+  color: var(--green);
+  background: rgba(47, 191, 122, 0.08);
+}
+
+.module-status-toggle.is-active:hover:not(.is-disabled) {
+  border-color: rgba(47, 191, 122, 0.56);
+  background: rgba(47, 191, 122, 0.12);
+}
+
+.module-status-toggle.is-disabled {
+  cursor: not-allowed;
+  opacity: 0.58;
+}
+
+.module-status-toggle:focus-within {
+  box-shadow: var(--focus-ring);
+}
+
+.module-status-toggle input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.module-status-toggle-icon {
+  width: 24px;
+  height: 24px;
+  display: grid;
+  place-items: center;
+  border-radius: 6px;
+  color: var(--muted);
+  background: rgba(126, 145, 177, 0.1);
+}
+
+.module-status-toggle.is-active .module-status-toggle-icon {
+  color: var(--green);
+  background: rgba(47, 191, 122, 0.12);
 }
 
 .welcome-grid {
@@ -5769,10 +5822,6 @@ textarea {
 .logging-hero p {
   max-width: 820px;
   color: var(--muted);
-}
-
-.logging-switch {
-  flex: 0 0 auto;
 }
 
 .logging-summary-grid {
@@ -7550,48 +7599,6 @@ textarea {
   color: var(--muted);
 }
 
-.feature-hero {
-  display: grid;
-  grid-template-columns: 46px minmax(0, 1fr) auto;
-  align-items: center;
-}
-
-.feature-hero-icon {
-  width: 46px;
-  height: 46px;
-  display: grid;
-  place-items: center;
-  border: 1px solid rgba(104, 168, 255, 0.22);
-  border-radius: 8px;
-  color: var(--blue);
-  background: rgba(104, 168, 255, 0.09);
-}
-
-.feature-master-toggle {
-  display: inline-flex;
-  align-items: center;
-  min-height: 38px;
-  padding: 0 13px;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  color: var(--muted-strong);
-  background: var(--control-bg);
-  cursor: pointer;
-}
-
-.feature-master-toggle:has(input:checked) {
-  border-color: rgba(47, 191, 122, 0.38);
-  color: var(--green);
-  background: rgba(47, 191, 122, 0.09);
-}
-
-.feature-master-toggle input {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  opacity: 0;
-}
-
 .module-inactive {
   display: grid;
   grid-template-columns: 42px minmax(0, 1fr) auto;
@@ -7786,14 +7793,6 @@ textarea {
 
   .control-hero-actions {
     justify-content: flex-start;
-  }
-
-  .feature-hero {
-    grid-template-columns: 46px minmax(0, 1fr);
-  }
-
-  .feature-hero .control-hero-actions {
-    grid-column: 1 / -1;
   }
 
   .raid-profile-grid,
