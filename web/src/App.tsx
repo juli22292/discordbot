@@ -364,6 +364,7 @@ type TicketSettings = {
   panelChannelId: string | null;
   logChannelId: string | null;
   supportRoleIds: string[];
+  deleteRoleIds: string[];
   notifyRoleId: string | null;
   panelTitle: string;
   panelDescription: string;
@@ -1658,6 +1659,7 @@ function demoApiResponse(path: string, init: RequestInit): { handled: boolean; d
           panelChannelId: DEMO_TEXT_CHANNEL_ID,
           logChannelId: DEMO_LOG_CHANNEL_ID,
           supportRoleIds: [DEMO_TEAM_ROLE_ID],
+          deleteRoleIds: [DEMO_TEAM_ROLE_ID],
           totalTickets: 184,
           openTickets: 6,
           closedTickets: 171,
@@ -5517,6 +5519,7 @@ const DEFAULT_TICKET_DRAFT: TicketSettings = {
   panelChannelId: null,
   logChannelId: null,
   supportRoleIds: [],
+  deleteRoleIds: [],
   notifyRoleId: null,
   panelTitle: "Ticketsystem",
   panelDescription: "Wähle unten eine Kategorie aus, um ein Ticket zu erstellen.",
@@ -7944,7 +7947,7 @@ function TicketSystemPage({ guildId }: { guildId: string }) {
   const loading = (settings.loading && !settings.data) || (channels.loading && !channels.data) || (roles.loading && !roles.data);
   const loadError = settings.error || channels.error || roles.error;
 
-  function toggleList(key: "supportRoleIds" | "blacklistRoleIds", id: string) {
+  function toggleList(key: "supportRoleIds" | "deleteRoleIds" | "blacklistRoleIds", id: string) {
     setDraft((current) => ({ ...current, [key]: current[key].includes(id) ? current[key].filter((value) => value !== id) : [...current[key], id] }));
   }
   function updateCategory(index: number, patch: Partial<TicketCategory>) {
@@ -7953,7 +7956,7 @@ function TicketSystemPage({ guildId }: { guildId: string }) {
   function ticketPayload(value: TicketSettings) {
     return {
       enabled: value.enabled, ticketCategoryId: value.ticketCategoryId, panelChannelId: value.panelChannelId, logChannelId: value.logChannelId,
-      supportRoleIds: value.supportRoleIds, notifyRoleId: value.notifyRoleId, panelTitle: value.panelTitle, panelDescription: value.panelDescription,
+      supportRoleIds: value.supportRoleIds, deleteRoleIds: value.deleteRoleIds, notifyRoleId: value.notifyRoleId, panelTitle: value.panelTitle, panelDescription: value.panelDescription,
       formTitle: value.formTitle, formQuestions: value.formQuestions, selectCategories: value.selectCategories, ratingEnabled: value.ratingEnabled,
       autoCloseHours: value.autoCloseHours, reminderHours: value.reminderHours, slaHours: value.slaHours,
       blacklistRoleIds: value.blacklistRoleIds, blacklistUserIds: value.blacklistUserIds
@@ -7988,6 +7991,7 @@ function TicketSystemPage({ guildId }: { guildId: string }) {
           <div className="control-stack">
             <section className="panel control-panel"><div className="panel-title compact"><div><h2>Grundkonfiguration</h2><p className="muted">Discord-Ziele für neue Tickets, Panel und Protokolle.</p></div><RefreshButton loading={settings.loading || channels.loading || roles.loading} onClick={async () => { await Promise.all([settings.reload(), channels.reload(), roles.reload()]); }} /></div><div className="control-field-grid two"><label>Ticket-Kategorie<select value={draft.ticketCategoryId ?? ""} onChange={(event) => setDraft({ ...draft, ticketCategoryId: event.target.value || null })}><option value="">Kategorie auswählen</option>{categoryChannels.map((channel) => <option value={channel.id} key={channel.id}>{channel.name}</option>)}</select></label><label>Panel-Kanal<select value={draft.panelChannelId ?? ""} onChange={(event) => setDraft({ ...draft, panelChannelId: event.target.value || null })}><ChannelSelectOptions channels={textChannels} noneLabel="Kanal auswählen" /></select></label><label>Log-Kanal<select value={draft.logChannelId ?? ""} onChange={(event) => setDraft({ ...draft, logChannelId: event.target.value || null })}><ChannelSelectOptions channels={textChannels} noneLabel="Kein eigener Log-Kanal" /></select></label><label>Benachrichtigungsrolle<select value={draft.notifyRoleId ?? ""} onChange={(event) => setDraft({ ...draft, notifyRoleId: event.target.value || null })}><option value="">Keine Rolle</option>{manageableRoles.map((role) => <option value={role.id} key={role.id}>{role.name}</option>)}</select></label></div></section>
             <section className="panel control-panel"><div className="panel-title compact"><div><h2>Supportrollen</h2><p className="muted">Alle ausgewählten Rollen erhalten Zugriff auf neu erstellte Tickets.</p></div><span className="pill neutral">{draft.supportRoleIds.length}/10</span></div><RoleChecklist roles={manageableRoles} selected={draft.supportRoleIds} onToggle={(id) => { if (!draft.supportRoleIds.includes(id) && draft.supportRoleIds.length >= 10) return setStatus("Maximal 10 Supportrollen sind möglich."); toggleList("supportRoleIds", id); }} /></section>
+            <section className="panel control-panel"><div className="panel-title compact"><div><h2>Löschberechtigte Rollen</h2><p className="muted">Nur diese Rollen können geschlossene Tickets endgültig löschen. Danach sehen das Ticket nur noch der Ersteller, Supportrollen und diese Rollen.</p></div><span className="pill neutral">{draft.deleteRoleIds.length}/10</span></div><RoleChecklist roles={manageableRoles} selected={draft.deleteRoleIds} onToggle={(id) => { if (!draft.deleteRoleIds.includes(id) && draft.deleteRoleIds.length >= 10) return setStatus("Maximal 10 Löschrollen sind möglich."); toggleList("deleteRoleIds", id); }} /></section>
             <section className="panel control-panel"><div className="panel-title compact"><div><h2>Panel-Inhalt</h2><p className="muted">So erscheint der Einstieg in Discord.</p></div>{draft.panelMessageId && <span className="pill ok">Panel vorhanden</span>}</div><div className="control-field-grid"><label>Titel<input maxLength={100} value={draft.panelTitle} onChange={(event) => setDraft({ ...draft, panelTitle: event.target.value })} /></label><label>Beschreibung<textarea rows={4} maxLength={1000} value={draft.panelDescription} onChange={(event) => setDraft({ ...draft, panelDescription: event.target.value })} /></label></div></section>
             <section className="panel control-panel"><div className="panel-title compact"><div><h2>Ticket-Kategorien</h2><p className="muted">Bis zu 25 Auswahlpunkte für das Discord-Panel.</p></div><button type="button" className="secondary-action inline" disabled={draft.selectCategories.length >= 25} onClick={() => setDraft({ ...draft, selectCategories: [...draft.selectCategories, { label: "Neue Kategorie", description: "Beschreibe das Anliegen", emoji: "🎫", value: `kategorie-${draft.selectCategories.length + 1}` }] })}><Plus size={16} /> Kategorie</button></div><div className="ticket-builder-list">{draft.selectCategories.map((category, index) => <article key={`${category.value}-${index}`}><input aria-label="Emoji" className="ticket-emoji-input" maxLength={100} placeholder="🎫 oder <:name:id>" value={category.emoji} onChange={(event) => updateCategory(index, { emoji: event.target.value })} /><label>Name<input maxLength={80} value={category.label} onChange={(event) => updateCategory(index, { label: event.target.value })} /></label><label>Beschreibung<input maxLength={100} value={category.description} onChange={(event) => updateCategory(index, { description: event.target.value })} /></label><label>Wert<input maxLength={80} value={category.value} onChange={(event) => updateCategory(index, { value: event.target.value.toLowerCase().replace(/[^a-z0-9_-]/g, "-") })} /></label><button type="button" className="icon-button danger" title="Kategorie entfernen" onClick={() => setDraft({ ...draft, selectCategories: draft.selectCategories.filter((_, position) => position !== index) })}><Trash2 size={16} /></button></article>)}</div></section>
           </div>

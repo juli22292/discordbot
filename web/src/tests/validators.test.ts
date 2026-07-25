@@ -215,6 +215,7 @@ describe("guild-isolated validation", () => {
       enabled: true,
       ticketCategoryId: "123456789012345678",
       supportRoleIds: ["223456789012345678"],
+      deleteRoleIds: ["223456789012345678"],
       formQuestions: ["Wobei brauchst du Hilfe?"],
       selectCategories: [{ label: "Support", description: "Allgemeine Hilfe", emoji: customEmoji, value: "support" }]
     });
@@ -223,7 +224,14 @@ describe("guild-isolated validation", () => {
     expect(() => ticketSettingsSchema.parse({
       selectCategories: [{ label: "Support", description: "Allgemeine Hilfe", emoji: "x".repeat(101), value: "support" }]
     })).toThrow(/maximal 100/);
-    expect(() => ticketSettingsSchema.parse({ enabled: true })).toThrow(/Discord-Kategorie/);
+    expect(() => ticketSettingsSchema.parse({
+      enabled: true,
+      deleteRoleIds: ["223456789012345678"]
+    })).toThrow(/Discord-Kategorie/);
+    expect(() => ticketSettingsSchema.parse({
+      enabled: true,
+      ticketCategoryId: "123456789012345678"
+    })).toThrow(/Löschrolle/);
   });
 
   it("validates configurable guild feature modules", () => {

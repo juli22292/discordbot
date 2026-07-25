@@ -426,6 +426,7 @@ export const ticketSettingsSchema = z.object({
   panelChannelId: nullableSnowflakeSchema,
   logChannelId: nullableSnowflakeSchema,
   supportRoleIds: z.array(snowflakeSchema).max(10).default([]),
+  deleteRoleIds: z.array(snowflakeSchema).max(10).default([]),
   notifyRoleId: nullableSnowflakeSchema,
   panelTitle: z.string().trim().min(1).max(100).default("Ticketsystem"),
   panelDescription: z.string().trim().min(1).max(1000).default("Wähle unten eine Kategorie aus, um ein Ticket zu erstellen."),
@@ -444,6 +445,13 @@ export const ticketSettingsSchema = z.object({
       code: z.ZodIssueCode.custom,
       path: ["ticketCategoryId"],
       message: "Für ein aktives Ticketsystem muss eine Discord-Kategorie ausgewählt sein."
+    });
+  }
+  if (value.enabled && value.deleteRoleIds.length === 0) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["deleteRoleIds"],
+      message: "Für ein aktives Ticketsystem muss mindestens eine Löschrolle ausgewählt sein."
     });
   }
   const labels = new Set<string>();

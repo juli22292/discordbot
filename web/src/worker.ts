@@ -1423,6 +1423,7 @@ const DEFAULT_TICKET_CONFIGURATION = {
   panelChannelId: null,
   logChannelId: null,
   supportRoleIds: [],
+  deleteRoleIds: [],
   notifyRoleId: null,
   panelTitle: "Ticketsystem",
   panelDescription: "Wähle unten eine Kategorie aus, um ein Ticket zu erstellen.",
@@ -3409,6 +3410,7 @@ app.put("/api/guilds/:guildId/tickets", async (c) => {
 
   const selectedRoleIds = Array.from(new Set([
     ...data.supportRoleIds,
+    ...data.deleteRoleIds,
     ...data.blacklistRoleIds,
     ...(data.notifyRoleId ? [data.notifyRoleId] : [])
   ]));
