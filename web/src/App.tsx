@@ -233,6 +233,8 @@ type FeatureDefinition = {
   tabs?: FeatureTabDefinition[];
 };
 
+type PageSectionTab = Pick<FeatureTabDefinition, "key" | "label" | "description" | "icon">;
+
 type FeatureSettings = {
   enabled: boolean;
   fields: Record<string, FeatureValue>;
@@ -1043,6 +1045,12 @@ const FEATURE_DEFINITIONS: FeatureDefinition[] = [
     kicker: "Community Rewards",
     description: "Standardwerte, Teamrechte und Zielkanal für neue Verlosungen zentral festlegen.",
     icon: <Trophy size={18} />,
+    tabs: [
+      { key: "general", label: "Allgemeines", description: "Zielkanal und Benachrichtigung für neue Verlosungen.", icon: <Settings size={16} />, fieldKeys: ["defaultChannelId", "mentionRoleId"] },
+      { key: "schedule", label: "Ablauf", description: "Gewinnerzahl und Standardlaufzeit neuer Giveaways.", icon: <Clock3 size={16} />, fieldKeys: ["defaultWinnerCount", "defaultDurationMinutes"] },
+      { key: "team", label: "Team", description: "Rollen mit Zugriff auf die Giveaway-Verwaltung.", icon: <UsersRound size={16} />, fieldKeys: ["managerRoleIds"] },
+      { key: "message", label: "Nachricht", description: "Der vorbereitete Beschreibungstext für neue Verlosungen.", icon: <MessageSquare size={16} />, fieldKeys: ["defaultDescription"] }
+    ],
     fields: [
       { key: "defaultChannelId", label: "Standardkanal", description: "Neue Giveaways verwenden diesen Kanal als vorausgewähltes Ziel.", type: "channel" },
       { key: "managerRoleIds", label: "Giveaway-Team", description: "Diese Rollen dürfen Verlosungen verwalten.", type: "roles", wide: true },
@@ -1059,6 +1067,11 @@ const FEATURE_DEFINITIONS: FeatureDefinition[] = [
     kicker: "Self Roles",
     description: "Rollenpanel, auswählbare Rollen und Mehrfachauswahl für Mitglieder vorbereiten.",
     icon: <BadgeCheck size={18} />,
+    tabs: [
+      { key: "panel", label: "Discord-Panel", description: "Kanal, Überschrift und Erklärung des Rollenpanels.", icon: <MessageSquare size={16} />, fieldKeys: ["panelChannelId", "panelTitle", "panelDescription"] },
+      { key: "roles", label: "Rollen", description: "Die Rollen festlegen, die Mitglieder selbst auswählen dürfen.", icon: <BadgeCheck size={16} />, fieldKeys: ["roleIds"] },
+      { key: "behavior", label: "Verhalten", description: "Regeln für die Auswahl im Rollenpanel.", icon: <SlidersHorizontal size={16} />, fieldKeys: ["allowMultiple"] }
+    ],
     fields: [
       { key: "panelChannelId", label: "Panelkanal", description: "Kanal, in dem das Rollenpanel veröffentlicht wird.", type: "channel" },
       { key: "allowMultiple", label: "Mehrfachauswahl", description: "Mitglieder dürfen mehrere Rollen aus dem Panel wählen.", type: "toggle" },
@@ -1074,6 +1087,12 @@ const FEATURE_DEFINITIONS: FeatureDefinition[] = [
     kicker: "Scheduled Operations",
     description: "Sticky-, wiederkehrende und geplante Nachrichten an einem Ort konfigurieren.",
     icon: <Clock3 size={18} />,
+    tabs: [
+      { key: "general", label: "Allgemeines", description: "Das gemeinsame Ziel für automatisierte Nachrichten.", icon: <Settings size={16} />, fieldKeys: ["channelId"] },
+      { key: "sticky", label: "Sticky", description: "Eine Nachricht dauerhaft am Ende des Kanals halten.", icon: <MessageSquare size={16} />, fieldKeys: ["stickyMessage"] },
+      { key: "recurring", label: "Wiederkehrend", description: "Regelmäßigen Inhalt und sein Zeitintervall festlegen.", icon: <RefreshCw size={16} />, fieldKeys: ["recurringMessage", "intervalMinutes"] },
+      { key: "scheduled", label: "Geplant", description: "Eine einmalige Nachricht zu einem festen Zeitpunkt senden.", icon: <Clock3 size={16} />, fieldKeys: ["scheduledMessage", "scheduledAt"] }
+    ],
     fields: [
       { key: "channelId", label: "Zielkanal", description: "Gemeinsames Ziel für die konfigurierten Nachrichten.", type: "channel" },
       { key: "intervalMinutes", label: "Intervall", description: "Abstand zwischen wiederkehrenden Nachrichten.", type: "number", min: 1, max: 525600, suffix: "Minuten" },
@@ -1090,6 +1109,12 @@ const FEATURE_DEFINITIONS: FeatureDefinition[] = [
     kicker: "Moderation Center",
     description: "Teamrollen, Mod-Logs, Warnablauf und automatische Eskalationen verwalten.",
     icon: <Shield size={18} />,
+    tabs: [
+      { key: "logs", label: "Logs", description: "Den zentralen Protokollkanal für Moderationsaktionen festlegen.", icon: <ClipboardList size={16} />, fieldKeys: ["logChannelId"] },
+      { key: "team", label: "Team", description: "Rollen mit Zugriff auf die Moderationswerkzeuge.", icon: <UsersRound size={16} />, fieldKeys: ["moderatorRoleIds"] },
+      { key: "punishments", label: "Strafen", description: "Standardwerte für Verwarnungen und Timeouts.", icon: <Shield size={16} />, fieldKeys: ["warnExpireDays", "defaultTimeoutMinutes"] },
+      { key: "escalation", label: "Eskalation", description: "Automatische Reaktion auf wiederholte Verwarnungen.", icon: <AlertTriangle size={16} />, fieldKeys: ["autoPunishmentThreshold", "autoPunishmentAction"] }
+    ],
     fields: [
       { key: "logChannelId", label: "Moderations-Log", description: "Warns, Timeouts, Kicks und Bans werden hier protokolliert.", type: "channel" },
       { key: "moderatorRoleIds", label: "Moderatorrollen", description: "Rollen mit Zugriff auf die Moderationswerkzeuge.", type: "roles", wide: true },
@@ -1117,6 +1142,11 @@ const FEATURE_DEFINITIONS: FeatureDefinition[] = [
     kicker: "Community Feedback",
     description: "Vorschlagskanal, internes Review und anonyme Einreichungen steuern.",
     icon: <MessageSquare size={18} />,
+    tabs: [
+      { key: "channels", label: "Kanäle", description: "Öffentliche Einreichungen und internes Review trennen.", icon: <Hash size={16} />, fieldKeys: ["channelId", "reviewChannelId"] },
+      { key: "team", label: "Team", description: "Rollen für die Prüfung und Entscheidung über Vorschläge.", icon: <UsersRound size={16} />, fieldKeys: ["reviewerRoleIds"] },
+      { key: "behavior", label: "Verhalten", description: "Anonymität und automatische Diskussionen konfigurieren.", icon: <SlidersHorizontal size={16} />, fieldKeys: ["anonymous", "autoThread"] }
+    ],
     fields: [
       { key: "channelId", label: "Vorschlagskanal", description: "Öffentlicher Kanal für neue Vorschläge.", type: "channel" },
       { key: "reviewChannelId", label: "Review-Kanal", description: "Optionales internes Ziel für neue Vorschläge.", type: "channel" },
@@ -1132,6 +1162,11 @@ const FEATURE_DEFINITIONS: FeatureDefinition[] = [
     kicker: "Member Journey",
     description: "Verifizierung, Mindestalter des Accounts und Einstiegstext sauber bündeln.",
     icon: <UserPlus size={18} />,
+    tabs: [
+      { key: "general", label: "Allgemeines", description: "Verifizierungskanal und anschließend vergebene Rolle.", icon: <Settings size={16} />, fieldKeys: ["verificationChannelId", "verificationRoleId"] },
+      { key: "panel", label: "Discord-Panel", description: "Titel und Erklärung für den Verifizierungseinstieg.", icon: <MessageSquare size={16} />, fieldKeys: ["verificationTitle", "verificationText"] },
+      { key: "security", label: "Sicherheit", description: "Mindestalter neuer Discord-Accounts kontrollieren.", icon: <ShieldCheck size={16} />, fieldKeys: ["accountAgeMinDays"] }
+    ],
     fields: [
       { key: "verificationChannelId", label: "Verifizierungskanal", description: "Kanal für das Verifizierungs-Panel.", type: "channel" },
       { key: "verificationRoleId", label: "Verifizierte Rolle", description: "Wird nach erfolgreicher Verifizierung vergeben.", type: "role" },
@@ -1147,6 +1182,10 @@ const FEATURE_DEFINITIONS: FeatureDefinition[] = [
     kicker: "Identity Automation",
     description: "Neue Mitglieder automatisch nach einer einheitlichen Vorlage benennen.",
     icon: <AtSign size={18} />,
+    tabs: [
+      { key: "template", label: "Vorlage", description: "Das Namensformat für neue Mitglieder vorbereiten.", icon: <AtSign size={16} />, fieldKeys: ["template"] },
+      { key: "audience", label: "Zielgruppe", description: "Festlegen, ob die Automation auch Bots erfasst.", icon: <UsersRound size={16} />, fieldKeys: ["includeBots"] }
+    ],
     fields: [
       { key: "template", label: "Nickname-Vorlage", description: "Verwende zum Beispiel {username}, {display_name} oder {id}.", type: "text", placeholder: "[Member] {username}", wide: true },
       { key: "includeBots", label: "Bots einschließen", description: "Die Vorlage wird auch auf neu beitretende Bots angewendet.", type: "toggle" }
@@ -1214,6 +1253,11 @@ const FEATURE_DEFINITIONS: FeatureDefinition[] = [
     kicker: "Community Highlights",
     description: "Beliebte Nachrichten automatisch in einem Highlight-Kanal sammeln.",
     icon: <Star size={18} />,
+    tabs: [
+      { key: "general", label: "Allgemeines", description: "Zielkanal, Reaktion und benötigten Schwellenwert festlegen.", icon: <Settings size={16} />, fieldKeys: ["channelId", "emoji", "threshold"] },
+      { key: "channels", label: "Kanäle", description: "Bereiche vom Starboard ausschließen.", icon: <Hash size={16} />, fieldKeys: ["ignoredChannelIds"] },
+      { key: "rules", label: "Regeln", description: "Bestimmen, ob Autoren ihre eigenen Beiträge werten dürfen.", icon: <ShieldCheck size={16} />, fieldKeys: ["allowSelfStar"] }
+    ],
     fields: [
       { key: "channelId", label: "Starboard-Kanal", description: "Ziel für Nachrichten, die den Schwellenwert erreichen.", type: "channel" },
       { key: "emoji", label: "Reaktions-Emoji", description: "Unicode- oder Server-Emoji, das gezählt wird.", type: "text", placeholder: "⭐" },
@@ -1229,6 +1273,10 @@ const FEATURE_DEFINITIONS: FeatureDefinition[] = [
     kicker: "Live Counters",
     description: "Automatische Voice-Counter für Mitglieder, Bots und Online-Status konfigurieren.",
     icon: <BarChart3 size={18} />,
+    tabs: [
+      { key: "general", label: "Allgemeines", description: "Kategorie und Aktualisierungsintervall der Live-Counter.", icon: <Settings size={16} />, fieldKeys: ["categoryId", "updateMinutes"] },
+      { key: "labels", label: "Bezeichnungen", description: "Die sichtbaren Namen der einzelnen Statistikkanäle.", icon: <AtSign size={16} />, fieldKeys: ["memberChannelName", "botChannelName", "onlineChannelName"] }
+    ],
     fields: [
       { key: "categoryId", label: "Counter-Kategorie", description: "Kategorie, in der die Statistikkanäle liegen.", type: "category" },
       { key: "updateMinutes", label: "Aktualisierung", description: "Zeitabstand für regelmäßige Counter-Updates.", type: "number", min: 1, max: 1440, suffix: "Minuten" },
@@ -1244,6 +1292,10 @@ const FEATURE_DEFINITIONS: FeatureDefinition[] = [
     kicker: "Member Moments",
     description: "Geburtstagsnachrichten, Zeitzone und optionale Tagesrolle verwalten.",
     icon: <Sparkles size={18} />,
+    tabs: [
+      { key: "general", label: "Allgemeines", description: "Kanal, Tagesrolle und Zeitzone für Geburtstage.", icon: <Settings size={16} />, fieldKeys: ["channelId", "roleId", "timezone"] },
+      { key: "message", label: "Nachricht", description: "Den öffentlichen Glückwunschtext gestalten.", icon: <MessageSquare size={16} />, fieldKeys: ["message"] }
+    ],
     fields: [
       { key: "channelId", label: "Geburtstagskanal", description: "Hier veröffentlicht der Bot Glückwünsche.", type: "channel" },
       { key: "roleId", label: "Geburtstagsrolle", description: "Optionale Rolle für das Geburtstagskind.", type: "role" },
@@ -1258,6 +1310,11 @@ const FEATURE_DEFINITIONS: FeatureDefinition[] = [
     kicker: "Game Integration",
     description: "Standardserver, Statusziel und Rollen für Whitelist-Aktionen festlegen.",
     icon: <Server size={18} />,
+    tabs: [
+      { key: "server", label: "Server", description: "Minecraft-Adresse und Ziel für Statusmeldungen.", icon: <Server size={16} />, fieldKeys: ["serverAddress", "statusChannelId"] },
+      { key: "team", label: "Team", description: "Rollen für die Verwaltung der Whitelist.", icon: <UsersRound size={16} />, fieldKeys: ["whitelistRoleIds"] },
+      { key: "display", label: "Anzeige", description: "Sichtbare Informationen in automatischen Statusmeldungen.", icon: <Eye size={16} />, fieldKeys: ["showPlayers"] }
+    ],
     fields: [
       { key: "serverAddress", label: "Serveradresse", description: "Standardadresse für Status- und Spielerabfragen.", type: "text", placeholder: "play.example.net" },
       { key: "statusChannelId", label: "Statuskanal", description: "Ziel für automatische Statusmeldungen.", type: "channel" },
@@ -1272,6 +1329,11 @@ const FEATURE_DEFINITIONS: FeatureDefinition[] = [
     kicker: "Member Recognition",
     description: "Badge-Verwaltung, Ankündigungen und öffentliche Profile konfigurieren.",
     icon: <Crown size={18} />,
+    tabs: [
+      { key: "announcements", label: "Ankündigungen", description: "Den Zielkanal für neue Badge-Vergaben bestimmen.", icon: <MessageSquare size={16} />, fieldKeys: ["announceChannelId"] },
+      { key: "team", label: "Team", description: "Rollen mit Zugriff auf Erstellung und Vergabe.", icon: <UsersRound size={16} />, fieldKeys: ["managerRoleIds"] },
+      { key: "profiles", label: "Profile", description: "Öffentliche Badge-Profile für Mitglieder freigeben.", icon: <UserRound size={16} />, fieldKeys: ["allowSelfProfile"] }
+    ],
     fields: [
       { key: "announceChannelId", label: "Ankündigungskanal", description: "Neue Badge-Vergaben können hier gemeldet werden.", type: "channel" },
       { key: "managerRoleIds", label: "Badge-Team", description: "Rollen, die Badges erstellen und vergeben dürfen.", type: "roles", wide: true },
@@ -1285,6 +1347,10 @@ const FEATURE_DEFINITIONS: FeatureDefinition[] = [
     kicker: "Engagement Suite",
     description: "Beichten, Zitate und Umfragen auf feste Kanäle begrenzen.",
     icon: <UsersRound size={18} />,
+    tabs: [
+      { key: "channels", label: "Kanäle", description: "Die Ziele für Beichten, Zitate und Umfragen festlegen.", icon: <Hash size={16} />, fieldKeys: ["confessionChannelId", "quoteChannelId", "pollChannelId"] },
+      { key: "privacy", label: "Privatsphäre", description: "Öffentliche Absenderinformationen bei Beichten kontrollieren.", icon: <ShieldCheck size={16} />, fieldKeys: ["anonymousConfessions"] }
+    ],
     fields: [
       { key: "confessionChannelId", label: "Beichten", description: "Zielkanal für anonyme Beichten.", type: "channel" },
       { key: "quoteChannelId", label: "Zitate", description: "Zielkanal für gespeicherte Community-Zitate.", type: "channel" },
@@ -1299,6 +1365,11 @@ const FEATURE_DEFINITIONS: FeatureDefinition[] = [
     kicker: "Music Operations",
     description: "Request-Kanal, DJ-Rollen, Lautstärke und Queue-Regeln für Lavalink festlegen.",
     icon: <Youtube size={18} />,
+    tabs: [
+      { key: "player", label: "Player", description: "Musikkanal und Lautstärke für neue Player.", icon: <Music2 size={16} />, fieldKeys: ["requestChannelId", "defaultVolume"] },
+      { key: "team", label: "DJ-Team", description: "Rollen mit erweiterten Rechten am Musikplayer.", icon: <UsersRound size={16} />, fieldKeys: ["djRoleIds"] },
+      { key: "queue", label: "Queue", description: "Warteschlange und automatische Fortsetzung konfigurieren.", icon: <ListOrdered size={16} />, fieldKeys: ["maxQueueLength", "autoplay"] }
+    ],
     fields: [
       { key: "requestChannelId", label: "Musikkanal", description: "Bevorzugter Kanal für Musikwünsche und Playermeldungen.", type: "channel" },
       { key: "djRoleIds", label: "DJ-Rollen", description: "Rollen mit erweiterten Playerrechten.", type: "roles", wide: true },
@@ -1314,6 +1385,11 @@ const FEATURE_DEFINITIONS: FeatureDefinition[] = [
     kicker: "Fun & Rewards",
     description: "Spielkanäle, Cooldown und Belohnungen für Fun-Commands steuern.",
     icon: <Gamepad2 size={18} />,
+    tabs: [
+      { key: "channels", label: "Kanäle", description: "Die Textkanäle bestimmen, in denen Spiele erlaubt sind.", icon: <Hash size={16} />, fieldKeys: ["allowedChannelIds"] },
+      { key: "rules", label: "Regeln", description: "Den Abstand zwischen Spielaktionen festlegen.", icon: <Clock3 size={16} />, fieldKeys: ["cooldownSeconds"] },
+      { key: "rewards", label: "Belohnungen", description: "XP und tägliche Economy-Belohnungen steuern.", icon: <Trophy size={16} />, fieldKeys: ["xpRewards", "dailyReward"] }
+    ],
     fields: [
       { key: "allowedChannelIds", label: "Erlaubte Spielkanäle", description: "Ist die Liste leer, funktionieren Spiele in allen Textkanälen.", type: "channels", wide: true },
       { key: "cooldownSeconds", label: "Spiel-Cooldown", description: "Mindestabstand zwischen Spielaktionen eines Nutzers.", type: "number", min: 0, max: 86400, suffix: "Sekunden" },
@@ -6466,6 +6542,12 @@ function ProfilePage({ guildId, settings, onSaved }: { guildId: string; settings
   const [savingNickname, setSavingNickname] = useState(false);
   const [avatarBusy, setAvatarBusy] = useState(false);
   const [fileInputKey, setFileInputKey] = useState(0);
+  const [activeSection, setActiveSection] = useState("nickname");
+  const sectionTabs: PageSectionTab[] = [
+    { key: "nickname", label: "Bot-Nickname", description: "Den sichtbaren Namen des Bots nur für diese Guild anpassen.", icon: <AtSign size={16} /> },
+    { key: "avatar", label: "Server-Avatar", description: "Ein eigenes Profilbild für diese Guild hochladen und synchronisieren.", icon: <Bot size={16} /> }
+  ];
+  const activeSectionTab = sectionTabs.find((tab) => tab.key === activeSection) ?? sectionTabs[0];
   const storedAvatarUrl = settings.bot_avatar_media_key
     ? `/api/guilds/${guildId}/media?key=${encodeURIComponent(settings.bot_avatar_media_key)}`
     : null;
@@ -6585,7 +6667,11 @@ function ProfilePage({ guildId, settings, onSaved }: { guildId: string; settings
 
   return (
     <section className="section-grid">
-      <div className="panel">
+      <div className="profile-section-navigation">
+        <PageSectionTabs tabs={sectionTabs} activeKey={activeSection} onChange={setActiveSection} label="Bot-Profil Bereiche" />
+        <PageSectionHeading tab={activeSectionTab} />
+      </div>
+      {activeSection === "nickname" && <div className="panel profile-section-panel">
         <div className="panel-title">
           <h2>Bot-Nickname</h2>
           <span className="pill">max. 32 Zeichen</span>
@@ -6601,9 +6687,9 @@ function ProfilePage({ guildId, settings, onSaved }: { guildId: string; settings
             Nickname speichern
           </button>
         </div>
-      </div>
+      </div>}
 
-      <div className="panel">
+      {activeSection === "avatar" && <div className="panel profile-section-panel">
         <div className="panel-title">
           <h2>Server-Avatar</h2>
           <span className={settings.bot_avatar_sync_status === "failed" ? "pill danger" : settings.bot_avatar_sync_status === "synced" ? "pill ok" : "pill"}>
@@ -6643,7 +6729,7 @@ function ProfilePage({ guildId, settings, onSaved }: { guildId: string; settings
         </div>
         <ActionStatus status={avatarStatus} />
         {settings.bot_avatar_sync_error && <Notice tone="danger" text={settings.bot_avatar_sync_error} />}
-      </div>
+      </div>}
     </section>
   );
 }
@@ -6835,6 +6921,12 @@ function AutorolePage({ guildId }: { guildId: string }) {
   const [query, setQuery] = useState("");
   const [saving, setSaving] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
+  const [activeSection, setActiveSection] = useState("roles");
+  const sectionTabs: PageSectionTab[] = [
+    { key: "roles", label: "Rollen", description: "Automatische Rollen getrennt für Mitglieder und Bots auswählen.", icon: <UsersRound size={16} /> },
+    { key: "rules", label: "Vergaberegeln", description: "Verzögerung und Discord Membership-Screening steuern.", icon: <SlidersHorizontal size={16} /> }
+  ];
+  const activeSectionTab = sectionTabs.find((tab) => tab.key === activeSection) ?? sectionTabs[0];
 
   useEffect(() => {
     if (settings.data?.autorole) setDraft(settings.data.autorole);
@@ -6953,6 +7045,9 @@ function AutorolePage({ guildId }: { guildId: string }) {
 
       {!loading && !loadError && draft.enabled && (
         <>
+          <PageSectionTabs tabs={sectionTabs} activeKey={activeSection} onChange={setActiveSection} label="Autorole Bereiche" />
+          <PageSectionHeading tab={activeSectionTab} />
+
           <section className="control-stat-grid autorole-summary-grid">
             <StatusTile icon={<UsersRound size={19} />} label="Mitgliederrollen" value={String(draft.humanRoleIds.length)} tone={draft.humanRoleIds.length ? "ok" : undefined} />
             <StatusTile icon={<Bot size={19} />} label="Botrollen" value={String(draft.botRoleIds.length)} tone={draft.botRoleIds.length ? "ok" : undefined} />
@@ -6960,9 +7055,9 @@ function AutorolePage({ guildId }: { guildId: string }) {
             <StatusTile icon={<ShieldCheck size={19} />} label="Screening" value={draft.waitForScreening ? "Abwarten" : "Direkt"} tone={draft.waitForScreening ? "ok" : undefined} />
           </section>
 
-          <div className="autorole-layout">
+          <div className={`autorole-layout ${activeSection === "rules" ? "editor-only" : ""}`}>
             <div className="autorole-editor">
-              <section className="panel control-panel autorole-role-panel">
+              {activeSection === "roles" && <section className="panel control-panel autorole-role-panel">
                 <div className="panel-title autorole-panel-title">
                   <div>
                     <h2>Automatische Rollen</h2>
@@ -7017,9 +7112,9 @@ function AutorolePage({ guildId }: { guildId: string }) {
                     );
                   })}
                 </div>
-              </section>
+              </section>}
 
-              <section className="panel control-panel autorole-rules-panel">
+              {activeSection === "rules" && <section className="panel control-panel autorole-rules-panel">
                 <div className="panel-title compact">
                   <div><h2>Vergaberegeln</h2><p className="muted">Timing und Discord-Onboarding zentral festlegen.</p></div>
                 </div>
@@ -7041,7 +7136,7 @@ function AutorolePage({ guildId }: { guildId: string }) {
                   <span><strong>Membership-Screening abwarten</strong><small>Der Bot vergibt Rollen erst, nachdem das neue Mitglied die Serverregeln akzeptiert hat.</small></span>
                   <input type="checkbox" checked={draft.waitForScreening} onChange={(event) => setDraft({ ...draft, waitForScreening: event.target.checked })} />
                 </label>
-              </section>
+              </section>}
 
               <section className="panel control-panel autorole-save-panel">
                 <div><strong>{draft.humanRoleIds.length + draft.botRoleIds.length} Rollen ausgewählt</strong><small>Die sichere Sync-Queue überträgt alle Regeln an den laufenden Bot.</small></div>
@@ -7052,7 +7147,7 @@ function AutorolePage({ guildId }: { guildId: string }) {
               </section>
             </div>
 
-            <aside className="autorole-preview">
+            {activeSection === "roles" && <aside className="autorole-preview">
               <div className="autorole-preview-heading">
                 <div><span>Vergabe-Vorschau</span><h2>Neue Mitglieder</h2></div>
                 <span className="pill ok">Automatisch</span>
@@ -7079,7 +7174,7 @@ function AutorolePage({ guildId }: { guildId: string }) {
                 <span><Clock3 size={15} /> {draft.delaySeconds ? `${draft.delaySeconds} Sekunden Wartezeit` : "Sofortige Vergabe"}</span>
                 <span><BadgeCheck size={15} /> {draft.waitForScreening ? "Screening wird abgewartet" : "Vergabe vor Screening möglich"}</span>
               </div>
-            </aside>
+            </aside>}
           </div>
         </>
       )}
@@ -7096,6 +7191,12 @@ function LevelSystemPage({ guildId }: { guildId: string }) {
   const [rewardRoleId, setRewardRoleId] = useState("");
   const [saving, setSaving] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
+  const [activeSection, setActiveSection] = useState("announcements");
+  const sectionTabs: PageSectionTab[] = [
+    { key: "announcements", label: "Levelaufstiege", description: "Festlegen, wo neue Level öffentlich angekündigt werden.", icon: <MessageSquare size={16} /> },
+    { key: "rewards", label: "Rollenbelohnungen", description: "Automatische Discord-Rollen an erreichte Level binden.", icon: <Trophy size={16} /> }
+  ];
+  const activeSectionTab = sectionTabs.find((tab) => tab.key === activeSection) ?? sectionTabs[0];
 
   useEffect(() => {
     if (settings.data?.levelSystem) setDraft(settings.data.levelSystem);
@@ -7211,6 +7312,9 @@ function LevelSystemPage({ guildId }: { guildId: string }) {
 
       {!loading && !loadError && draft.enabled && (
         <>
+          <PageSectionTabs tabs={sectionTabs} activeKey={activeSection} onChange={setActiveSection} label="Level-System Bereiche" />
+          <PageSectionHeading tab={activeSectionTab} />
+
           <section className="control-stat-grid level-summary-grid">
             <StatusTile icon={<MessageSquare size={19} />} label="Nachrichten-XP" value="8-15 XP" tone="ok" />
             <StatusTile icon={<Clock3 size={19} />} label="Cooldown" value="60 Sek." />
@@ -7220,7 +7324,7 @@ function LevelSystemPage({ guildId }: { guildId: string }) {
 
           <div className="level-layout">
             <div className="level-editor">
-              <section className="panel control-panel level-control-panel">
+              {activeSection === "announcements" && <section className="panel control-panel level-control-panel">
                 <div className="panel-title">
                   <div>
                     <h2>Levelaufstiege</h2>
@@ -7237,9 +7341,9 @@ function LevelSystemPage({ guildId }: { guildId: string }) {
                   </select>
                   <small>{selectedChannel ? `Alle Aufstiege werden in #${selectedChannel.name} gesendet.` : "Fallback aktiv: Die Meldung erscheint direkt im Kanal der auslösenden Nachricht."}</small>
                 </label>
-              </section>
+              </section>}
 
-              <section className="panel control-panel level-control-panel">
+              {activeSection === "rewards" && <section className="panel control-panel level-control-panel">
                 <div className="panel-title compact">
                   <div>
                     <h2>Rollenbelohnungen</h2>
@@ -7288,7 +7392,7 @@ function LevelSystemPage({ guildId }: { guildId: string }) {
                     );
                   })}
                 </div>
-              </section>
+              </section>}
 
               <section className="panel control-panel level-save-panel">
                 <div>
@@ -7344,6 +7448,12 @@ function CountingPage({ guildId }: { guildId: string }) {
   const [saving, setSaving] = useState(false);
   const [resetting, setResetting] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
+  const [activeSection, setActiveSection] = useState("channel");
+  const sectionTabs: PageSectionTab[] = [
+    { key: "channel", label: "Spielkanal", description: "Den Textkanal für die gemeinsame Zahlenkette festlegen.", icon: <Hash size={16} /> },
+    { key: "rules", label: "Regeln", description: "Fehler, Nachrichtenbereinigung und Meilensteine steuern.", icon: <ShieldCheck size={16} /> }
+  ];
+  const activeSectionTab = sectionTabs.find((tab) => tab.key === activeSection) ?? sectionTabs[0];
 
   useEffect(() => {
     if (settings.data?.counting) setDraft(settings.data.counting);
@@ -7454,6 +7564,9 @@ function CountingPage({ guildId }: { guildId: string }) {
 
       {!loading && !loadError && draft.enabled && (
         <>
+          <PageSectionTabs tabs={sectionTabs} activeKey={activeSection} onChange={setActiveSection} label="Counting Bereiche" />
+          <PageSectionHeading tab={activeSectionTab} />
+
           <section className="control-stat-grid counting-summary-grid">
             <StatusTile icon={<ListOrdered size={19} />} label="Aktueller Lauf" value={draft.currentNumber.toLocaleString("de-DE")} tone="ok" />
             <StatusTile icon={<Trophy size={19} />} label="Rekord" value={draft.recordNumber.toLocaleString("de-DE")} />
@@ -7463,7 +7576,7 @@ function CountingPage({ guildId }: { guildId: string }) {
 
           <div className="counting-layout">
             <div className="counting-editor">
-              <section className="panel control-panel counting-control-panel">
+              {activeSection === "channel" && <section className="panel control-panel counting-control-panel">
                 <div className="panel-title">
                   <div>
                     <h2>Spielkanal</h2>
@@ -7477,9 +7590,9 @@ function CountingPage({ guildId }: { guildId: string }) {
                   </select>
                   <small>{selectedChannel ? `Aktiv in #${selectedChannel.name}` : "Der Bot benötigt Schreiben, Reaktionen und Nachrichtenverlauf."}</small>
                 </label>
-              </section>
+              </section>}
 
-              <section className="panel control-panel counting-control-panel">
+              {activeSection === "rules" && <section className="panel control-panel counting-control-panel">
                 <div className="panel-title compact">
                   <div>
                     <h2>Regeln</h2>
@@ -7508,7 +7621,7 @@ function CountingPage({ guildId }: { guildId: string }) {
                     <small>0 deaktiviert Meldungen. Standard: alle 100 Zahlen.</small>
                   </label>
                 </div>
-              </section>
+              </section>}
 
               <section className="panel control-panel counting-control-panel">
                 <div className="counting-save-row">
@@ -7583,6 +7696,13 @@ function TempVoicePage({ guildId }: { guildId: string }) {
   const [saving, setSaving] = useState(false);
   const [sending, setSending] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
+  const [activeSection, setActiveSection] = useState("creators");
+  const sectionTabs: PageSectionTab[] = [
+    { key: "creators", label: "Creator-Kanäle", description: "Join-to-create Sprachkanäle für neue temporäre Räume auswählen.", icon: <Radio size={16} /> },
+    { key: "defaults", label: "Raum-Standard", description: "Kategorie, Name, Benutzerlimit und Audioqualität vorbereiten.", icon: <SlidersHorizontal size={16} /> },
+    { key: "interface", label: "Discord-Interface", description: "Das Bedienpanel prüfen und in einen Textkanal senden.", icon: <Send size={16} /> }
+  ];
+  const activeSectionTab = sectionTabs.find((tab) => tab.key === activeSection) ?? sectionTabs[0];
 
   useEffect(() => {
     if (settings.data?.tempVoice) setDraft(settings.data.tempVoice);
@@ -7708,6 +7828,9 @@ function TempVoicePage({ guildId }: { guildId: string }) {
 
       {!loading && !loadError && draft.enabled && (
         <>
+          <PageSectionTabs tabs={sectionTabs} activeKey={activeSection} onChange={setActiveSection} label="TempVoice Bereiche" />
+          <PageSectionHeading tab={activeSectionTab} />
+
           <section className="control-stat-grid tempvoice-summary-grid">
             <StatusTile icon={<Mic2 size={19} />} label="Status" value={draft.enabled ? "aktiv" : "inaktiv"} tone={draft.enabled ? "ok" : "warn"} />
             <StatusTile icon={<Radio size={19} />} label="Creator" value={String(draft.creatorChannelIds.length)} tone={draft.creatorChannelIds.length ? "ok" : "warn"} />
@@ -7715,9 +7838,9 @@ function TempVoicePage({ guildId }: { guildId: string }) {
             <StatusTile icon={<MessageSquare size={19} />} label="Interface" value={panelChannel ? `#${panelChannel.name}` : "fehlt"} tone={panelChannel ? "ok" : "warn"} />
           </section>
 
-          <div className="tempvoice-layout">
+          <div className={`tempvoice-layout ${activeSection === "interface" ? "" : "editor-only"}`}>
             <div className="tempvoice-editor">
-              <section className="panel control-panel tempvoice-control-panel">
+              {activeSection === "creators" && <section className="panel control-panel tempvoice-control-panel">
                 <div className="panel-title">
                   <div>
                     <h2>Creator-Kanäle</h2>
@@ -7756,9 +7879,9 @@ function TempVoicePage({ guildId }: { guildId: string }) {
                 ) : (
                   <EmptyState title="Keine Sprachkanäle" text="Der Bot-Snapshot enthält noch keine sichtbaren Sprachkanäle." />
                 )}
-              </section>
+              </section>}
 
-              <section className="panel control-panel tempvoice-control-panel">
+              {activeSection === "defaults" && <section className="panel control-panel tempvoice-control-panel">
                 <div className="panel-title">
                   <div>
                     <h2>Raum-Standard</h2>
@@ -7809,9 +7932,9 @@ function TempVoicePage({ guildId }: { guildId: string }) {
                     </select>
                   </label>
                 </div>
-              </section>
+              </section>}
 
-              <section className="panel control-panel tempvoice-control-panel">
+              {activeSection === "interface" && <section className="panel control-panel tempvoice-control-panel">
                 <div className="panel-title compact">
                   <div>
                     <h2>Interface senden</h2>
@@ -7826,10 +7949,6 @@ function TempVoicePage({ guildId }: { guildId: string }) {
                   </select>
                 </label>
                 <div className="form-actions">
-                  <button className="primary-action inline" onClick={() => persist(false)} disabled={saving || sending}>
-                    {saving ? <Loader2 className="spin" size={16} /> : <Save size={16} />}
-                    Einstellungen speichern
-                  </button>
                   <button className="secondary-action inline" onClick={() => persist(true)} disabled={saving || sending || !draft.interfaceChannelId}>
                     {sending ? <Loader2 className="spin" size={16} /> : <Rocket size={16} />}
                     Panel senden
@@ -7846,10 +7965,20 @@ function TempVoicePage({ guildId }: { guildId: string }) {
                     </a>
                   )}
                 </div>
+              </section>}
+
+              <section className="panel control-panel tempvoice-control-panel">
+                <div className="counting-save-row">
+                  <div><strong>TempVoice-Konfiguration</strong><small>Alle Bereiche werden gemeinsam über die sichere Bot-Queue synchronisiert.</small></div>
+                  <button className="primary-action inline" onClick={() => persist(false)} disabled={saving || sending}>
+                    {saving ? <Loader2 className="spin" size={16} /> : <Save size={16} />}
+                    Einstellungen speichern
+                  </button>
+                </div>
               </section>
             </div>
 
-            <aside className="tempvoice-preview">
+            {activeSection === "interface" && <aside className="tempvoice-preview">
               <div className="tempvoice-preview-heading">
                 <div>
                   <span>Live-Vorschau</span>
@@ -7890,7 +8019,7 @@ function TempVoicePage({ guildId }: { guildId: string }) {
                 <span>/tempvoice transfer</span>
                 <span>/tempvoice region</span>
               </div>
-            </aside>
+            </aside>}
           </div>
         </>
       )}
@@ -7906,6 +8035,12 @@ function LoggingPage({ guildId }: { guildId: string }) {
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState(false);
   const [testCategory, setTestCategory] = useState<LogCategory>("general");
+  const [activeSection, setActiveSection] = useState("setup");
+  const sectionTabs: PageSectionTab[] = [
+    { key: "setup", label: "Steuerung", description: "Standardziel, Testlauf und vorbereitete Logging-Profile verwalten.", icon: <SlidersHorizontal size={16} /> },
+    { key: "events", label: "Events & Kanäle", description: "Jede Ereigniskategorie aktivieren und ihrem Zielkanal zuordnen.", icon: <ListFilter size={16} /> }
+  ];
+  const activeSectionTab = sectionTabs.find((tab) => tab.key === activeSection) ?? sectionTabs[0];
 
   useEffect(() => {
     if (logging.data?.logging) setDraft(logging.data.logging);
@@ -8044,6 +8179,9 @@ function LoggingPage({ guildId }: { guildId: string }) {
 
       {!loading && !loadError && draft.enabled && (
         <>
+          <PageSectionTabs tabs={sectionTabs} activeKey={activeSection} onChange={setActiveSection} label="Logging Bereiche" />
+          <PageSectionHeading tab={activeSectionTab} />
+
           <section className="control-stat-grid logging-summary-grid">
             <StatusTile icon={<ListFilter size={19} />} label="Status" value={draft.enabled ? "aktiv" : "inaktiv"} tone={draft.enabled ? "ok" : "warn"} />
             <StatusTile icon={<Check size={19} />} label="Events" value={`${activeEvents}/${LOG_CATEGORIES.length}`} />
@@ -8051,7 +8189,7 @@ function LoggingPage({ guildId }: { guildId: string }) {
             <StatusTile icon={<MessageSquare size={19} />} label="Kanäle" value={String(textChannels.length)} tone={textChannels.length ? "ok" : "warn"} />
           </section>
 
-          <section className="panel control-panel logging-control-panel">
+          {activeSection === "setup" && <section className="panel control-panel logging-control-panel">
             <div className="panel-title">
               <div>
                 <h2>Steuerung</h2>
@@ -8075,10 +8213,6 @@ function LoggingPage({ guildId }: { guildId: string }) {
                 </select>
               </label>
               <div className="logging-action-stack">
-                <button className="primary-action inline" onClick={() => void save()} disabled={saving}>
-                  {saving ? <Loader2 className="spin" size={16} /> : <Save size={16} />}
-                  Logging speichern
-                </button>
                 <button className="secondary-action inline" onClick={sendTest} disabled={testing || !draft.enabled}>
                   {testing ? <Loader2 className="spin" size={16} /> : <Radio size={16} />}
                   Test senden
@@ -8101,9 +8235,9 @@ function LoggingPage({ guildId }: { guildId: string }) {
               </button>
             </div>
 
-          </section>
+          </section>}
 
-          <section className="logging-category-grid">
+          {activeSection === "events" && <section className="logging-category-grid">
             {LOG_CATEGORIES.map((category) => {
               const Icon = category.icon;
               return (
@@ -8144,6 +8278,14 @@ function LoggingPage({ guildId }: { guildId: string }) {
                 </article>
               );
             })}
+          </section>}
+
+          <section className="control-savebar">
+            <div><strong>Logging-Konfiguration</strong><small>Alle Bereiche werden gemeinsam über die Bot-Queue synchronisiert.</small></div>
+            <button className="primary-action inline" onClick={() => void save()} disabled={saving}>
+              {saving ? <Loader2 className="spin" size={16} /> : <Save size={16} />}
+              Logging speichern
+            </button>
           </section>
         </>
       )}
@@ -8161,6 +8303,14 @@ function WelcomePage({ guildId }: { guildId: string }) {
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [testing, setTesting] = useState(false);
+  const [activeSection, setActiveSection] = useState("message");
+  const sectionTabs: PageSectionTab[] = [
+    { key: "message", label: "Nachricht & Ziel", description: "Kanal, Startrolle, Nachricht und Platzhalter vorbereiten.", icon: <MessageSquare size={16} /> },
+    { key: "embed", label: "Embed & Bild", description: "Darstellung, Farbe und Bild der Begrüßung gestalten.", icon: <Palette size={16} /> },
+    { key: "mentions", label: "Mentions", description: "Erlaubte Pings und erwähnbare Rollen kontrollieren.", icon: <AtSign size={16} /> },
+    { key: "preview", label: "Discord-Vorschau", description: "Die fertige Begrüßung vor dem Testversand prüfen.", icon: <Eye size={16} /> }
+  ];
+  const activeSectionTab = sectionTabs.find((tab) => tab.key === activeSection) ?? sectionTabs[0];
 
   useEffect(() => {
     if (welcome.data?.welcome) setDraft(welcome.data.welcome);
@@ -8339,9 +8489,12 @@ function WelcomePage({ guildId }: { guildId: string }) {
       )}
 
       {!loading && !loadError && draft.enabled && (
-        <div className="welcome-grid">
+        <>
+        <PageSectionTabs tabs={sectionTabs} activeKey={activeSection} onChange={setActiveSection} label="Begrüßung Bereiche" />
+        <PageSectionHeading tab={activeSectionTab} />
+        <div className={`welcome-grid ${activeSection === "preview" ? "" : "editor-only"}`}>
           <div className="welcome-editor">
-            <section className="panel control-panel">
+            {activeSection === "message" && <section className="panel control-panel">
               <div className="panel-title">
                 <h2>Nachricht & Ziel</h2>
                 <span className={draft.enabled ? "pill ok" : "pill"}>{draft.enabled ? "sendet" : "pausiert"}</span>
@@ -8396,9 +8549,9 @@ function WelcomePage({ guildId }: { guildId: string }) {
                   </button>
                 </div>
               </div>
-            </section>
+            </section>}
 
-            <section className="panel control-panel">
+            {activeSection === "embed" && <section className="panel control-panel">
               <div className="panel-title">
                 <h2>Embed & Bild</h2>
                 <Palette size={18} />
@@ -8449,9 +8602,9 @@ function WelcomePage({ guildId }: { guildId: string }) {
                   )}
                 </div>
               </div>
-            </section>
+            </section>}
 
-            <section className="panel control-panel">
+            {activeSection === "mentions" && <section className="panel control-panel">
               <div className="panel-title">
                 <h2>Mentions</h2>
                 <MessageSquare size={18} />
@@ -8493,7 +8646,7 @@ function WelcomePage({ guildId }: { guildId: string }) {
                   ))}
                 </div>
               )}
-            </section>
+            </section>}
 
             <div className="form-actions">
               <button className="primary-action inline" onClick={() => void save()} disabled={saving || testing}>
@@ -8507,7 +8660,7 @@ function WelcomePage({ guildId }: { guildId: string }) {
             </div>
           </div>
 
-          <aside className="welcome-preview">
+          {activeSection === "preview" && <aside className="welcome-preview">
             <div className="panel-title">
               <h2>Discord-Vorschau</h2>
               <span className="pill neutral">Preview</span>
@@ -8537,8 +8690,9 @@ function WelcomePage({ guildId }: { guildId: string }) {
                 </div>
               </div>
             </div>
-          </aside>
+          </aside>}
         </div>
+        </>
       )}
     </section>
   );
@@ -8651,6 +8805,12 @@ function CustomCommandsPage({ guildId }: { guildId: string }) {
   );
   const [draft, setDraft] = useState(emptyDraft);
   const [status, setStatus] = useState<string | null>(null);
+  const [activeSection, setActiveSection] = useState("create");
+  const sectionTabs: PageSectionTab[] = [
+    { key: "create", label: "Command erstellen", description: "Name, Antwort und Verhalten eines neuen Befehls festlegen.", icon: <Plus size={16} /> },
+    { key: "manage", label: "Commands verwalten", description: "Bestehende Custom Commands bearbeiten oder entfernen.", icon: <ClipboardList size={16} /> }
+  ];
+  const activeSectionTab = sectionTabs.find((tab) => tab.key === activeSection) ?? sectionTabs[0];
 
   async function create() {
     setStatus(null);
@@ -8684,8 +8844,11 @@ function CustomCommandsPage({ guildId }: { guildId: string }) {
       {commands.loading && !commands.data && <LoadingBlock text="Custom Commands werden geladen" />}
       {commands.error && <Notice tone="danger" text={commands.error} />}
 
-      <div className="control-columns">
-        <section className="panel control-panel">
+      <PageSectionTabs tabs={sectionTabs} activeKey={activeSection} onChange={setActiveSection} label="Custom Commands Bereiche" />
+      <PageSectionHeading tab={activeSectionTab} />
+
+      <div className="control-columns tabbed-control-columns">
+        {activeSection === "create" && <section className="panel control-panel">
           <div className="panel-title">
             <div>
               <h2>Neuer Custom Command</h2>
@@ -8699,9 +8862,9 @@ function CustomCommandsPage({ guildId }: { guildId: string }) {
               Erstellen
             </button>
           </div>
-        </section>
+        </section>}
 
-        <section className="panel control-panel">
+        {activeSection === "manage" && <section className="panel control-panel">
           <div className="panel-title">
             <div>
               <h2>Vorhandene Commands</h2>
@@ -8715,7 +8878,7 @@ function CustomCommandsPage({ guildId }: { guildId: string }) {
               <EditableCustomCommand key={command.id} guildId={guildId} command={command} onChanged={commands.reload} />
             ))}
           </div>
-        </section>
+        </section>}
       </div>
     </section>
   );
@@ -8967,6 +9130,56 @@ function FeatureChannelChecklist({
   );
 }
 
+function PageSectionTabs({
+  tabs,
+  activeKey,
+  onChange,
+  label
+}: {
+  tabs: PageSectionTab[];
+  activeKey: string;
+  onChange: (key: string) => void;
+  label: string;
+}) {
+  if (tabs.length < 2) return null;
+
+  return (
+    <nav className="feature-section-tabs" role="tablist" aria-label={label}>
+      {tabs.map((tab) => (
+        <div
+          className={`feature-section-tab ${activeKey === tab.key ? "active" : ""}`}
+          role="tab"
+          aria-selected={activeKey === tab.key}
+          tabIndex={activeKey === tab.key ? 0 : -1}
+          onClick={() => onChange(tab.key)}
+          onKeyDown={(event) => {
+            if (event.key === "Enter" || event.key === " ") {
+              event.preventDefault();
+              onChange(tab.key);
+            }
+          }}
+          key={tab.key}
+        >
+          {tab.icon}
+          <span>{tab.label}</span>
+        </div>
+      ))}
+    </nav>
+  );
+}
+
+function PageSectionHeading({ tab }: { tab: PageSectionTab }) {
+  return (
+    <header className="feature-tab-heading">
+      <div className="feature-tab-icon">{tab.icon}</div>
+      <div>
+        <h3>{tab.label}</h3>
+        <p>{tab.description}</p>
+      </div>
+    </header>
+  );
+}
+
 function FeatureModulePage({ guildId, definition }: { guildId: string; definition: FeatureDefinition }) {
   const settings = useApi<{ feature: FeatureSettings }>(`/api/guilds/${guildId}/features/${definition.module}`, [guildId, definition.module]);
   const channels = useApi<{ channels: ChannelOption[] }>(`/api/guilds/${guildId}/channels`, [guildId]);
@@ -9014,8 +9227,15 @@ function FeatureModulePage({ guildId, definition }: { guildId: string; definitio
   const loading = (settings.loading && !settings.data) || (channels.loading && !channels.data) || (roles.loading && !roles.data);
   const loadError = settings.error || channels.error || roles.error;
   const activeTab = definition.tabs?.find((tab) => tab.key === activeTabKey) ?? definition.tabs?.[0] ?? null;
+  const assignedFieldKeys = useMemo(
+    () => new Set((definition.tabs ?? []).flatMap((tab) => tab.fieldKeys)),
+    [definition.tabs]
+  );
   const visibleFields = activeTab
-    ? definition.fields.filter((field) => activeTab.fieldKeys.includes(field.key))
+    ? definition.fields.filter((field) => (
+      activeTab.fieldKeys.includes(field.key)
+      || (activeTab.key === definition.tabs?.[0]?.key && !assignedFieldKeys.has(field.key))
+    ))
     : definition.fields;
   const applicationChannelId = typeof draft.fields.applicationChannelId === "string" ? draft.fields.applicationChannelId : "";
   const applicationReviewChannelId = typeof draft.fields.reviewChannelId === "string" ? draft.fields.reviewChannelId : "";
@@ -9256,38 +9476,15 @@ function FeatureModulePage({ guildId, definition }: { guildId: string; definitio
 
       {!loading && draft.enabled && (
         <>
-          {definition.tabs && definition.tabs.length > 1 && (
-            <nav className="feature-section-tabs" role="tablist" aria-label={`${definition.label} Bereiche`}>
-              {definition.tabs.map((tab) => (
-                <div
-                  className={`feature-section-tab ${activeTab?.key === tab.key ? "active" : ""}`}
-                  role="tab"
-                  aria-selected={activeTab?.key === tab.key}
-                  tabIndex={activeTab?.key === tab.key ? 0 : -1}
-                  onClick={() => setActiveTabKey(tab.key)}
-                  onKeyDown={(event) => {
-                    if (event.key === "Enter" || event.key === " ") {
-                      event.preventDefault();
-                      setActiveTabKey(tab.key);
-                    }
-                  }}
-                  key={tab.key}
-                >
-                  {tab.icon}
-                  <span>{tab.label}</span>
-                </div>
-              ))}
-            </nav>
+          {definition.tabs && (
+            <PageSectionTabs
+              tabs={definition.tabs}
+              activeKey={activeTab?.key ?? ""}
+              onChange={setActiveTabKey}
+              label={`${definition.label} Bereiche`}
+            />
           )}
-          {activeTab && (
-            <header className="feature-tab-heading">
-              <div className="feature-tab-icon">{activeTab.icon}</div>
-              <div>
-                <h3>{activeTab.label}</h3>
-                <p>{activeTab.description}</p>
-              </div>
-            </header>
-          )}
+          {activeTab && <PageSectionHeading tab={activeTab} />}
           {visibleFields.length > 0 && (
             <div className="feature-field-grid">
               {visibleFields.map(renderField)}
@@ -9357,6 +9554,14 @@ function SecurityPage({ guildId }: { guildId: string }) {
   const [draft, setDraft] = useState(DEFAULT_SECURITY_DRAFT);
   const [saving, setSaving] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
+  const [activeSection, setActiveSection] = useState("messages");
+  const sectionTabs: PageSectionTab[] = [
+    { key: "messages", label: "Nachrichten-Schutz", description: "Spam, Einladungen und Mention-Fluten kontrollieren.", icon: <MessageSquare size={16} /> },
+    { key: "domains", label: "Domainregeln", description: "Erlaubte und blockierte Web-Domains verwalten.", icon: <Globe2 size={16} /> },
+    { key: "verification", label: "Verifizierung", description: "Discord-Panel, Zielkanal und Mitgliedsrolle konfigurieren.", icon: <BadgeCheck size={16} /> },
+    { key: "antinuke", label: "Anti-Nuke", description: "Kritische Massenaktionen erkennen und eindämmen.", icon: <Shield size={16} /> }
+  ];
+  const activeSectionTab = sectionTabs.find((tab) => tab.key === activeSection) ?? sectionTabs[0];
 
   useEffect(() => {
     if (settings.data?.security) setDraft(settings.data.security);
@@ -9424,15 +9629,17 @@ function SecurityPage({ guildId }: { guildId: string }) {
       {draft.syncError && <Notice tone="danger" text={draft.syncError} />}
       <ActionStatus status={status} />
       {!loading && !loadError && <>
+        <PageSectionTabs tabs={sectionTabs} activeKey={activeSection} onChange={setActiveSection} label="Security Bereiche" />
+        <PageSectionHeading tab={activeSectionTab} />
         <div className="control-stat-grid">
           <StatusTile icon={<ShieldCheck size={19} />} label="Security Score" value={`${draft.healthScore}%`} tone={draft.healthScore >= 70 ? "ok" : "warn"} />
           <StatusTile icon={<Activity size={19} />} label="Aktive Schutzmodule" value={`${draft.activeProtections}/${draft.totalProtections}`} />
           <StatusTile icon={<BadgeCheck size={19} />} label="Rollenrechte" value={draft.botCanManageRoles ? "bereit" : "fehlen"} tone={draft.botCanManageRoles ? "ok" : "warn"} />
           <StatusTile icon={<ClipboardList size={19} />} label="Audit-Log" value={draft.botCanViewAuditLog ? "sichtbar" : "nicht sichtbar"} tone={draft.botCanViewAuditLog ? "ok" : "warn"} />
         </div>
-        <div className="control-columns">
+        <div className="control-columns tabbed-control-columns">
           <div className="control-stack">
-            <section className="panel control-panel">
+            {activeSection === "messages" && <section className="panel control-panel">
               <div className="panel-title compact"><div><h2>Nachrichten-Schutz</h2><p className="muted">Spam, Links, Einladungen und Mention-Fluten begrenzen.</p></div></div>
               <div className="control-toggle-list">
                 <ControlToggle icon={<MessageSquare size={17} />} title="Antispam" text="Zu viele Nachrichten in einem Zeitfenster erkennen." checked={draft.antispamEnabled} onChange={(value) => setDraft({ ...draft, antispamEnabled: value })}>
@@ -9452,17 +9659,17 @@ function SecurityPage({ guildId }: { guildId: string }) {
                 <NumberSetting label="Mention-Timeout" value={draft.antimentionTimeoutSeconds} min={0} max={86400} suffix="Sek." onChange={(value) => setDraft({ ...draft, antimentionTimeoutSeconds: value })} />
                 <NumberSetting label="Account-Mindestalter" value={draft.accountAgeMinDays} min={0} max={3650} suffix="Tage" onChange={(value) => setDraft({ ...draft, accountAgeMinDays: value })} />
               </div>
-            </section>
-            <section className="panel control-panel">
+            </section>}
+            {activeSection === "domains" && <section className="panel control-panel">
               <div className="panel-title compact"><div><h2>Domainregeln</h2><p className="muted">Eine Domain pro Zeile oder durch Komma getrennt, ohne Protokoll.</p></div></div>
               <div className="control-field-grid two">
                 <label>Erlaubte Domains<textarea rows={5} value={draft.allowedDomains.join("\n")} onChange={(event) => setDraft({ ...draft, allowedDomains: parseDomains(event.target.value) })} placeholder="example.com" /></label>
                 <label>Blockierte Domains<textarea rows={5} value={draft.blockedDomains.join("\n")} onChange={(event) => setDraft({ ...draft, blockedDomains: parseDomains(event.target.value) })} placeholder="bad-example.com" /></label>
               </div>
-            </section>
+            </section>}
           </div>
           <div className="control-stack">
-            <section className="panel control-panel">
+            {activeSection === "verification" && <section className="panel control-panel">
               <div className="panel-title compact"><div><h2>Verifizierung</h2><p className="muted">Button-Panel und Rolle direkt vom Bot verwalten lassen.</p></div></div>
               <ControlToggle icon={<BadgeCheck size={17} />} title="Button-Verifizierung" text="Sendet oder aktualisiert das Verifizierungspanel." checked={draft.verificationEnabled} onChange={(value) => setDraft({ ...draft, verificationEnabled: value })} />
               <div className="control-field-grid two">
@@ -9471,8 +9678,8 @@ function SecurityPage({ guildId }: { guildId: string }) {
                 <label>Titel<input maxLength={100} value={draft.verificationTitle} onChange={(event) => setDraft({ ...draft, verificationTitle: event.target.value })} /></label>
                 <label className="wide">Nachricht<textarea rows={4} maxLength={1500} value={draft.verificationText} onChange={(event) => setDraft({ ...draft, verificationText: event.target.value })} /></label>
               </div>
-            </section>
-            <section className="panel control-panel danger-panel">
+            </section>}
+            {activeSection === "antinuke" && <section className="panel control-panel danger-panel">
               <div className="panel-title compact"><div><h2>Anti-Nuke & Quarantäne</h2><p className="muted">Massenaktionen erkennen und kontrolliert bestrafen.</p></div></div>
               <ControlToggle icon={<Shield size={17} />} title="Anti-Nuke" text="Audit-Aktionen innerhalb eines Zeitfensters zählen." checked={draft.antinukeEnabled} onChange={(value) => setDraft({ ...draft, antinukeEnabled: value })} />
               <div className="control-field-grid two">
@@ -9482,7 +9689,7 @@ function SecurityPage({ guildId }: { guildId: string }) {
                 <label>Quarantäne-Rolle<select value={draft.quarantineRoleId ?? ""} onChange={(event) => setDraft({ ...draft, quarantineRoleId: event.target.value || null })}><option value="">Keine Rolle</option>{manageableRoles.map((role) => <option value={role.id} key={role.id}>{role.name}</option>)}</select></label>
               </div>
               <ControlToggle icon={<ClipboardList size={17} />} title="Audit-Watch" text="Kritische Audit-Log-Aktionen überwachen." checked={draft.auditLogWatchEnabled} onChange={(value) => setDraft({ ...draft, auditLogWatchEnabled: value })} />
-            </section>
+            </section>}
           </div>
         </div>
         <div className="control-savebar"><div><strong>{draft.activeProtections} Schutzmodule aktiv</strong><small>Änderungen werden über die sichere Bot-Queue synchronisiert.</small></div><button className="primary-action inline" onClick={() => void save()} disabled={saving}>{saving ? <Loader2 className="spin" size={16} /> : <Save size={16} />} Security speichern</button></div>
@@ -9496,6 +9703,7 @@ function RaidmodePage({ guildId }: { guildId: string }) {
   const [draft, setDraft] = useState(DEFAULT_RAID_DRAFT);
   const [saving, setSaving] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
+  const [activeSection, setActiveSection] = useState("profile");
   useEffect(() => { if (settings.data?.raidmode) setDraft(settings.data.raidmode); }, [settings.data]);
 
   async function save() {
@@ -9512,14 +9720,21 @@ function RaidmodePage({ guildId }: { guildId: string }) {
     { key: "light" as const, title: "Leicht", text: "Antispam, Antiinvite und Mention-Limit für normalen Schutz.", icon: ShieldCheck },
     { key: "strict" as const, title: "Streng", text: "Join-Sperre plus verschärfter Nachrichten- und Accountschutz.", icon: AlertTriangle }
   ];
+  const sectionTabs: PageSectionTab[] = [
+    { key: "profile", label: "Schutzprofil", description: "Ein abgestimmtes Sicherheitsprofil für den Server auswählen.", icon: <ShieldCheck size={16} /> },
+    { key: "panic", label: "Panic-Modus", description: "Im Ernstfall Slowmode und strenge Schutzregeln sofort aktivieren.", icon: <AlertTriangle size={16} /> }
+  ];
+  const activeSectionTab = sectionTabs.find((tab) => tab.key === activeSection) ?? sectionTabs[0];
   return (
     <section className="control-page raid-control">
       <header className="control-hero raid"><div><p className="eyebrow"><AlertTriangle size={15} /> Incident Response</p><h2>Raidmode</h2><p>Schutzprofile kontrolliert aktivieren und bei einem laufenden Angriff sofort den Panic-Modus auslösen.</p></div><div className="control-hero-actions"><SyncPill status={draft.syncStatus} /><RefreshButton loading={settings.loading} onClick={settings.reload} /></div></header>
       {settings.loading && !settings.data && <LoadingBlock text="Raidmode wird geladen" />}{settings.error && <Notice tone="danger" text={settings.error} />}{draft.syncError && <Notice tone="danger" text={draft.syncError} />}<ActionStatus status={status} />
       {settings.data && <>
+        <PageSectionTabs tabs={sectionTabs} activeKey={activeSection} onChange={setActiveSection} label="Raidmode Bereiche" />
+        <PageSectionHeading tab={activeSectionTab} />
         <div className="control-stat-grid"><StatusTile icon={<Activity size={19} />} label="Raidmode" value={draft.raidmodeEnabled ? "aktiv" : "inaktiv"} tone={draft.raidmodeEnabled ? "warn" : "ok"} /><StatusTile icon={<AlertTriangle size={19} />} label="Panic" value={draft.panicEnabled ? "aktiv" : "bereit"} tone={draft.panicEnabled ? "warn" : "ok"} /><StatusTile icon={<UsersRound size={19} />} label="Mitglieder" value={String(draft.memberCount)} /><StatusTile icon={<Hash size={19} />} label="Textkanäle" value={String(draft.textChannelCount)} /></div>
-        <section className="panel control-panel"><div className="panel-title compact"><div><h2>Schutzprofil</h2><p className="muted">Ein Profil setzt die zusammengehörigen Security-Regeln atomar.</p></div></div><div className="raid-profile-grid">{profiles.map((profile) => { const Icon = profile.icon; return <button type="button" className={draft.profile === profile.key ? "selected" : ""} onClick={() => setDraft({ ...draft, profile: profile.key })} key={profile.key}><span><Icon size={19} /></span><strong>{profile.title}</strong><small>{profile.text}</small>{draft.profile === profile.key && <Check size={17} />}</button>; })}</div></section>
-        <section className={`panel panic-panel ${draft.panicEnabled ? "active" : ""}`}><div className="panic-copy"><span><AlertTriangle size={21} /></span><div><h2>Panic-Modus</h2><p>Aktiviert das strenge Profil und setzt den gewählten Slowmode auf alle Textkanäle. Beim Ausschalten stellt der Bot die vorherigen Werte wieder her.</p></div></div><ModuleStatusToggle checked={draft.panicEnabled} inactiveLabel="Bereit" onChange={(checked) => setDraft({ ...draft, panicEnabled: checked })} /><NumberSetting label="Slowmode" value={draft.panicSlowmodeSeconds} min={0} max={21600} suffix="Sek." onChange={(value) => setDraft({ ...draft, panicSlowmodeSeconds: value })} /></section>
+        {activeSection === "profile" && <section className="panel control-panel"><div className="panel-title compact"><div><h2>Schutzprofil</h2><p className="muted">Ein Profil setzt die zusammengehörigen Security-Regeln atomar.</p></div></div><div className="raid-profile-grid">{profiles.map((profile) => { const Icon = profile.icon; return <button type="button" className={draft.profile === profile.key ? "selected" : ""} onClick={() => setDraft({ ...draft, profile: profile.key })} key={profile.key}><span><Icon size={19} /></span><strong>{profile.title}</strong><small>{profile.text}</small>{draft.profile === profile.key && <Check size={17} />}</button>; })}</div></section>}
+        {activeSection === "panic" && <section className={`panel panic-panel ${draft.panicEnabled ? "active" : ""}`}><div className="panic-copy"><span><AlertTriangle size={21} /></span><div><h2>Panic-Modus</h2><p>Aktiviert das strenge Profil und setzt den gewählten Slowmode auf alle Textkanäle. Beim Ausschalten stellt der Bot die vorherigen Werte wieder her.</p></div></div><ModuleStatusToggle checked={draft.panicEnabled} inactiveLabel="Bereit" onChange={(checked) => setDraft({ ...draft, panicEnabled: checked })} /><NumberSetting label="Slowmode" value={draft.panicSlowmodeSeconds} min={0} max={21600} suffix="Sek." onChange={(value) => setDraft({ ...draft, panicSlowmodeSeconds: value })} /></section>}
         <div className="control-savebar"><div><strong>Profil: {profiles.find((profile) => profile.key === draft.profile)?.title}</strong><small>{draft.panicEnabled ? "Panic wird beim Speichern sofort ausgelöst." : "Änderungen werden nach dem Speichern vom Bot angewendet."}</small></div><button className={draft.panicEnabled ? "danger-action inline" : "primary-action inline"} onClick={() => void save()} disabled={saving}>{saving ? <Loader2 className="spin" size={16} /> : <Save size={16} />}{draft.panicEnabled ? "Panic aktivieren" : "Raidmode speichern"}</button></div>
       </>}
     </section>
@@ -9534,6 +9749,16 @@ function TicketSystemPage({ guildId }: { guildId: string }) {
   const [saving, setSaving] = useState(false);
   const [sending, setSending] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
+  const [activeSection, setActiveSection] = useState("general");
+  const sectionTabs: PageSectionTab[] = [
+    { key: "general", label: "Allgemeines", description: "Ticket-Kategorie, Zielkanäle und Benachrichtigung festlegen.", icon: <Settings size={16} /> },
+    { key: "team", label: "Team", description: "Support- und Löschrechte sauber voneinander trennen.", icon: <UsersRound size={16} /> },
+    { key: "panel", label: "Discord-Panel", description: "Inhalt, Auswahlkategorien und Discord-Vorschau bearbeiten.", icon: <MessageSquare size={16} /> },
+    { key: "form", label: "Formular", description: "Titel und Fragen für neue Tickets vorbereiten.", icon: <ClipboardList size={16} /> },
+    { key: "automation", label: "Automationen", description: "Bewertungen, Erinnerungen, Auto-Close und SLA steuern.", icon: <Clock3 size={16} /> },
+    { key: "access", label: "Zugriff", description: "Rollen und einzelne Discord-Nutzer vom Erstellen ausschließen.", icon: <Shield size={16} /> }
+  ];
+  const activeSectionTab = sectionTabs.find((tab) => tab.key === activeSection) ?? sectionTabs[0];
   useEffect(() => { if (settings.data?.tickets) setDraft(settings.data.tickets); }, [settings.data]);
   const textChannels = useMemo(() => (channels.data?.channels ?? []).filter(isTextGuildChannel), [channels.data]);
   const categoryChannels = useMemo(() => (channels.data?.channels ?? []).filter((channel) => channel.type.toLowerCase() === "category"), [channels.data]);
@@ -9614,20 +9839,22 @@ function TicketSystemPage({ guildId }: { guildId: string }) {
       {loading && <LoadingBlock text="Ticket-System wird geladen" />}{loadError && <Notice tone="danger" text={loadError} />}{draft.syncError && <Notice tone="danger" text={draft.syncError} />}<ActionStatus status={status} />
       {!loading && !loadError && !draft.enabled && <ModuleInactiveState icon={<LifeBuoy size={22} />} title="Ticket-System ist ausgeschaltet" text="Aktiviere das Modul, um Supportrollen, Ticket-Kategorien, Formulare und Automationen einzurichten." onEnable={() => void updateEnabled(true)} disabled={saving || sending} />}
       {!loading && !loadError && draft.enabled && <>
+        <PageSectionTabs tabs={sectionTabs} activeKey={activeSection} onChange={setActiveSection} label="Ticket-System Bereiche" />
+        <PageSectionHeading tab={activeSectionTab} />
         <div className="control-stat-grid"><StatusTile icon={<LifeBuoy size={19} />} label="Offen" value={String(draft.openTickets)} tone={draft.openTickets ? "warn" : "ok"} /><StatusTile icon={<Check size={19} />} label="Geschlossen" value={String(draft.closedTickets)} /><StatusTile icon={<ClipboardList size={19} />} label="Gesamt" value={String(draft.totalTickets)} /><StatusTile icon={<Star size={19} />} label="Bewertung" value={draft.averageRating === null ? "keine" : `${draft.averageRating}/5`} tone={draft.averageRating !== null && draft.averageRating >= 4 ? "ok" : undefined} /></div>
-        <div className="control-columns ticket-columns">
+        <div className="control-columns ticket-columns tabbed-control-columns">
           <div className="control-stack">
-            <section className="panel control-panel"><div className="panel-title compact"><div><h2>Grundkonfiguration</h2><p className="muted">Discord-Ziele für neue Tickets, Panel und Protokolle.</p></div></div><div className="control-field-grid two"><label>Ticket-Kategorie<select value={draft.ticketCategoryId ?? ""} onChange={(event) => setDraft({ ...draft, ticketCategoryId: event.target.value || null })}><option value="">Kategorie auswählen</option>{categoryChannels.map((channel) => <option value={channel.id} key={channel.id}>{channel.name}</option>)}</select></label><label>Panel-Kanal<select value={draft.panelChannelId ?? ""} onChange={(event) => setDraft({ ...draft, panelChannelId: event.target.value || null })}><ChannelSelectOptions channels={textChannels} noneLabel="Kanal auswählen" /></select></label><label>Log-Kanal<select value={draft.logChannelId ?? ""} onChange={(event) => setDraft({ ...draft, logChannelId: event.target.value || null })}><ChannelSelectOptions channels={textChannels} noneLabel="Kein eigener Log-Kanal" /></select></label><label>Benachrichtigungsrolle<select value={draft.notifyRoleId ?? ""} onChange={(event) => setDraft({ ...draft, notifyRoleId: event.target.value || null })}><option value="">Keine Rolle</option>{manageableRoles.map((role) => <option value={role.id} key={role.id}>{role.name}</option>)}</select></label></div></section>
-            <section className="panel control-panel"><div className="panel-title compact"><div><h2>Supportrollen</h2><p className="muted">Alle ausgewählten Rollen erhalten Zugriff auf neu erstellte Tickets.</p></div><span className="pill neutral">{draft.supportRoleIds.length}/10</span></div><RoleChecklist roles={manageableRoles} selected={draft.supportRoleIds} onToggle={(id) => { if (!draft.supportRoleIds.includes(id) && draft.supportRoleIds.length >= 10) return setStatus("Maximal 10 Supportrollen sind möglich."); toggleList("supportRoleIds", id); }} /></section>
-            <section className="panel control-panel"><div className="panel-title compact"><div><h2>Löschberechtigte Rollen</h2><p className="muted">Nur diese Rollen können geschlossene Tickets endgültig löschen. Danach sehen das Ticket nur noch der Ersteller, Supportrollen und diese Rollen.</p></div><span className="pill neutral">{draft.deleteRoleIds.length}/10</span></div><RoleChecklist roles={manageableRoles} selected={draft.deleteRoleIds} onToggle={(id) => { if (!draft.deleteRoleIds.includes(id) && draft.deleteRoleIds.length >= 10) return setStatus("Maximal 10 Löschrollen sind möglich."); toggleList("deleteRoleIds", id); }} /></section>
-            <section className="panel control-panel"><div className="panel-title compact"><div><h2>Panel-Inhalt</h2><p className="muted">So erscheint der Einstieg in Discord.</p></div>{draft.panelMessageId && <span className="pill ok">Panel vorhanden</span>}</div><div className="control-field-grid"><label>Titel<input maxLength={100} value={draft.panelTitle} onChange={(event) => setDraft({ ...draft, panelTitle: event.target.value })} /></label><label>Beschreibung<textarea rows={4} maxLength={1000} value={draft.panelDescription} onChange={(event) => setDraft({ ...draft, panelDescription: event.target.value })} /></label></div></section>
-            <section className="panel control-panel"><div className="panel-title compact"><div><h2>Ticket-Kategorien</h2><p className="muted">Bis zu 25 Auswahlpunkte für das Discord-Panel.</p></div><button type="button" className="secondary-action inline" disabled={draft.selectCategories.length >= 25} onClick={() => setDraft({ ...draft, selectCategories: [...draft.selectCategories, { label: "Neue Kategorie", description: "Beschreibe das Anliegen", emoji: botCustomEmojiMarkup("ticket"), value: `kategorie-${draft.selectCategories.length + 1}` }] })}><Plus size={16} /> Kategorie</button></div><div className="ticket-builder-list">{draft.selectCategories.map((category, index) => <article key={`${category.value}-${index}`}><TicketEmojiPicker value={category.emoji} onChange={(emoji) => updateCategory(index, { emoji })} /><label>Name<input maxLength={80} value={category.label} onChange={(event) => updateCategory(index, { label: event.target.value })} /></label><label>Beschreibung<input maxLength={100} value={category.description} onChange={(event) => updateCategory(index, { description: event.target.value })} /></label><label>Wert<input maxLength={80} value={category.value} onChange={(event) => updateCategory(index, { value: event.target.value.toLowerCase().replace(/[^a-z0-9_-]/g, "-") })} /></label><button type="button" className="icon-button danger" title="Kategorie entfernen" onClick={() => setDraft({ ...draft, selectCategories: draft.selectCategories.filter((_, position) => position !== index) })}><Trash2 size={16} /></button></article>)}</div></section>
+            {activeSection === "general" && <section className="panel control-panel"><div className="panel-title compact"><div><h2>Grundkonfiguration</h2><p className="muted">Discord-Ziele für neue Tickets, Panel und Protokolle.</p></div></div><div className="control-field-grid two"><label>Ticket-Kategorie<select value={draft.ticketCategoryId ?? ""} onChange={(event) => setDraft({ ...draft, ticketCategoryId: event.target.value || null })}><option value="">Kategorie auswählen</option>{categoryChannels.map((channel) => <option value={channel.id} key={channel.id}>{channel.name}</option>)}</select></label><label>Panel-Kanal<select value={draft.panelChannelId ?? ""} onChange={(event) => setDraft({ ...draft, panelChannelId: event.target.value || null })}><ChannelSelectOptions channels={textChannels} noneLabel="Kanal auswählen" /></select></label><label>Log-Kanal<select value={draft.logChannelId ?? ""} onChange={(event) => setDraft({ ...draft, logChannelId: event.target.value || null })}><ChannelSelectOptions channels={textChannels} noneLabel="Kein eigener Log-Kanal" /></select></label><label>Benachrichtigungsrolle<select value={draft.notifyRoleId ?? ""} onChange={(event) => setDraft({ ...draft, notifyRoleId: event.target.value || null })}><option value="">Keine Rolle</option>{manageableRoles.map((role) => <option value={role.id} key={role.id}>{role.name}</option>)}</select></label></div></section>}
+            {activeSection === "team" && <section className="panel control-panel"><div className="panel-title compact"><div><h2>Supportrollen</h2><p className="muted">Alle ausgewählten Rollen erhalten Zugriff auf neu erstellte Tickets.</p></div><span className="pill neutral">{draft.supportRoleIds.length}/10</span></div><RoleChecklist roles={manageableRoles} selected={draft.supportRoleIds} onToggle={(id) => { if (!draft.supportRoleIds.includes(id) && draft.supportRoleIds.length >= 10) return setStatus("Maximal 10 Supportrollen sind möglich."); toggleList("supportRoleIds", id); }} /></section>}
+            {activeSection === "team" && <section className="panel control-panel"><div className="panel-title compact"><div><h2>Löschberechtigte Rollen</h2><p className="muted">Nur diese Rollen können geschlossene Tickets endgültig löschen. Danach sehen das Ticket nur noch der Ersteller, Supportrollen und diese Rollen.</p></div><span className="pill neutral">{draft.deleteRoleIds.length}/10</span></div><RoleChecklist roles={manageableRoles} selected={draft.deleteRoleIds} onToggle={(id) => { if (!draft.deleteRoleIds.includes(id) && draft.deleteRoleIds.length >= 10) return setStatus("Maximal 10 Löschrollen sind möglich."); toggleList("deleteRoleIds", id); }} /></section>}
+            {activeSection === "panel" && <section className="panel control-panel"><div className="panel-title compact"><div><h2>Panel-Inhalt</h2><p className="muted">So erscheint der Einstieg in Discord.</p></div>{draft.panelMessageId && <span className="pill ok">Panel vorhanden</span>}</div><div className="control-field-grid"><label>Titel<input maxLength={100} value={draft.panelTitle} onChange={(event) => setDraft({ ...draft, panelTitle: event.target.value })} /></label><label>Beschreibung<textarea rows={4} maxLength={1000} value={draft.panelDescription} onChange={(event) => setDraft({ ...draft, panelDescription: event.target.value })} /></label></div></section>}
+            {activeSection === "panel" && <section className="panel control-panel"><div className="panel-title compact"><div><h2>Ticket-Kategorien</h2><p className="muted">Bis zu 25 Auswahlpunkte für das Discord-Panel.</p></div><button type="button" className="secondary-action inline" disabled={draft.selectCategories.length >= 25} onClick={() => setDraft({ ...draft, selectCategories: [...draft.selectCategories, { label: "Neue Kategorie", description: "Beschreibe das Anliegen", emoji: botCustomEmojiMarkup("ticket"), value: `kategorie-${draft.selectCategories.length + 1}` }] })}><Plus size={16} /> Kategorie</button></div><div className="ticket-builder-list">{draft.selectCategories.map((category, index) => <article key={`${category.value}-${index}`}><TicketEmojiPicker value={category.emoji} onChange={(emoji) => updateCategory(index, { emoji })} /><label>Name<input maxLength={80} value={category.label} onChange={(event) => updateCategory(index, { label: event.target.value })} /></label><label>Beschreibung<input maxLength={100} value={category.description} onChange={(event) => updateCategory(index, { description: event.target.value })} /></label><label>Wert<input maxLength={80} value={category.value} onChange={(event) => updateCategory(index, { value: event.target.value.toLowerCase().replace(/[^a-z0-9_-]/g, "-") })} /></label><button type="button" className="icon-button danger" title="Kategorie entfernen" onClick={() => setDraft({ ...draft, selectCategories: draft.selectCategories.filter((_, position) => position !== index) })}><Trash2 size={16} /></button></article>)}</div></section>}
           </div>
           <div className="control-stack">
-            <section className="panel control-panel"><div className="panel-title compact"><div><h2>Ticket-Formular</h2><p className="muted">Bis zu fünf Fragen werden im neuen Ticket angezeigt.</p></div><button type="button" className="secondary-action inline" disabled={draft.formQuestions.length >= 5} onClick={() => setDraft({ ...draft, formQuestions: [...draft.formQuestions, "Neue Frage"] })}><Plus size={16} /> Frage</button></div><label>Formular-Titel<input maxLength={100} value={draft.formTitle} onChange={(event) => setDraft({ ...draft, formTitle: event.target.value })} /></label><div className="ticket-question-list">{draft.formQuestions.map((question, index) => <div key={index}><span>{index + 1}</span><input maxLength={250} value={question} onChange={(event) => setDraft({ ...draft, formQuestions: draft.formQuestions.map((value, position) => position === index ? event.target.value : value) })} /><button type="button" className="icon-button" title="Frage entfernen" onClick={() => setDraft({ ...draft, formQuestions: draft.formQuestions.filter((_, position) => position !== index) })}><X size={16} /></button></div>)}{!draft.formQuestions.length && <p className="muted">Keine Zusatzfragen eingerichtet.</p>}</div></section>
-            <section className="panel control-panel"><div className="panel-title compact"><div><h2>Automationen</h2><p className="muted">Zeiten in Stunden; 0 deaktiviert die jeweilige Funktion.</p></div></div><ControlToggle icon={<Star size={17} />} title="Bewertungen" text="Nach dem Schließen eine 1-5-Sterne-Bewertung anfragen." checked={draft.ratingEnabled} onChange={(value) => setDraft({ ...draft, ratingEnabled: value })} /><div className="control-field-grid"><NumberSetting label="Erinnerung" value={draft.reminderHours} min={0} max={720} suffix="Std." onChange={(value) => setDraft({ ...draft, reminderHours: value })} /><NumberSetting label="Auto-Close" value={draft.autoCloseHours} min={0} max={720} suffix="Std." onChange={(value) => setDraft({ ...draft, autoCloseHours: value })} /><NumberSetting label="SLA-Ziel" value={draft.slaHours} min={0} max={720} suffix="Std." onChange={(value) => setDraft({ ...draft, slaHours: value })} /></div></section>
-            <section className="panel control-panel"><div className="panel-title compact"><div><h2>Zugriffssperren</h2><p className="muted">Rollen und einzelne Discord-Nutzer vom Erstellen ausschließen.</p></div></div><h3 className="control-subheading">Gesperrte Rollen</h3><RoleChecklist roles={manageableRoles} selected={draft.blacklistRoleIds} onToggle={(id) => toggleList("blacklistRoleIds", id)} /><label className="control-user-ids">Gesperrte Nutzer-IDs<textarea rows={4} value={draft.blacklistUserIds.join("\n")} onChange={(event) => setDraft({ ...draft, blacklistUserIds: Array.from(new Set(event.target.value.split(/[\s,;]+/).filter((value) => /^\d{17,20}$/.test(value)))) })} placeholder="Eine Discord-ID pro Zeile" /></label></section>
-            <aside className="ticket-preview"><span>Discord Vorschau</span><div className="ticket-preview-embed"><h3>{draft.panelTitle || "Ticketsystem"}</h3><p>{draft.panelDescription || "Wähle eine Kategorie aus."}</p><small>Kategorien</small>{draft.selectCategories.slice(0, 5).map((category) => <div className="ticket-preview-category" key={category.value}><BotCustomEmoji value={category.emoji} size={18} /><span>{category.label}</span></div>)}</div><details className="ticket-preview-dropdown"><summary><span>Wähle eine Ticketkategorie...</span><ChevronDown size={16} /></summary><div>{draft.selectCategories.map((category) => <button type="button" key={category.value}><BotCustomEmoji value={category.emoji} size={20} /><span><strong>{category.label}</strong><small>{category.description}</small></span></button>)}</div></details></aside>
+            {activeSection === "form" && <section className="panel control-panel"><div className="panel-title compact"><div><h2>Ticket-Formular</h2><p className="muted">Bis zu fünf Fragen werden im neuen Ticket angezeigt.</p></div><button type="button" className="secondary-action inline" disabled={draft.formQuestions.length >= 5} onClick={() => setDraft({ ...draft, formQuestions: [...draft.formQuestions, "Neue Frage"] })}><Plus size={16} /> Frage</button></div><label>Formular-Titel<input maxLength={100} value={draft.formTitle} onChange={(event) => setDraft({ ...draft, formTitle: event.target.value })} /></label><div className="ticket-question-list">{draft.formQuestions.map((question, index) => <div key={index}><span>{index + 1}</span><input maxLength={250} value={question} onChange={(event) => setDraft({ ...draft, formQuestions: draft.formQuestions.map((value, position) => position === index ? event.target.value : value) })} /><button type="button" className="icon-button" title="Frage entfernen" onClick={() => setDraft({ ...draft, formQuestions: draft.formQuestions.filter((_, position) => position !== index) })}><X size={16} /></button></div>)}{!draft.formQuestions.length && <p className="muted">Keine Zusatzfragen eingerichtet.</p>}</div></section>}
+            {activeSection === "automation" && <section className="panel control-panel"><div className="panel-title compact"><div><h2>Automationen</h2><p className="muted">Zeiten in Stunden; 0 deaktiviert die jeweilige Funktion.</p></div></div><ControlToggle icon={<Star size={17} />} title="Bewertungen" text="Nach dem Schließen eine 1-5-Sterne-Bewertung anfragen." checked={draft.ratingEnabled} onChange={(value) => setDraft({ ...draft, ratingEnabled: value })} /><div className="control-field-grid"><NumberSetting label="Erinnerung" value={draft.reminderHours} min={0} max={720} suffix="Std." onChange={(value) => setDraft({ ...draft, reminderHours: value })} /><NumberSetting label="Auto-Close" value={draft.autoCloseHours} min={0} max={720} suffix="Std." onChange={(value) => setDraft({ ...draft, autoCloseHours: value })} /><NumberSetting label="SLA-Ziel" value={draft.slaHours} min={0} max={720} suffix="Std." onChange={(value) => setDraft({ ...draft, slaHours: value })} /></div></section>}
+            {activeSection === "access" && <section className="panel control-panel"><div className="panel-title compact"><div><h2>Zugriffssperren</h2><p className="muted">Rollen und einzelne Discord-Nutzer vom Erstellen ausschließen.</p></div></div><h3 className="control-subheading">Gesperrte Rollen</h3><RoleChecklist roles={manageableRoles} selected={draft.blacklistRoleIds} onToggle={(id) => toggleList("blacklistRoleIds", id)} /><label className="control-user-ids">Gesperrte Nutzer-IDs<textarea rows={4} value={draft.blacklistUserIds.join("\n")} onChange={(event) => setDraft({ ...draft, blacklistUserIds: Array.from(new Set(event.target.value.split(/[\s,;]+/).filter((value) => /^\d{17,20}$/.test(value)))) })} placeholder="Eine Discord-ID pro Zeile" /></label></section>}
+            {activeSection === "panel" && <aside className="ticket-preview"><span>Discord Vorschau</span><div className="ticket-preview-embed"><h3>{draft.panelTitle || "Ticketsystem"}</h3><p>{draft.panelDescription || "Wähle eine Kategorie aus."}</p><small>Kategorien</small>{draft.selectCategories.slice(0, 5).map((category) => <div className="ticket-preview-category" key={category.value}><BotCustomEmoji value={category.emoji} size={18} /><span>{category.label}</span></div>)}</div><details className="ticket-preview-dropdown"><summary><span>Wähle eine Ticketkategorie...</span><ChevronDown size={16} /></summary><div>{draft.selectCategories.map((category) => <button type="button" key={category.value}><BotCustomEmoji value={category.emoji} size={20} /><span><strong>{category.label}</strong><small>{category.description}</small></span></button>)}</div></details></aside>}
           </div>
         </div>
         <div className="control-savebar"><div><strong>{draft.enabled ? "Ticketsystem aktiv" : "Ticketsystem inaktiv"}</strong><small className={status ? "ticket-save-status" : undefined}>{status || "Speichern aktualisiert Regeln; Panel senden veröffentlicht oder aktualisiert die Discord-Nachricht."}</small></div><div className="form-actions"><button className="primary-action inline" onClick={() => void persist()} disabled={saving || sending}>{saving ? <Loader2 className="spin" size={16} /> : <Save size={16} />} Einstellungen speichern</button><button className="secondary-action inline" onClick={() => void sendPanel()} disabled={saving || sending || !draft.enabled || !draft.panelChannelId}>{sending ? <Loader2 className="spin" size={16} /> : <Rocket size={16} />}{sending ? "Panel wird gesendet" : "Panel senden"}</button></div></div>

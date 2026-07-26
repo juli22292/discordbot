@@ -8643,6 +8643,32 @@ textarea {
   line-height: 1.45;
 }
 
+.profile-section-navigation {
+  grid-column: 1 / -1;
+  display: grid;
+  gap: 12px;
+}
+
+.profile-section-panel {
+  grid-column: 1 / -1;
+}
+
+.tabbed-control-columns > .control-stack {
+  display: contents;
+}
+
+.tabbed-control-columns > .panel,
+.tabbed-control-columns > .control-stack > .panel,
+.tabbed-control-columns > .control-stack > .ticket-preview {
+  grid-column: 1 / -1;
+}
+
+.autorole-layout.editor-only .autorole-editor,
+.tempvoice-layout.editor-only .tempvoice-editor,
+.welcome-grid.editor-only .welcome-editor {
+  grid-column: 1 / -1;
+}
+
 .feature-field-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
