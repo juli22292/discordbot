@@ -8,7 +8,6 @@ import type {
 } from "./server/counting-leaderboard";
 import type { PublicGuildCounter, PublicGuildCounterSummary } from "./server/guild-counters";
 import { isAiDeleteCommand } from "./ai-chat";
-import { parsePublicAiInlineMarkdown } from "./public-ai-markdown";
 import {
   Activity,
   AlertTriangle,
@@ -1380,6 +1379,10 @@ const ASSISTANT_QUICK_PROMPTS = [
 ];
 const PUBLIC_AI_STORAGE_KEY = "modmail-manager-public-ai-chat";
 const AI_VISIBILITY_CHANGED_EVENT = "modmail-manager-ai-visibility-changed";
+const PublicAiContent = React.lazy(async () => {
+  const module = await import("./public-ai-content");
+  return { default: module.PublicAiContent };
+});
 
 type ToastPayload = {
   tone?: ToastTone;
@@ -2490,122 +2493,6 @@ function readPublicAiMessages(): PublicAiMessage[] {
   }
 }
 
-function PublicAiCodeBlock({ language, code }: { language: string; code: string }) {
-  const [copied, setCopied] = useState(false);
-  const resetTimerRef = useRef<number | null>(null);
-
-  useEffect(() => () => {
-    if (resetTimerRef.current !== null) window.clearTimeout(resetTimerRef.current);
-  }, []);
-
-  function copyCodeWithFallback(): boolean {
-    const textarea = document.createElement("textarea");
-    textarea.value = code;
-    textarea.setAttribute("readonly", "");
-    textarea.style.position = "fixed";
-    textarea.style.inset = "-9999px auto auto -9999px";
-    document.body.appendChild(textarea);
-    textarea.select();
-
-    try {
-      return document.execCommand("copy");
-    } finally {
-      textarea.remove();
-    }
-  }
-
-  async function copyCode() {
-    try {
-      if (navigator.clipboard?.writeText) {
-        try {
-          await navigator.clipboard.writeText(code);
-        } catch {
-          if (!copyCodeWithFallback()) throw new Error("Clipboard unavailable");
-        }
-      } else if (!copyCodeWithFallback()) {
-        throw new Error("Clipboard unavailable");
-      }
-      setCopied(true);
-      if (resetTimerRef.current !== null) window.clearTimeout(resetTimerRef.current);
-      resetTimerRef.current = window.setTimeout(() => {
-        setCopied(false);
-        resetTimerRef.current = null;
-      }, 1800);
-    } catch {
-      notify({
-        tone: "warning",
-        title: "Kopieren nicht möglich",
-        text: "Der Code konnte nicht in die Zwischenablage kopiert werden."
-      });
-    }
-  }
-
-  return (
-    <div className="public-ai-code">
-      <div className="public-ai-code-header">
-        <span>{language || "Code"}</span>
-        <button
-          type="button"
-          className={copied ? "is-copied" : ""}
-          aria-label={copied ? "Code kopiert" : "Code kopieren"}
-          title={copied ? "Kopiert" : "Code kopieren"}
-          onClick={() => void copyCode()}
-        >
-          {copied ? <Check size={14} /> : <Copy size={14} />}
-          <span>{copied ? "Kopiert" : "Kopieren"}</span>
-        </button>
-      </div>
-      <pre><code>{code}</code></pre>
-    </div>
-  );
-}
-
-function PublicAiContent({ content }: { content: string }) {
-  const parts: React.ReactNode[] = [];
-  const codeBlockPattern = /```([^\n`]*)\n?([\s\S]*?)```/g;
-  let cursor = 0;
-  let match: RegExpExecArray | null;
-
-  function renderInlineMarkdown(value: string, keyPrefix: string) {
-    return parsePublicAiInlineMarkdown(value).map((token, index) => {
-      const key = `${keyPrefix}-${index}`;
-      if (token.type === "strong") return <strong key={key}>{token.text}</strong>;
-      if (token.type === "code") return <code className="public-ai-inline-code" key={key}>{token.text}</code>;
-      if (token.type === "link") {
-        return (
-          <a key={key} href={token.href} target="_blank" rel="noreferrer">
-            {token.text}
-          </a>
-        );
-      }
-      return <React.Fragment key={key}>{token.text}</React.Fragment>;
-    });
-  }
-
-  while ((match = codeBlockPattern.exec(content)) !== null) {
-    const prose = content.slice(cursor, match.index);
-    if (prose.trim()) {
-      parts.push(<p key={`text-${cursor}`}>{renderInlineMarkdown(prose.trim(), `inline-${cursor}`)}</p>);
-    }
-    const language = match[1]?.trim();
-    parts.push(
-      <PublicAiCodeBlock
-        code={match[2].trimEnd()}
-        key={`code-${match.index}`}
-        language={language}
-      />
-    );
-    cursor = match.index + match[0].length;
-  }
-
-  const remainder = content.slice(cursor);
-  if (remainder.trim() || parts.length === 0) {
-    parts.push(<p key={`text-${cursor}`}>{renderInlineMarkdown(remainder.trim(), `inline-${cursor}`)}</p>);
-  }
-
-  return <div className="public-ai-answer-content">{parts}</div>;
-}
-
 function PublicAiPage({
   accessAllowed,
   accessError,
@@ -2760,7 +2647,20 @@ function PublicAiPage({
                     {message.role === "assistant" ? "ModmailBot KI" : "Du"}
                   </span>
                   {message.role === "assistant"
-                    ? <PublicAiContent content={message.content} />
+                    ? (
+                      <React.Suspense
+                        fallback={<div className="public-ai-answer-loading" role="status">Antwort wird formatiert...</div>}
+                      >
+                        <PublicAiContent
+                          content={message.content}
+                          onCopyError={() => notify({
+                            tone: "warning",
+                            title: "Kopieren nicht möglich",
+                            text: "Der Code konnte nicht in die Zwischenablage kopiert werden."
+                          })}
+                        />
+                      </React.Suspense>
+                    )
                     : <p>{message.content}</p>}
                 </article>
               ))}

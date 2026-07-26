@@ -9450,16 +9450,198 @@ textarea {
 .public-ai-answer-content {
   min-width: 0;
   display: grid;
-  gap: 12px;
+  gap: 14px;
   color: var(--muted-strong);
   font-size: 15px;
   line-height: 1.68;
 }
 
-.public-ai-answer-content > p {
+.public-ai-answer-loading {
+  min-height: 32px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.public-ai-answer-content > :first-child {
+  margin-top: 0;
+}
+
+.public-ai-answer-content > :last-child {
+  margin-bottom: 0;
+}
+
+.public-ai-answer-content p {
   margin: 0;
   overflow-wrap: anywhere;
-  white-space: pre-wrap;
+}
+
+.public-ai-answer-content h1,
+.public-ai-answer-content h2,
+.public-ai-answer-content h3,
+.public-ai-answer-content h4,
+.public-ai-answer-content h5,
+.public-ai-answer-content h6 {
+  margin: 8px 0 0;
+  color: var(--text);
+  font-weight: 700;
+  letter-spacing: 0;
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+}
+
+.public-ai-answer-content h1 {
+  font-size: 22px;
+}
+
+.public-ai-answer-content h2 {
+  font-size: 19px;
+}
+
+.public-ai-answer-content h3 {
+  font-size: 17px;
+}
+
+.public-ai-answer-content h4,
+.public-ai-answer-content h5,
+.public-ai-answer-content h6 {
+  font-size: 15px;
+}
+
+.public-ai-answer-content ul,
+.public-ai-answer-content ol {
+  display: grid;
+  gap: 5px;
+  margin: 0;
+  padding-left: 24px;
+}
+
+.public-ai-answer-content ul {
+  list-style: disc;
+}
+
+.public-ai-answer-content ol {
+  list-style: decimal;
+}
+
+.public-ai-answer-content li {
+  min-width: 0;
+  padding-left: 3px;
+  overflow-wrap: anywhere;
+}
+
+.public-ai-answer-content li::marker {
+  color: var(--blue);
+  font-weight: 700;
+}
+
+.public-ai-answer-content li > ul,
+.public-ai-answer-content li > ol {
+  margin-top: 5px;
+}
+
+.public-ai-answer-content li > p:first-child:last-child {
+  display: inline;
+}
+
+.public-ai-answer-content .contains-task-list {
+  padding-left: 2px;
+  list-style: none;
+}
+
+.public-ai-answer-content .task-list-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  padding-left: 0;
+}
+
+.public-ai-answer-content .task-list-item input {
+  width: 16px;
+  height: 16px;
+  flex: 0 0 16px;
+  margin: 5px 0 0;
+  accent-color: var(--green);
+}
+
+.public-ai-answer-content blockquote {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 10px 13px;
+  border-left: 3px solid var(--blue);
+  border-radius: 0 6px 6px 0;
+  color: var(--muted);
+  background: color-mix(in srgb, var(--blue) 7%, transparent);
+}
+
+.public-ai-answer-content hr {
+  width: 100%;
+  height: 1px;
+  margin: 3px 0;
+  border: 0;
+  background: var(--border);
+}
+
+.public-ai-table-scroll {
+  width: 100%;
+  max-width: 100%;
+  overflow-x: auto;
+  border: 1px solid var(--border-soft);
+  border-radius: 8px;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+}
+
+.public-ai-answer-content table {
+  width: max-content;
+  min-width: 100%;
+  border-spacing: 0;
+  border-collapse: collapse;
+  table-layout: auto;
+}
+
+.public-ai-answer-content th,
+.public-ai-answer-content td {
+  min-width: 120px;
+  padding: 8px 10px;
+  border-right: 1px solid var(--border-soft);
+  border-bottom: 1px solid var(--border-soft);
+  text-align: left;
+  vertical-align: top;
+  overflow-wrap: anywhere;
+}
+
+.public-ai-answer-content th:last-child,
+.public-ai-answer-content td:last-child {
+  border-right: 0;
+}
+
+.public-ai-answer-content tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.public-ai-answer-content th {
+  color: var(--text);
+  background: var(--surface);
+  font-weight: 700;
+}
+
+.public-ai-answer-content td {
+  background: color-mix(in srgb, var(--surface) 55%, transparent);
+}
+
+.public-ai-answer-content del {
+  color: var(--muted);
+}
+
+.public-ai-answer-content img {
+  display: block;
+  width: auto;
+  max-width: 100%;
+  max-height: 520px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  object-fit: contain;
 }
 
 .public-ai-answer-content strong {
