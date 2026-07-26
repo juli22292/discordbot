@@ -26,6 +26,7 @@ import {
   buildGuildCounterSummary,
   type PublicGuildCounter
 } from "./server/guild-counters";
+import { mergeGuildControlState } from "./server/guild-control-state";
 import {
   buildPublicCountingLeaderboard,
   type PublicCountingContribution,
@@ -2175,10 +2176,12 @@ function normalizeGuildControlModule(row: GuildControlModuleRow | null | undefin
   const configuration = row ? recordValue(parseJson(row.configuration, {})) : {};
   const runtime = row ? recordValue(parseJson(row.runtime_state, {})) : {};
   return {
-    ...DEFAULT_CONTROL_CONFIGURATIONS[module],
-    ...configuration,
-    ...DEFAULT_CONTROL_RUNTIME[module],
-    ...runtime,
+    ...mergeGuildControlState(
+      DEFAULT_CONTROL_CONFIGURATIONS[module],
+      configuration,
+      DEFAULT_CONTROL_RUNTIME[module],
+      runtime
+    ),
     syncStatus: row?.sync_status || "idle",
     syncError: row?.sync_error ?? null,
     updatedAt: row?.updated_at ?? null
@@ -5897,7 +5900,7 @@ app.post("/api/internal/bot/snapshot", async (c) => {
      FROM json_each(?)
      WHERE true
      ON CONFLICT(guild_id, module) DO UPDATE SET
-       configuration = CASE WHEN guild_control_modules.sync_status = 'pending' THEN guild_control_modules.configuration ELSE excluded.configuration END,
+       configuration = guild_control_modules.configuration,
        runtime_state = excluded.runtime_state,
        sync_status = CASE WHEN guild_control_modules.sync_status = 'pending' THEN 'pending' ELSE 'synced' END,
        sync_error = CASE WHEN guild_control_modules.sync_status = 'pending' THEN guild_control_modules.sync_error ELSE NULL END,
@@ -6204,9 +6207,6 @@ app.post("/api/internal/bot/sync-events/:eventId/complete", async (c) => {
     const currentConfiguration = currentRow ? recordValue(parseJson(currentRow.configuration, {})) : DEFAULT_CONTROL_CONFIGURATIONS[controlModule];
     const currentRuntime = currentRow ? recordValue(parseJson(currentRow.runtime_state, {})) : DEFAULT_CONTROL_RUNTIME[controlModule];
     const result = recordValue(body.result);
-    const configuration = Object.keys(recordValue(result.configuration)).length
-      ? recordValue(result.configuration)
-      : currentConfiguration;
     const runtime = Object.keys(recordValue(result.runtime)).length
       ? recordValue(result.runtime)
       : currentRuntime;
@@ -6215,7 +6215,7 @@ app.post("/api/internal/bot/sync-events/:eventId/complete", async (c) => {
       `UPDATE guild_control_modules
           SET configuration = ?, runtime_state = ?, sync_status = 'synced', sync_error = NULL, updated_at = ?
         WHERE guild_id = ? AND module = ?`
-    ).bind(asJson(configuration), asJson(runtime), nowIso(), row.guild_id, controlModule).run();
+    ).bind(asJson(currentConfiguration), asJson(runtime), nowIso(), row.guild_id, controlModule).run();
   }
 
   const currentMediaKey = row.action === "guild.member_avatar.update"

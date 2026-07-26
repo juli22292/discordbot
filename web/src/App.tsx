@@ -6827,7 +6827,6 @@ function AutorolePage({ guildId }: { guildId: string }) {
       });
       setDraft(response.autorole);
       setStatus("Autorole gespeichert. Der Bot übernimmt die Regeln jetzt.");
-      await settings.reload();
       return true;
     } catch (error) {
       setStatus(error instanceof Error ? error.message : "Autorole konnte nicht gespeichert werden.");
@@ -7082,7 +7081,6 @@ function LevelSystemPage({ guildId }: { guildId: string }) {
       });
       setDraft(response.levelSystem);
       setStatus("Level-System gespeichert. Der Bot übernimmt die Einstellungen jetzt.");
-      await settings.reload();
       return true;
     } catch (error) {
       setStatus(error instanceof Error ? error.message : "Das Level-System konnte nicht gespeichert werden.");
@@ -7333,7 +7331,6 @@ function CountingPage({ guildId }: { guildId: string }) {
       });
       setDraft(response.counting);
       setStatus("Counting wurde gespeichert und wird jetzt mit dem Bot synchronisiert.");
-      await settings.reload();
       return true;
     } catch (error) {
       setStatus(error instanceof Error ? error.message : "Counting konnte nicht gespeichert werden.");
@@ -7368,7 +7365,6 @@ function CountingPage({ guildId }: { guildId: string }) {
       });
       setDraft(response.counting);
       setStatus("Der aktuelle Lauf wird auf 0 zurückgesetzt. Der Rekord bleibt erhalten.");
-      await settings.reload();
     } catch (error) {
       setStatus(error instanceof Error ? error.message : "Der Lauf konnte nicht zurückgesetzt werden.");
     } finally {
@@ -7600,7 +7596,6 @@ function TempVoicePage({ guildId }: { guildId: string }) {
         setStatus("TempVoice wurde gespeichert und zur Bot-Synchronisierung vorgemerkt.");
       }
 
-      await settings.reload();
       return true;
     } catch (error) {
       setStatus(error instanceof Error ? error.message : "TempVoice konnte nicht gespeichert werden.");
@@ -7934,7 +7929,6 @@ function LoggingPage({ guildId }: { guildId: string }) {
       });
       setDraft(response.logging);
       setStatus("Logging gespeichert und zur Bot-Synchronisierung vorgemerkt.");
-      await logging.reload();
       return true;
     } catch (error) {
       setStatus(error instanceof Error ? error.message : "Logging konnte nicht gespeichert werden.");
@@ -8190,7 +8184,6 @@ function WelcomePage({ guildId }: { guildId: string }) {
       });
       setDraft(response.welcome);
       setStatus("Begrüßung gespeichert und zur Bot-Synchronisierung vorgemerkt.");
-      await welcome.reload();
       return true;
     } catch (error) {
       setStatus(error instanceof Error ? error.message : "Speichern fehlgeschlagen.");
@@ -8204,6 +8197,12 @@ function WelcomePage({ guildId }: { guildId: string }) {
     const previousDraft = draft;
     const nextDraft = { ...draft, enabled };
     setDraft(nextDraft);
+
+    if (enabled && !nextDraft.channelId) {
+      setStatus("Wähle jetzt den Begrüßungskanal und speichere anschließend die Einstellungen.");
+      return;
+    }
+
     if (!(await save(nextDraft))) setDraft(previousDraft);
   }
 
@@ -8930,7 +8929,6 @@ function FeatureModulePage({ guildId, definition }: { guildId: string; definitio
       });
       setDraft(response.feature);
       setStatus(`${definition.label} wurde gespeichert. Der Bot übernimmt die Konfiguration jetzt.`);
-      await settings.reload();
       return true;
     } catch (error) {
       setStatus(error instanceof Error ? error.message : `${definition.label} konnte nicht gespeichert werden.`);
@@ -9131,7 +9129,6 @@ function SecurityPage({ guildId }: { guildId: string }) {
       });
       setDraft(response.security);
       setStatus("Security-Einstellungen gespeichert. Der Bot übernimmt sie jetzt.");
-      await settings.reload();
     } catch (error) {
       setStatus(error instanceof Error ? error.message : "Security-Einstellungen konnten nicht gespeichert werden.");
     } finally {
@@ -9232,7 +9229,7 @@ function RaidmodePage({ guildId }: { guildId: string }) {
     setSaving(true); setStatus(null);
     try {
       const response = await api<{ raidmode: RaidSettings }>(`/api/guilds/${guildId}/raidmode`, { method: "PUT", body: JSON.stringify({ profile: draft.profile, panicEnabled: draft.panicEnabled, panicSlowmodeSeconds: draft.panicSlowmodeSeconds }) });
-      setDraft(response.raidmode); setStatus("Raid-Schutz gespeichert. Der Bot setzt das Profil jetzt um."); await settings.reload();
+      setDraft(response.raidmode); setStatus("Raid-Schutz gespeichert. Der Bot setzt das Profil jetzt um.");
     } catch (error) { setStatus(error instanceof Error ? error.message : "Raidmode konnte nicht gespeichert werden."); }
     finally { setSaving(false); }
   }
@@ -9292,7 +9289,7 @@ function TicketSystemPage({ guildId }: { guildId: string }) {
     setSaving(true); setStatus(null);
     try {
       const response = await api<{ tickets: TicketSettings }>(`/api/guilds/${guildId}/tickets`, { method: "PUT", body: JSON.stringify(ticketPayload(nextDraft)) });
-      setDraft(response.tickets); setStatus("Ticketsystem gespeichert. Der Bot übernimmt die Konfiguration jetzt."); await settings.reload(); return true;
+      setDraft(response.tickets); setStatus("Ticketsystem gespeichert. Der Bot übernimmt die Konfiguration jetzt."); return true;
     } catch (error) { setStatus(error instanceof Error ? error.message : "Ticketsystem konnte nicht gespeichert werden."); return false; }
     finally { setSaving(false); }
   }
@@ -9300,6 +9297,12 @@ function TicketSystemPage({ guildId }: { guildId: string }) {
     const previousDraft = draft;
     const nextDraft = { ...draft, enabled };
     setDraft(nextDraft);
+
+    if (enabled && (!nextDraft.ticketCategoryId || nextDraft.deleteRoleIds.length === 0)) {
+      setStatus("Wähle jetzt eine Ticket-Kategorie und mindestens eine Löschrolle. Speichere danach die Einstellungen.");
+      return;
+    }
+
     if (!(await persist(nextDraft))) setDraft(previousDraft);
   }
   async function sendPanel() {
