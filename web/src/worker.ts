@@ -4139,6 +4139,71 @@ app.put("/api/guilds/:guildId/features/:module", async (c) => {
   return json(c, { ok: true, eventId, feature: saved });
 });
 
+app.post("/api/guilds/:guildId/features/applications/panel", async (c) => {
+  const access = await requireGuildManagementAccess(c, c.req.param("guildId"));
+  const data = ticketPanelSchema.parse(await readJsonBody(c));
+  const applications = await ensureGuildControlModule(c.env, access.guild.id, "applications");
+  const fields = recordValue(applications.fields);
+  const applicationChannelId = String(fields.applicationChannelId ?? "").trim();
+  const reviewChannelId = String(fields.reviewChannelId ?? "").trim();
+  const questions = String(fields.questions ?? "")
+    .split(/\r?\n/)
+    .map((question) => question.trim())
+    .filter(Boolean);
+
+  if (!applications.enabled) {
+    throw new HttpError(400, "applications_disabled", "Aktiviere und speichere das Bewerbungsmodul zuerst.");
+  }
+  if (!applicationChannelId || data.channelId !== applicationChannelId) {
+    throw new HttpError(400, "applications_panel_channel_invalid", "Der gewählte Bewerbungskanal stimmt nicht mit der gespeicherten Konfiguration überein.");
+  }
+  if (!reviewChannelId) {
+    throw new HttpError(400, "applications_review_channel_required", "Wähle zuerst einen internen Review-Kanal aus.");
+  }
+  if (questions.length === 0 || questions.length > 5) {
+    throw new HttpError(400, "applications_questions_invalid", "Für das Discord-Formular werden eine bis fünf Fragen benötigt.");
+  }
+
+  const channelRows = await all<{ id: string; can_send: number }>(
+    c.env.DB.prepare(
+      `SELECT discord_channel_id AS id, can_send
+         FROM guild_channels
+        WHERE guild_id = ? AND discord_channel_id IN (?, ?)`
+    ).bind(access.guild.id, applicationChannelId, reviewChannelId)
+  );
+  const channelsById = new Map(channelRows.map((channel) => [channel.id, channel]));
+
+  for (const [channelId, label] of [[applicationChannelId, "Bewerbungskanal"], [reviewChannelId, "Review-Kanal"]] as const) {
+    const channel = channelsById.get(channelId);
+    if (!channel) throw new HttpError(400, "applications_channel_missing", `${label} wurde im Bot-Snapshot nicht gefunden.`);
+    if (!channel.can_send) throw new HttpError(400, "applications_channel_forbidden", `Der Bot kann im ${label} nicht schreiben.`);
+  }
+
+  await setGuildControlPending(c.env, access.guild.id, "applications", {
+    enabled: applications.enabled,
+    fields
+  });
+  const eventId = await enqueueSyncEvent(c.env, access.guild, "applications.panel.send", {
+    discordGuildId: access.guild.discordGuildId,
+    channelId: applicationChannelId,
+    settings: {
+      enabled: applications.enabled,
+      fields
+    }
+  });
+
+  await audit(
+    c.env,
+    access.guild.id,
+    access.session.user.discordUserId,
+    "applications.panel.send",
+    applicationChannelId,
+    null,
+    { eventId }
+  );
+  return json(c, { ok: true, eventId });
+});
+
 app.get("/api/guilds/:guildId/roles", async (c) => {
   const access = await requireGuildManagementAccess(c, c.req.param("guildId"));
   const roles = await all<Record<string, unknown>>(
@@ -4352,6 +4417,42 @@ app.put("/api/guilds/:guildId/welcome", async (c) => {
 
   await audit(c.env, access.guild.id, access.session.user.discordUserId, "welcome.update", "welcome_settings", oldValue, saved);
   return json(c, { ok: true, eventId, welcome: saved });
+});
+
+app.post("/api/guilds/:guildId/welcome/test", async (c) => {
+  const access = await requireGuildManagementAccess(c, c.req.param("guildId"));
+  const welcome = await ensureWelcomeSettings(c.env, access.guild.id);
+
+  if (!welcome.enabled) {
+    throw new HttpError(400, "welcome_disabled", "Aktiviere und speichere die Begrüßung zuerst.");
+  }
+  if (!welcome.channelId) {
+    throw new HttpError(400, "welcome_channel_required", "Wähle zuerst einen Begrüßungskanal aus.");
+  }
+
+  const channel = await first<{ can_send: number }>(
+    c.env.DB.prepare("SELECT can_send FROM guild_channels WHERE guild_id = ? AND discord_channel_id = ?")
+      .bind(access.guild.id, welcome.channelId)
+  );
+  if (!channel) throw new HttpError(400, "welcome_channel_invalid", "Der Begrüßungskanal wurde im Bot-Snapshot nicht gefunden.");
+  if (!channel.can_send) throw new HttpError(400, "welcome_channel_forbidden", "Der Bot kann im Begrüßungskanal nicht schreiben.");
+
+  const eventId = await enqueueSyncEvent(c.env, access.guild, "welcome_settings.test", {
+    discordGuildId: access.guild.discordGuildId,
+    memberId: access.session.user.discordUserId,
+    channelId: welcome.channelId
+  });
+
+  await audit(
+    c.env,
+    access.guild.id,
+    access.session.user.discordUserId,
+    "welcome.test",
+    welcome.channelId,
+    null,
+    { eventId }
+  );
+  return json(c, { ok: true, eventId });
 });
 
 app.post("/api/guilds/:guildId/welcome/image", async (c) => {
@@ -6188,6 +6289,7 @@ app.post("/api/internal/bot/sync-events/:eventId/complete", async (c) => {
     "raidmode.settings.upsert": "raidmode",
     "ticket.settings.upsert": "tickets",
     "ticket.panel.send": "tickets",
+    "applications.panel.send": "applications",
     "backup.action": "backups"
   };
   const featureModule = row.action === "feature.settings.upsert"
@@ -6323,6 +6425,7 @@ app.post("/api/internal/bot/sync-events/:eventId/fail", async (c) => {
     "raidmode.settings.upsert": "raidmode",
     "ticket.settings.upsert": "tickets",
     "ticket.panel.send": "tickets",
+    "applications.panel.send": "applications",
     "backup.action": "backups"
   };
   const failedPayload = parseJson<Record<string, unknown>>(row.payload, {});

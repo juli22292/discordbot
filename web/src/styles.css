@@ -8682,6 +8682,42 @@ textarea {
   background: rgba(47, 191, 122, 0.07);
 }
 
+.application-panel-publish {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  padding: 18px 2px;
+  border-top: 1px solid var(--border-soft);
+  border-bottom: 1px solid var(--border-soft);
+}
+
+.application-panel-publish > div {
+  min-width: 0;
+}
+
+.application-panel-publish h3,
+.application-panel-publish p {
+  margin: 0;
+}
+
+.application-panel-publish h3 {
+  margin-top: 5px;
+  color: var(--text);
+  font-size: 18px;
+}
+
+.application-panel-publish > div > p:last-child {
+  max-width: 720px;
+  margin-top: 5px;
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+.application-panel-publish .secondary-action {
+  flex: 0 0 auto;
+}
+
 .feature-control .control-savebar span {
   color: var(--muted);
   font-size: 13px;
@@ -8711,6 +8747,7 @@ textarea {
 
   .control-hero,
   .control-savebar,
+  .application-panel-publish,
   .backup-note {
     align-items: flex-start;
     flex-direction: column;

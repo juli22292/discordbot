@@ -1156,7 +1156,7 @@ const FEATURE_DEFINITIONS: FeatureDefinition[] = [
       { key: "appealChannelId", label: "Entbannungsanträge", description: "Interner Kanal für Appeals.", type: "channel" },
       { key: "reviewerRoleIds", label: "Bearbeiterrollen", description: "Teamrollen, die Einreichungen verwalten dürfen.", type: "roles", wide: true },
       { key: "title", label: "Formulartitel", description: "Titel für das Bewerbungsformular.", type: "text", placeholder: "Team-Bewerbung" },
-      { key: "questions", label: "Fragen", description: "Eine Frage pro Zeile. Die Reihenfolge wird übernommen.", type: "textarea", placeholder: "Wie alt bist du?\nWarum möchtest du ins Team?", wide: true }
+      { key: "questions", label: "Fragen", description: "Eine bis fünf Fragen, jeweils eine pro Zeile. Die Reihenfolge wird übernommen.", type: "textarea", placeholder: "Wie alt bist du?\nWarum möchtest du ins Team?", wide: true }
     ]
   },
   {
@@ -8112,6 +8112,7 @@ function WelcomePage({ guildId }: { guildId: string }) {
   const [status, setStatus] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [testing, setTesting] = useState(false);
 
   useEffect(() => {
     if (welcome.data?.welcome) setDraft(welcome.data.welcome);
@@ -8178,16 +8179,16 @@ function WelcomePage({ guildId }: { guildId: string }) {
     setSaving(true);
     setStatus(null);
     try {
-      const response = await api<{ welcome: WelcomeSettings }>(`/api/guilds/${guildId}/welcome`, {
+      const response = await api<{ eventId?: string; welcome: WelcomeSettings }>(`/api/guilds/${guildId}/welcome`, {
         method: "PUT",
         body: JSON.stringify(nextDraft)
       });
       setDraft(response.welcome);
       setStatus("Begrüßung gespeichert und zur Bot-Synchronisierung vorgemerkt.");
-      return true;
+      return response;
     } catch (error) {
       setStatus(error instanceof Error ? error.message : "Speichern fehlgeschlagen.");
-      return false;
+      return null;
     } finally {
       setSaving(false);
     }
@@ -8204,6 +8205,56 @@ function WelcomePage({ guildId }: { guildId: string }) {
     }
 
     if (!(await save(nextDraft))) setDraft(previousDraft);
+  }
+
+  async function sendTest() {
+    if (!draft.channelId) {
+      setStatus("Wähle zuerst einen Begrüßungskanal aus.");
+      return;
+    }
+
+    setTesting(true);
+    setStatus(null);
+    try {
+      const saved = await save(draft);
+      if (!saved) return;
+
+      if (saved.eventId) {
+        setStatus("Einstellungen gespeichert. Der Bot übernimmt jetzt exakt diese Begrüßung.");
+        const saveEvent = await waitForGuildSyncEvent(guildId, saved.eventId);
+        if (saveEvent?.status === "failed") {
+          throw new Error(saveEvent.lastError || "Der Bot konnte die Begrüßung nicht übernehmen.");
+        }
+        if (!saveEvent) {
+          setStatus("Die Begrüßung liegt noch in der Bot-Queue. Bitte versuche den Test gleich erneut.");
+          return;
+        }
+      }
+
+      const response = await api<{ eventId?: string }>(`/api/guilds/${guildId}/welcome/test`, {
+        method: "POST",
+        body: JSON.stringify({})
+      });
+      if (!response.eventId) {
+        setStatus("Demo: Die identische Begrüßung wurde erfolgreich simuliert.");
+        return;
+      }
+
+      setStatus("Der Bot sendet die Begrüßung jetzt als echte Discord-Testnachricht.");
+      const testEvent = await waitForGuildSyncEvent(guildId, response.eventId);
+      if (testEvent?.status === "failed") {
+        throw new Error(testEvent.lastError || "Die Begrüßungsnachricht konnte nicht gesendet werden.");
+      }
+      if (!testEvent) {
+        setStatus("Der Test liegt noch in der Bot-Queue. Sein Status erscheint beim Aktualisieren.");
+        return;
+      }
+      setStatus("Test gesendet. Inhalt, Embed, Bild und Mentions entsprechen der Live-Begrüßung.");
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : "Die Begrüßung konnte nicht getestet werden.");
+    } finally {
+      setTesting(false);
+    }
   }
 
   return (
@@ -8397,9 +8448,13 @@ function WelcomePage({ guildId }: { guildId: string }) {
             </section>
 
             <div className="form-actions">
-              <button className="primary-action inline" onClick={() => void save()} disabled={saving}>
+              <button className="primary-action inline" onClick={() => void save()} disabled={saving || testing}>
                 {saving ? <Loader2 className="spin" size={16} /> : <Save size={16} />}
                 Begrüßung speichern
+              </button>
+              <button className="secondary-action inline" onClick={() => void sendTest()} disabled={saving || testing || !draft.channelId}>
+                {testing ? <Loader2 className="spin" size={16} /> : <Send size={16} />}
+                {testing ? "Test wird gesendet" : "Begrüßung testen"}
               </button>
             </div>
           </div>
@@ -8876,6 +8931,7 @@ function FeatureModulePage({ guildId, definition }: { guildId: string; definitio
     updatedAt: null
   });
   const [saving, setSaving] = useState(false);
+  const [sendingPanel, setSendingPanel] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
 
   useEffect(() => {
@@ -8923,16 +8979,16 @@ function FeatureModulePage({ guildId, definition }: { guildId: string; definitio
     setSaving(true);
     setStatus(null);
     try {
-      const response = await api<{ feature: FeatureSettings }>(`/api/guilds/${guildId}/features/${definition.module}`, {
+      const response = await api<{ eventId?: string; feature: FeatureSettings }>(`/api/guilds/${guildId}/features/${definition.module}`, {
         method: "PUT",
         body: JSON.stringify({ enabled: nextDraft.enabled, fields: nextDraft.fields })
       });
       setDraft(response.feature);
       setStatus(`${definition.label} wurde gespeichert. Der Bot übernimmt die Konfiguration jetzt.`);
-      return true;
+      return response;
     } catch (error) {
       setStatus(error instanceof Error ? error.message : `${definition.label} konnte nicht gespeichert werden.`);
-      return false;
+      return null;
     } finally {
       setSaving(false);
     }
@@ -8943,6 +8999,75 @@ function FeatureModulePage({ guildId, definition }: { guildId: string; definitio
     const nextDraft = { ...draft, enabled };
     setDraft(nextDraft);
     if (!(await save(nextDraft))) setDraft(previousDraft);
+  }
+
+  async function sendApplicationPanel() {
+    const applicationChannelId = typeof draft.fields.applicationChannelId === "string"
+      ? draft.fields.applicationChannelId
+      : "";
+    const reviewChannelId = typeof draft.fields.reviewChannelId === "string"
+      ? draft.fields.reviewChannelId
+      : "";
+    const questions = typeof draft.fields.questions === "string"
+      ? draft.fields.questions.split(/\r?\n/).map((question) => question.trim()).filter(Boolean)
+      : [];
+
+    if (!applicationChannelId) {
+      setStatus("Wähle zuerst einen Bewerbungskanal aus.");
+      return;
+    }
+    if (!reviewChannelId) {
+      setStatus("Wähle zuerst einen internen Review-Kanal aus.");
+      return;
+    }
+    if (questions.length === 0 || questions.length > 5) {
+      setStatus("Das Discord-Formular benötigt eine bis fünf Fragen, jeweils eine pro Zeile.");
+      return;
+    }
+
+    setSendingPanel(true);
+    setStatus(null);
+    try {
+      const saved = await save(draft);
+      if (!saved) return;
+
+      if (saved.eventId) {
+        setStatus("Bewerbungen gespeichert. Der Bot übernimmt jetzt die Formular-Konfiguration.");
+        const saveEvent = await waitForGuildSyncEvent(guildId, saved.eventId);
+        if (saveEvent?.status === "failed") {
+          throw new Error(saveEvent.lastError || "Der Bot konnte die Bewerbungs-Konfiguration nicht übernehmen.");
+        }
+        if (!saveEvent) {
+          setStatus("Die Konfiguration liegt noch in der Bot-Queue. Bitte sende das Panel gleich erneut.");
+          return;
+        }
+      }
+
+      const response = await api<{ eventId?: string }>(`/api/guilds/${guildId}/features/applications/panel`, {
+        method: "POST",
+        body: JSON.stringify({ channelId: applicationChannelId })
+      });
+      if (!response.eventId) {
+        setStatus("Demo: Das Bewerbungspanel wurde erfolgreich simuliert.");
+        return;
+      }
+
+      setStatus("Der Bot veröffentlicht jetzt das Bewerbungspanel in Discord.");
+      const panelEvent = await waitForGuildSyncEvent(guildId, response.eventId);
+      await settings.reload();
+      if (panelEvent?.status === "failed") {
+        throw new Error(panelEvent.lastError || "Das Bewerbungspanel konnte nicht gesendet werden.");
+      }
+      if (!panelEvent) {
+        setStatus("Das Bewerbungspanel liegt noch in der Bot-Queue. Der Status erscheint beim Aktualisieren.");
+        return;
+      }
+      setStatus("Bewerbungspanel erfolgreich gesendet. Der Start-Button und das Formular sind einsatzbereit.");
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : "Das Bewerbungspanel konnte nicht gesendet werden.");
+    } finally {
+      setSendingPanel(false);
+    }
   }
 
   function renderField(field: FeatureFieldDefinition) {
@@ -9061,12 +9186,30 @@ function FeatureModulePage({ guildId, definition }: { guildId: string; definitio
           <div className="feature-field-grid">
             {definition.fields.map(renderField)}
           </div>
+          {definition.module === "applications" && (
+            <section className="application-panel-publish">
+              <div>
+                <p className="eyebrow"><Send size={15} /> Discord-Panel</p>
+                <h3>Bewerbungspanel veröffentlichen</h3>
+                <p>Der Bot sendet einen dauerhaften Start-Button in den Bewerbungskanal. Antworten landen gesammelt im internen Review-Kanal.</p>
+              </div>
+              <button
+                className="secondary-action inline"
+                type="button"
+                onClick={() => void sendApplicationPanel()}
+                disabled={saving || sendingPanel}
+              >
+                {sendingPanel ? <Loader2 className="spin" size={16} /> : <Rocket size={16} />}
+                {sendingPanel ? "Panel wird gesendet" : "Bewerbungspanel senden"}
+              </button>
+            </section>
+          )}
           <footer className="control-savebar">
             <div>
               <strong>{definition.label} speichern</strong>
               <span>Kanal- und Rollenwerte werden vor der Übernahme serverseitig geprüft.</span>
             </div>
-            <button className="primary-action inline" type="button" onClick={() => void save()} disabled={saving}>
+            <button className="primary-action inline" type="button" onClick={() => void save()} disabled={saving || sendingPanel}>
               {saving ? <Loader2 className="spin" size={16} /> : <Save size={16} />}
               {saving ? "Wird gespeichert" : "Änderungen speichern"}
             </button>
