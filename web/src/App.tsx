@@ -2767,10 +2767,13 @@ function PublicAiPage({
               {sending && (
                 <article className="public-ai-message assistant is-thinking">
                   <span className="public-ai-message-author"><Sparkles size={16} /> ModmailBot KI</span>
-                  <div className="public-ai-thinking" aria-label="Antwort wird erstellt">
-                    <span />
-                    <span />
-                    <span />
+                  <div className="public-ai-thinking" role="status" aria-label="ModmailBot KI denkt nach">
+                    <span className="public-ai-thinking-label">Denke nach...</span>
+                    <span className="public-ai-thinking-dots" aria-hidden="true">
+                      <i />
+                      <i />
+                      <i />
+                    </span>
                   </div>
                 </article>
               )}

@@ -9562,10 +9562,127 @@ textarea {
 }
 
 .public-ai-thinking {
+  position: relative;
+  width: fit-content;
   display: flex;
   align-items: center;
+  gap: 16px;
+  min-height: 34px;
+  margin-left: 8px;
+  padding: 4px 10px 5px;
+  border-left: 2px solid color-mix(in srgb, var(--green) 55%, transparent);
+  color: var(--muted);
+  overflow: hidden;
+}
+
+.public-ai-thinking::after {
+  content: "";
+  position: absolute;
+  right: 8px;
+  bottom: 1px;
+  width: 42px;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--green), transparent);
+  opacity: 0.5;
+  transform: translateX(-54px);
+  animation: public-ai-thinking-sweep 1.9s ease-in-out infinite;
+}
+
+.public-ai-message.is-thinking .public-ai-message-author svg {
+  transform-origin: center;
+  animation: public-ai-thinking-spark 1.8s ease-in-out infinite;
+}
+
+.public-ai-thinking-label {
+  font-size: 13px;
+  font-weight: 650;
+  letter-spacing: 0;
+  white-space: nowrap;
+  animation: public-ai-thinking-label 1.8s ease-in-out infinite;
+}
+
+.public-ai-thinking-dots {
+  display: inline-flex;
+  align-items: center;
   gap: 6px;
-  min-height: 30px;
+  margin-left: 3px;
+}
+
+.public-ai-thinking-dots i {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--green);
+  box-shadow: 0 0 0 0 color-mix(in srgb, var(--green) 35%, transparent);
+  animation: public-ai-thinking-dot 1.15s ease-in-out infinite;
+}
+
+.public-ai-thinking-dots i:nth-child(2) {
+  animation-delay: 140ms;
+}
+
+.public-ai-thinking-dots i:nth-child(3) {
+  animation-delay: 280ms;
+}
+
+@keyframes public-ai-thinking-dot {
+  0%,
+  60%,
+  100% {
+    opacity: 0.32;
+    transform: translateY(0) scale(0.82);
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--green) 35%, transparent);
+  }
+
+  30% {
+    opacity: 1;
+    transform: translateY(-4px) scale(1);
+    box-shadow: 0 0 0 4px color-mix(in srgb, var(--green) 9%, transparent);
+  }
+}
+
+@keyframes public-ai-thinking-label {
+  0%,
+  100% {
+    color: var(--muted);
+    opacity: 0.72;
+  }
+
+  50% {
+    color: var(--text);
+    opacity: 1;
+  }
+}
+
+@keyframes public-ai-thinking-spark {
+  0%,
+  100% {
+    opacity: 0.7;
+    transform: rotate(0deg) scale(0.92);
+  }
+
+  50% {
+    opacity: 1;
+    transform: rotate(12deg) scale(1.12);
+  }
+}
+
+@keyframes public-ai-thinking-sweep {
+  0%,
+  20% {
+    opacity: 0;
+    transform: translateX(-54px);
+  }
+
+  50% {
+    opacity: 0.55;
+  }
+
+  80%,
+  100% {
+    opacity: 0;
+    transform: translateX(14px);
+  }
 }
 
 .public-ai-access-page {
@@ -9592,22 +9709,6 @@ textarea {
   margin: 0 0 6px;
   color: var(--muted);
   line-height: 1.6;
-}
-
-.public-ai-thinking span {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: var(--green);
-  animation: ai-thinking 1.05s ease-in-out infinite;
-}
-
-.public-ai-thinking span:nth-child(2) {
-  animation-delay: 120ms;
-}
-
-.public-ai-thinking span:nth-child(3) {
-  animation-delay: 240ms;
 }
 
 .public-ai-composer {
@@ -9758,7 +9859,10 @@ textarea {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .public-ai-thinking span {
+  .public-ai-thinking::after,
+  .public-ai-thinking-label,
+  .public-ai-thinking-dots i,
+  .public-ai-message.is-thinking .public-ai-message-author svg {
     animation: none;
   }
 }
