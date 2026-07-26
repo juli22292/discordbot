@@ -9257,18 +9257,25 @@ function FeatureModulePage({ guildId, definition }: { guildId: string; definitio
       {!loading && draft.enabled && (
         <>
           {definition.tabs && definition.tabs.length > 1 && (
-            <nav className="feature-section-tabs" aria-label={`${definition.label} Bereiche`}>
+            <nav className="feature-section-tabs" role="tablist" aria-label={`${definition.label} Bereiche`}>
               {definition.tabs.map((tab) => (
-                <button
-                  type="button"
-                  className={activeTab?.key === tab.key ? "active" : ""}
-                  aria-current={activeTab?.key === tab.key ? "page" : undefined}
+                <div
+                  className={`feature-section-tab ${activeTab?.key === tab.key ? "active" : ""}`}
+                  role="tab"
+                  aria-selected={activeTab?.key === tab.key}
+                  tabIndex={activeTab?.key === tab.key ? 0 : -1}
                   onClick={() => setActiveTabKey(tab.key)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter" || event.key === " ") {
+                      event.preventDefault();
+                      setActiveTabKey(tab.key);
+                    }
+                  }}
                   key={tab.key}
                 >
                   {tab.icon}
                   <span>{tab.label}</span>
-                </button>
+                </div>
               ))}
             </nav>
           )}
