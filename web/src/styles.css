@@ -3058,6 +3058,73 @@ textarea {
   background: rgba(47, 191, 122, 0.07);
 }
 
+.owner-ai-visibility-panel {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 20px;
+  padding: 18px;
+  border-color: rgba(104, 168, 255, 0.22);
+  background:
+    linear-gradient(90deg, rgba(104, 168, 255, 0.075), transparent 58%),
+    var(--panel-bg);
+}
+
+.owner-ai-visibility-copy {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 14px;
+}
+
+.owner-ai-visibility-icon {
+  width: 46px;
+  height: 46px;
+  flex: 0 0 46px;
+  display: grid;
+  place-items: center;
+  border: 1px solid rgba(104, 168, 255, 0.24);
+  border-radius: 8px;
+  color: var(--blue);
+  background: rgba(104, 168, 255, 0.1);
+}
+
+.owner-ai-visibility-copy .eyebrow {
+  margin-bottom: 3px;
+  color: var(--blue);
+}
+
+.owner-ai-visibility-copy h2 {
+  margin: 0;
+  font-size: 20px;
+}
+
+.owner-ai-visibility-copy p:last-child {
+  max-width: 720px;
+  margin: 5px 0 0;
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+.owner-ai-visibility-control {
+  display: grid;
+  grid-template-columns: auto auto;
+  align-items: center;
+  justify-items: end;
+  gap: 7px 10px;
+}
+
+.owner-ai-visibility-control small {
+  grid-column: 1 / -1;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.owner-ai-visibility-panel > .notice {
+  grid-column: 1 / -1;
+  margin: 0;
+}
+
 .owner-overview-grid {
   display: grid;
   grid-template-columns: repeat(6, minmax(128px, 1fr));
@@ -7333,6 +7400,24 @@ textarea {
     justify-items: start;
   }
 
+  .owner-ai-visibility-panel {
+    grid-template-columns: 1fr;
+  }
+
+  .owner-ai-visibility-copy {
+    align-items: flex-start;
+  }
+
+  .owner-ai-visibility-control {
+    width: 100%;
+    grid-template-columns: minmax(0, 1fr) auto;
+    justify-items: start;
+  }
+
+  .owner-ai-visibility-control .module-status-toggle {
+    justify-self: end;
+  }
+
   .owner-current-status em {
     white-space: normal;
   }
@@ -9481,6 +9566,32 @@ textarea {
   align-items: center;
   gap: 6px;
   min-height: 30px;
+}
+
+.public-ai-access-page {
+  display: grid;
+  place-items: center;
+}
+
+.public-ai-access-state {
+  width: min(560px, 100%);
+  display: grid;
+  justify-items: center;
+  gap: 12px;
+  padding: 32px 24px;
+  text-align: center;
+}
+
+.public-ai-access-state h1 {
+  margin: 0;
+  font-size: 26px;
+}
+
+.public-ai-access-state p {
+  max-width: 500px;
+  margin: 0 0 6px;
+  color: var(--muted);
+  line-height: 1.6;
 }
 
 .public-ai-thinking span {

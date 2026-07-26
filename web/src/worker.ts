@@ -6,6 +6,13 @@ import {
   parseAssistantModelResponse
 } from "./server/assistant";
 import {
+  AI_VISIBILITY_SETTING_KEY,
+  aiVisibilitySettingsSchema,
+  canAccessPublicAi,
+  parseStoredAiVisibility,
+  serializeAiVisibility
+} from "./server/ai-visibility";
+import {
   clearCookieHeader,
   cookieHeader,
   OAUTH_STATE_COOKIE,
@@ -726,6 +733,66 @@ async function registerPublicGuildClick(c: HonoContext, discordGuildId: string):
   );
   if (!row) throw new HttpError(500, "guild_click_missing", "Der Klick konnte nicht gelesen werden.");
   return normalizePublicGuildCounter(row, day);
+}
+
+let appSettingsStorageReady: Promise<void> | null = null;
+
+async function ensureAppSettingsStorage(env: Env): Promise<void> {
+  if (!appSettingsStorageReady) {
+    appSettingsStorageReady = requireDb(env).prepare(
+      `CREATE TABLE IF NOT EXISTS app_settings (
+         setting_key TEXT PRIMARY KEY,
+         setting_value TEXT NOT NULL,
+         updated_by_discord_user_id TEXT,
+         updated_at TEXT NOT NULL
+       )`
+    ).run().then(() => undefined).catch((error) => {
+      appSettingsStorageReady = null;
+      throw error;
+    });
+  }
+
+  await appSettingsStorageReady;
+}
+
+async function readAiVisibilitySettings(env: Env): Promise<{
+  publicVisible: boolean;
+  updatedAt: string | null;
+}> {
+  await ensureAppSettingsStorage(env);
+  const row = await first<{ setting_value: string; updated_at: string }>(
+    requireDb(env).prepare(
+      "SELECT setting_value, updated_at FROM app_settings WHERE setting_key = ?"
+    ).bind(AI_VISIBILITY_SETTING_KEY)
+  );
+
+  return {
+    publicVisible: parseStoredAiVisibility(row?.setting_value),
+    updatedAt: row?.updated_at ?? null
+  };
+}
+
+async function resolvePublicAiAccess(c: HonoContext): Promise<{
+  publicVisible: boolean;
+  ownerAdmin: boolean;
+  allowed: boolean;
+  updatedAt: string | null;
+}> {
+  const settings = await readAiVisibilitySettings(c.env);
+  let session: ActiveSession | null = null;
+
+  try {
+    session = await getSession(c);
+  } catch {
+    session = null;
+  }
+
+  const ownerAdmin = canUseOwnerAdmin(session?.user.discordUserId);
+  return {
+    ...settings,
+    ownerAdmin,
+    allowed: canAccessPublicAi(settings.publicVisible, session?.user.discordUserId)
+  };
 }
 
 async function requestGroqPublicChat(
@@ -3045,7 +3112,19 @@ app.get("/api/public/counting-leaderboard", async (c) => {
   return response;
 });
 
+app.get("/api/public/ai/access", async (c) => {
+  const access = await resolvePublicAiAccess(c);
+  const response = json(c, access);
+  response.headers.set("Cache-Control", "no-store");
+  return response;
+});
+
 app.post("/api/public/ai/chat", async (c) => {
+  const access = await resolvePublicAiAccess(c);
+  if (!access.allowed) {
+    throw new HttpError(403, "public_ai_restricted", "AI+ ist aktuell nur für den Owner verfügbar.");
+  }
+
   const input = publicAiChatSchema.parse(await readJsonBody(c));
   const reply = await requestGroqPublicChat(c.env, input);
   const response = json(c, reply);
@@ -4672,6 +4751,42 @@ app.get("/api/admin/bot", async (c) => {
       attempts: Number(event.attempts ?? 0),
       maxAttempts: Number(event.maxAttempts ?? 0)
     }))
+  });
+});
+
+app.get("/api/admin/ai-visibility", async (c) => {
+  await requireAdminSession(c);
+  return json(c, {
+    settings: await readAiVisibilitySettings(c.env)
+  });
+});
+
+app.put("/api/admin/ai-visibility", async (c) => {
+  const session = await requireAdminSession(c);
+  const data = aiVisibilitySettingsSchema.parse(await readJsonBody(c));
+  const timestamp = nowIso();
+  await ensureAppSettingsStorage(c.env);
+  await requireDb(c.env).prepare(
+    `INSERT INTO app_settings (
+       setting_key, setting_value, updated_by_discord_user_id, updated_at
+     ) VALUES (?, ?, ?, ?)
+     ON CONFLICT(setting_key) DO UPDATE SET
+       setting_value = excluded.setting_value,
+       updated_by_discord_user_id = excluded.updated_by_discord_user_id,
+       updated_at = excluded.updated_at`
+  ).bind(
+    AI_VISIBILITY_SETTING_KEY,
+    serializeAiVisibility(data.publicVisible),
+    session.user.discordUserId,
+    timestamp
+  ).run();
+
+  return json(c, {
+    ok: true,
+    settings: {
+      publicVisible: data.publicVisible,
+      updatedAt: timestamp
+    }
   });
 });
 

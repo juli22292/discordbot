@@ -847,6 +847,20 @@ type PublicAiReply = {
   answer: string;
 };
 
+type PublicAiAccess = {
+  publicVisible: boolean;
+  ownerAdmin: boolean;
+  allowed: boolean;
+  updatedAt: string | null;
+};
+
+type AdminAiVisibility = {
+  settings: {
+    publicVisible: boolean;
+    updatedAt: string | null;
+  };
+};
+
 type ThemeMode = "dark" | "light";
 type ToastTone = "success" | "danger" | "warning" | "info";
 type HomeGuildFilter = "all" | "installed" | "missing" | "favorites";
@@ -1365,6 +1379,7 @@ const ASSISTANT_QUICK_PROMPTS = [
   "Wo finde ich das Ticket-System?"
 ];
 const PUBLIC_AI_STORAGE_KEY = "modmail-manager-public-ai-chat";
+const AI_VISIBILITY_CHANGED_EVENT = "modmail-manager-ai-visibility-changed";
 
 type ToastPayload = {
   tone?: ToastTone;
@@ -2067,7 +2082,15 @@ function ModuleStatusToggle({
 function App() {
   const path = usePath();
   const cleanPath = path.split("?")[0];
+  const aiAccess = useApi<PublicAiAccess>("/api/public/ai/access", []);
   let page: React.ReactNode;
+
+  useEffect(() => {
+    const reloadAccess = () => void aiAccess.reload();
+    window.addEventListener(AI_VISIBILITY_CHANGED_EVENT, reloadAccess);
+    return () => window.removeEventListener(AI_VISIBILITY_CHANGED_EVENT, reloadAccess);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   if (cleanPath === "/login" || cleanPath === "/") page = <LoginPage />;
   else if (cleanPath === "/dokumentation") page = <DocumentationPage />;
@@ -2075,7 +2098,15 @@ function App() {
   else if (cleanPath === "/nutzungsbedingungen") page = <TermsPage />;
   else if (cleanPath === "/counters" || cleanPath === "/discord-clicker") page = <DiscordClickerPage />;
   else if (cleanPath === "/countings-topliste") page = <CountingLeaderboardPage />;
-  else if (cleanPath === "/ai") page = <PublicAiPage />;
+  else if (cleanPath === "/ai") {
+    page = (
+      <PublicAiPage
+        accessAllowed={Boolean(aiAccess.data?.allowed)}
+        accessError={aiAccess.error}
+        accessLoading={aiAccess.loading}
+      />
+    );
+  }
   else if (cleanPath.startsWith("/admin/discordguilds/view/")) page = <AdminGuildViewPage path={cleanPath} />;
   else if (cleanPath === "/admin") page = <AdminPageModern />;
   else if (cleanPath === "/home" || cleanPath === "/panel") page = <HomePage />;
@@ -2091,7 +2122,13 @@ function App() {
   return (
     <>
       {page}
-      {cleanPath !== "/ai" && <AiAssistant path={cleanPath} panelEnabled={showAssistant} />}
+      {cleanPath !== "/ai" && (
+        <AiAssistant
+          path={cleanPath}
+          panelEnabled={showAssistant}
+          aiPlusVisible={Boolean(aiAccess.data?.allowed)}
+        />
+      )}
     </>
   );
 }
@@ -2166,7 +2203,15 @@ function demoAssistantReply(question: string, section: string | null): Assistant
   };
 }
 
-function AiAssistant({ path, panelEnabled = true }: { path: string; panelEnabled?: boolean }) {
+function AiAssistant({
+  path,
+  panelEnabled = true,
+  aiPlusVisible = false
+}: {
+  path: string;
+  panelEnabled?: boolean;
+  aiPlusVisible?: boolean;
+}) {
   const context = useMemo(() => assistantContext(path), [path]);
   const [open, setOpen] = useState(false);
   const [messages, setMessages] = useState<AssistantMessage[]>([ASSISTANT_STARTER_MESSAGE]);
@@ -2395,15 +2440,17 @@ function AiAssistant({ path, panelEnabled = true }: { path: string; panelEnabled
       )}
 
       <div className="ai-assistant-launchers">
-        <button
-          type="button"
-          className="ai-plus-launcher"
-          aria-label="ModmailBot KI öffnen"
-          title="ModmailBot KI öffnen"
-          onClick={() => navigate("/ai")}
-        >
-          AI+
-        </button>
+        {aiPlusVisible && (
+          <button
+            type="button"
+            className="ai-plus-launcher"
+            aria-label="ModmailBot KI öffnen"
+            title="ModmailBot KI öffnen"
+            onClick={() => navigate("/ai")}
+          >
+            AI+
+          </button>
+        )}
         {panelEnabled && (
           <button
             type="button"
@@ -2559,7 +2606,15 @@ function PublicAiContent({ content }: { content: string }) {
   return <div className="public-ai-answer-content">{parts}</div>;
 }
 
-function PublicAiPage() {
+function PublicAiPage({
+  accessAllowed,
+  accessError,
+  accessLoading
+}: {
+  accessAllowed: boolean;
+  accessError: string | null;
+  accessLoading: boolean;
+}) {
   const [messages, setMessages] = useState<PublicAiMessage[]>(readPublicAiMessages);
   const [draft, setDraft] = useState("");
   const [sending, setSending] = useState(false);
@@ -2589,6 +2644,33 @@ function PublicAiPage() {
     textarea.style.height = "auto";
     textarea.style.height = `${Math.min(textarea.scrollHeight, 180)}px`;
   }, [draft]);
+
+  if (accessLoading || !accessAllowed) {
+    return (
+      <div className="app-shell public-ai-shell">
+        <TopNav />
+        <main className="public-ai-page public-ai-access-page">
+          <section className="public-ai-access-state">
+            <span className="public-ai-brand-mark">
+              {accessLoading ? <Loader2 className="spin" size={22} /> : <ShieldCheck size={22} />}
+            </span>
+            <h1>{accessLoading ? "AI+ wird geladen" : "AI+ ist nur für Owner verfügbar"}</h1>
+            <p>
+              {accessLoading
+                ? "Die aktuelle Sichtbarkeit wird geprüft."
+                : accessError || "Der öffentliche Zugriff wurde im Adminpanel deaktiviert."}
+            </p>
+            {!accessLoading && (
+              <button type="button" className="secondary-action inline" onClick={() => navigate("/panel")}>
+                <ArrowLeft size={16} />
+                Zurück zum Panel
+              </button>
+            )}
+          </section>
+        </main>
+      </div>
+    );
+  }
 
   async function sendPublicAiMessage() {
     const content = draft.trim();
@@ -4283,6 +4365,7 @@ function AdminPageModern() {
   const me = useApi<{ user: User }>("/api/me", []);
   const admin = useApi<AdminData>("/api/admin/bot", []);
   const ownerLogs = useApi<OwnerLogData>("/api/admin/bot/logs", []);
+  const aiVisibility = useApi<AdminAiVisibility>("/api/admin/ai-visibility", []);
   const runtime = admin.data?.runtime ?? null;
   const ownerHasData = Boolean(admin.data);
   const ownerInitialLoading = admin.loading && !ownerHasData;
@@ -4310,6 +4393,7 @@ function AdminPageModern() {
   const [eventFilter, setEventFilter] = useState<"all" | "open" | "failed" | "completed">("all");
   const [retryingEventId, setRetryingEventId] = useState<string | null>(null);
   const [autoRefresh, setAutoRefresh] = useState(true);
+  const [savingAiVisibility, setSavingAiVisibility] = useState(false);
 
   useEffect(() => {
     if (!runtime) return;
@@ -4547,6 +4631,33 @@ function AdminPageModern() {
     }
   }
 
+  async function saveAiVisibility(publicVisible: boolean) {
+    setSavingAiVisibility(true);
+    try {
+      await api<AdminAiVisibility>("/api/admin/ai-visibility", {
+        method: "PUT",
+        body: JSON.stringify({ publicVisible })
+      });
+      await aiVisibility.reload();
+      window.dispatchEvent(new Event(AI_VISIBILITY_CHANGED_EVENT));
+      notify({
+        tone: "success",
+        title: publicVisible ? "AI+ ist öffentlich" : "AI+ ist nur für Owner",
+        text: publicVisible
+          ? "Der AI+-Button und die KI-Seite sind jetzt für alle sichtbar."
+          : "Nur freigeschaltete Owner sehen und verwenden AI+."
+      });
+    } catch (error) {
+      notify({
+        tone: "danger",
+        title: "Sichtbarkeit nicht gespeichert",
+        text: error instanceof Error ? error.message : "Die AI+-Sichtbarkeit konnte nicht geändert werden."
+      });
+    } finally {
+      setSavingAiVisibility(false);
+    }
+  }
+
   return (
     <div className="app-shell">
       <TopNav user={me.data?.user} />
@@ -4577,6 +4688,41 @@ function AdminPageModern() {
               <small>Admin-Routen und Owner-API sind per Discord-ID gesperrt. Angemeldet als {me.data.user.displayName || me.data.user.username}{me.data.user.discordUserId ? ` · ${me.data.user.discordUserId}` : ""}.</small>
             </div>
             <em>ID-Lock</em>
+          </section>
+        )}
+
+        {me.data?.user?.ownerAdmin && (
+          <section className="panel owner-ai-visibility-panel">
+            <div className="owner-ai-visibility-copy">
+              <span className="owner-ai-visibility-icon"><Sparkles size={20} /></span>
+              <div>
+                <p className="eyebrow">Website-Zugriff</p>
+                <h2>AI+ Sichtbarkeit</h2>
+                <p>
+                  Lege fest, ob jeder Besucher AI+ sehen und verwenden darf oder ob der Zugriff wie beim Adminpanel nur für Owner erscheint.
+                </p>
+              </div>
+            </div>
+            <div className="owner-ai-visibility-control">
+              <span className={`pill ${aiVisibility.data?.settings.publicVisible === false ? "warn" : "ok"}`}>
+                PUBLIC: {aiVisibility.data?.settings.publicVisible === false ? "FALSE" : "TRUE"}
+              </span>
+              <ModuleStatusToggle
+                checked={aiVisibility.data?.settings.publicVisible ?? true}
+                disabled={aiVisibility.loading || savingAiVisibility}
+                activeLabel="Für alle"
+                inactiveLabel="Nur Owner"
+                onChange={(value) => void saveAiVisibility(value)}
+              />
+              <small>
+                {savingAiVisibility
+                  ? "Wird gespeichert..."
+                  : aiVisibility.data?.settings.updatedAt
+                    ? `Zuletzt geändert: ${formatDateTime(aiVisibility.data.settings.updatedAt)}`
+                    : "Standard: für alle sichtbar"}
+              </small>
+            </div>
+            {aiVisibility.error && <Notice tone="danger" text={aiVisibility.error} />}
           </section>
         )}
 
