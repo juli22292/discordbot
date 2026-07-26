@@ -213,6 +213,15 @@ type FeatureFieldDefinition = {
   wide?: boolean;
 };
 
+type FeatureTabDefinition = {
+  key: string;
+  label: string;
+  description: string;
+  icon: React.ReactNode;
+  fieldKeys: string[];
+  panel?: "applications";
+};
+
 type FeatureDefinition = {
   module: FeatureModule;
   section: string;
@@ -221,6 +230,7 @@ type FeatureDefinition = {
   description: string;
   icon: React.ReactNode;
   fields: FeatureFieldDefinition[];
+  tabs?: FeatureTabDefinition[];
 };
 
 type FeatureSettings = {
@@ -1149,6 +1159,44 @@ const FEATURE_DEFINITIONS: FeatureDefinition[] = [
     kicker: "Application Center",
     description: "Bewerbungen, Reports und Entbannungsanträge mit Teamrechten organisieren.",
     icon: <ClipboardList size={18} />,
+    tabs: [
+      {
+        key: "general",
+        label: "Allgemeines",
+        description: "Name und grundlegende Darstellung des Bewerbungsformulars.",
+        icon: <Settings size={16} />,
+        fieldKeys: ["title"]
+      },
+      {
+        key: "channels",
+        label: "Kanäle",
+        description: "Öffentliche Einstiege und interne Ziele sauber voneinander trennen.",
+        icon: <Hash size={16} />,
+        fieldKeys: ["applicationChannelId", "reviewChannelId", "reportChannelId", "appealChannelId"]
+      },
+      {
+        key: "form",
+        label: "Formular",
+        description: "Die Fragen festlegen, die Bewerber im Discord-Dialog beantworten.",
+        icon: <ClipboardList size={16} />,
+        fieldKeys: ["questions"]
+      },
+      {
+        key: "team",
+        label: "Team",
+        description: "Rollen bestimmen, die neue Einreichungen erhalten und bearbeiten.",
+        icon: <UsersRound size={16} />,
+        fieldKeys: ["reviewerRoleIds"]
+      },
+      {
+        key: "panel",
+        label: "Discord-Panel",
+        description: "Das fertige Bewerbungspanel prüfen und in Discord veröffentlichen.",
+        icon: <Send size={16} />,
+        fieldKeys: [],
+        panel: "applications"
+      }
+    ],
     fields: [
       { key: "applicationChannelId", label: "Bewerbungskanal", description: "Öffentlicher Einstieg für Bewerbungen.", type: "channel" },
       { key: "reviewChannelId", label: "Review-Kanal", description: "Interner Kanal für eingegangene Bewerbungen.", type: "channel" },
@@ -8933,6 +8981,7 @@ function FeatureModulePage({ guildId, definition }: { guildId: string; definitio
   const [saving, setSaving] = useState(false);
   const [sendingPanel, setSendingPanel] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
+  const [activeTabKey, setActiveTabKey] = useState(definition.tabs?.[0]?.key ?? "");
 
   useEffect(() => {
     if (settings.data?.feature) {
@@ -8945,6 +8994,10 @@ function FeatureModulePage({ guildId, definition }: { guildId: string; definitio
       });
     }
   }, [settings.data]);
+
+  useEffect(() => {
+    setActiveTabKey(definition.tabs?.[0]?.key ?? "");
+  }, [definition.module, definition.tabs]);
 
   const textChannels = useMemo(
     () => (channels.data?.channels ?? []).filter((channel) => isTextGuildChannel(channel) && channel.canSend !== false),
@@ -8960,6 +9013,26 @@ function FeatureModulePage({ guildId, definition }: { guildId: string; definitio
   );
   const loading = (settings.loading && !settings.data) || (channels.loading && !channels.data) || (roles.loading && !roles.data);
   const loadError = settings.error || channels.error || roles.error;
+  const activeTab = definition.tabs?.find((tab) => tab.key === activeTabKey) ?? definition.tabs?.[0] ?? null;
+  const visibleFields = activeTab
+    ? definition.fields.filter((field) => activeTab.fieldKeys.includes(field.key))
+    : definition.fields;
+  const applicationChannelId = typeof draft.fields.applicationChannelId === "string" ? draft.fields.applicationChannelId : "";
+  const applicationReviewChannelId = typeof draft.fields.reviewChannelId === "string" ? draft.fields.reviewChannelId : "";
+  const applicationQuestionCount = typeof draft.fields.questions === "string"
+    ? draft.fields.questions.split(/\r?\n/).map((question) => question.trim()).filter(Boolean).length
+    : 0;
+  const applicationPanelReady = Boolean(
+    applicationChannelId
+    && applicationReviewChannelId
+    && applicationQuestionCount >= 1
+    && applicationQuestionCount <= 5
+  );
+
+  function channelName(channelId: string) {
+    const channel = textChannels.find((entry) => entry.id === channelId);
+    return channel ? `#${channel.name}` : "Nicht ausgewählt";
+  }
 
   function setField(key: string, value: FeatureValue) {
     setDraft((current) => ({ ...current, fields: { ...current.fields, [key]: value } }));
@@ -9183,25 +9256,75 @@ function FeatureModulePage({ guildId, definition }: { guildId: string; definitio
 
       {!loading && draft.enabled && (
         <>
-          <div className="feature-field-grid">
-            {definition.fields.map(renderField)}
-          </div>
-          {definition.module === "applications" && (
-            <section className="application-panel-publish">
+          {definition.tabs && definition.tabs.length > 1 && (
+            <nav className="feature-section-tabs" aria-label={`${definition.label} Bereiche`}>
+              {definition.tabs.map((tab) => (
+                <button
+                  type="button"
+                  className={activeTab?.key === tab.key ? "active" : ""}
+                  aria-current={activeTab?.key === tab.key ? "page" : undefined}
+                  onClick={() => setActiveTabKey(tab.key)}
+                  key={tab.key}
+                >
+                  {tab.icon}
+                  <span>{tab.label}</span>
+                </button>
+              ))}
+            </nav>
+          )}
+          {activeTab && (
+            <header className="feature-tab-heading">
+              <div className="feature-tab-icon">{activeTab.icon}</div>
               <div>
-                <p className="eyebrow"><Send size={15} /> Discord-Panel</p>
-                <h3>Bewerbungspanel veröffentlichen</h3>
-                <p>Der Bot sendet einen dauerhaften Start-Button in den Bewerbungskanal. Antworten landen gesammelt im internen Review-Kanal.</p>
+                <h3>{activeTab.label}</h3>
+                <p>{activeTab.description}</p>
               </div>
-              <button
-                className="secondary-action inline"
-                type="button"
-                onClick={() => void sendApplicationPanel()}
-                disabled={saving || sendingPanel}
-              >
-                {sendingPanel ? <Loader2 className="spin" size={16} /> : <Rocket size={16} />}
-                {sendingPanel ? "Panel wird gesendet" : "Bewerbungspanel senden"}
-              </button>
+            </header>
+          )}
+          {visibleFields.length > 0 && (
+            <div className="feature-field-grid">
+              {visibleFields.map(renderField)}
+            </div>
+          )}
+          {activeTab?.panel === "applications" && (
+            <section className="application-panel-publish">
+              <header>
+                <div>
+                  <p className="eyebrow"><Send size={15} /> Veröffentlichung</p>
+                  <h3>Bewerbungspanel veröffentlichen</h3>
+                  <p>Der Bot sendet einen dauerhaften Start-Button. Antworten landen gesammelt im internen Review-Kanal.</p>
+                </div>
+                <span className={`application-panel-readiness ${applicationPanelReady ? "ready" : ""}`}>
+                  {applicationPanelReady ? <Check size={15} /> : <AlertTriangle size={15} />}
+                  {applicationPanelReady ? "Bereit" : "Konfiguration fehlt"}
+                </span>
+              </header>
+              <div className="application-panel-checks">
+                <div>
+                  <Hash size={17} />
+                  <span><small>Bewerbungskanal</small><strong>{channelName(applicationChannelId)}</strong></span>
+                </div>
+                <div>
+                  <ShieldCheck size={17} />
+                  <span><small>Review-Kanal</small><strong>{channelName(applicationReviewChannelId)}</strong></span>
+                </div>
+                <div>
+                  <ClipboardList size={17} />
+                  <span><small>Formular</small><strong>{applicationQuestionCount} von 5 Fragen</strong></span>
+                </div>
+              </div>
+              <footer>
+                <p>Beim erneuten Senden wird ein bereits vorhandenes Panel aktualisiert, statt ein Duplikat zu erstellen.</p>
+                <button
+                  className="secondary-action inline"
+                  type="button"
+                  onClick={() => void sendApplicationPanel()}
+                  disabled={saving || sendingPanel || !applicationPanelReady}
+                >
+                  {sendingPanel ? <Loader2 className="spin" size={16} /> : <Rocket size={16} />}
+                  {sendingPanel ? "Panel wird gesendet" : "Bewerbungspanel senden"}
+                </button>
+              </footer>
             </section>
           )}
           <footer className="control-savebar">
