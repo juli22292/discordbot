@@ -2483,9 +2483,12 @@ function AiAssistant({
             <strong>{context.section === "panel" ? "Serverauswahl" : context.section === "admin" ? "Owner-Bereich" : context.section}</strong>
           </div>
 
-          <div className="ai-assistant-messages" ref={messageListRef} aria-live="polite">
-            {messages.map((message) => (
-              <article className={`ai-message ${message.role}`} key={message.id}>
+          <div className="ai-assistant-messages" ref={messageListRef} aria-live="polite" aria-busy={sending}>
+            {messages.map((message, index) => (
+              <article
+                className={`ai-message ${message.role} ${index === messages.length - 1 ? "is-latest" : ""}`}
+                key={message.id}
+              >
                 <span className="ai-message-avatar">
                   {message.role === "assistant" ? <Sparkles size={15} /> : <UserRound size={15} />}
                 </span>
@@ -2513,7 +2516,14 @@ function AiAssistant({
             {sending && (
               <article className="ai-message assistant thinking">
                 <span className="ai-message-avatar"><Sparkles size={15} /></span>
-                <div><span /><span /><span /></div>
+                <div className="ai-compact-thinking" role="status" aria-label="KI-Helfer denkt nach">
+                  <span className="ai-compact-thinking-label">Denke nach</span>
+                  <span className="ai-compact-thinking-dots" aria-hidden="true">
+                    <i />
+                    <i />
+                    <i />
+                  </span>
+                </div>
               </article>
             )}
           </div>
@@ -2763,9 +2773,12 @@ function PublicAiPage({
               <p>Frag nach Wissen, Ideen, Texten, Code oder allem, wobei du gerade Unterstützung brauchst.</p>
             </div>
           ) : (
-            <div className="public-ai-thread" ref={threadRef} aria-live="polite">
-              {messages.map((message) => (
-                <article className={`public-ai-message ${message.role}`} key={message.id}>
+            <div className="public-ai-thread" ref={threadRef} aria-live="polite" aria-busy={sending}>
+              {messages.map((message, index) => (
+                <article
+                  className={`public-ai-message ${message.role} ${index === messages.length - 1 ? "is-latest" : ""}`}
+                  key={message.id}
+                >
                   <span className="public-ai-message-author">
                     {message.role === "assistant" ? <Sparkles size={16} /> : <UserRound size={16} />}
                     {message.role === "assistant" ? "ModmailBot KI" : "Du"}
@@ -2805,7 +2818,8 @@ function PublicAiPage({
           )}
 
           <form
-            className="public-ai-composer"
+            className={`public-ai-composer ${sending ? "is-sending" : ""}`}
+            aria-busy={sending}
             onSubmit={(event) => {
               event.preventDefault();
               void sendPublicAiMessage();

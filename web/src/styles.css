@@ -9072,7 +9072,9 @@ textarea {
   border-radius: 8px;
   background: var(--surface);
   box-shadow: var(--shadow);
-  animation: ai-panel-in 180ms ease-out;
+  transform-origin: right bottom;
+  will-change: opacity, transform;
+  animation: ai-panel-in 320ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 .ai-assistant-header {
@@ -9095,6 +9097,7 @@ textarea {
   border-radius: 8px;
   color: var(--blue);
   background: rgba(104, 168, 255, 0.1);
+  animation: ai-mark-in 440ms cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
 .ai-assistant-header > div {
@@ -9121,6 +9124,7 @@ textarea {
   border-radius: 50%;
   background: var(--green);
   box-shadow: 0 0 0 4px rgba(47, 191, 122, 0.1);
+  animation: ai-status-breathe 2.4s ease-in-out infinite;
 }
 
 .ai-assistant-header button {
@@ -9177,6 +9181,7 @@ textarea {
   overflow-y: auto;
   overscroll-behavior: contain;
   padding: 16px 13px;
+  scroll-behavior: smooth;
   scrollbar-width: thin;
   scrollbar-color: var(--border) transparent;
 }
@@ -9187,6 +9192,15 @@ textarea {
   grid-template-columns: 28px minmax(0, 1fr);
   align-items: start;
   gap: 9px;
+}
+
+.ai-message.is-latest {
+  animation: ai-message-in 360ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.ai-message.user.is-latest {
+  transform-origin: right bottom;
+  animation-name: ai-user-message-in;
 }
 
 .ai-message.user {
@@ -9288,18 +9302,46 @@ textarea {
   color: var(--text);
 }
 
-.ai-message.thinking > div {
+.ai-message.thinking .ai-compact-thinking {
+  position: relative;
   min-height: 38px;
   display: flex;
   align-items: center;
-  gap: 5px;
-  padding: 0 12px;
+  gap: 12px;
+  padding: 0 13px;
   border: 1px solid var(--border-soft);
   border-radius: 8px;
   background: var(--surface);
+  overflow: hidden;
 }
 
-.ai-message.thinking > div > span {
+.ai-message.thinking .ai-compact-thinking::after {
+  content: "";
+  position: absolute;
+  right: 10px;
+  bottom: 0;
+  left: 10px;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--blue), transparent);
+  opacity: 0;
+  transform: translateX(-60%);
+  animation: ai-thinking-sweep 1.8s ease-in-out infinite;
+}
+
+.ai-compact-thinking-label {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+  animation: ai-thinking-label 1.8s ease-in-out infinite;
+}
+
+.ai-compact-thinking-dots {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.ai-message.thinking .ai-compact-thinking-dots i {
   width: 6px;
   height: 6px;
   border-radius: 50%;
@@ -9307,11 +9349,11 @@ textarea {
   animation: ai-thinking 1.05s ease-in-out infinite;
 }
 
-.ai-message.thinking > div > span:nth-child(2) {
+.ai-message.thinking .ai-compact-thinking-dots i:nth-child(2) {
   animation-delay: 120ms;
 }
 
-.ai-message.thinking > div > span:nth-child(3) {
+.ai-message.thinking .ai-compact-thinking-dots i:nth-child(3) {
   animation-delay: 240ms;
 }
 
@@ -9333,6 +9375,15 @@ textarea {
   background: var(--control-bg);
   font-size: 12px;
   text-align: left;
+  animation: ai-prompt-in 340ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.ai-quick-prompts button:nth-child(2) {
+  animation-delay: 45ms;
+}
+
+.ai-quick-prompts button:nth-child(3) {
+  animation-delay: 90ms;
 }
 
 .ai-quick-prompts button:hover {
@@ -9394,6 +9445,7 @@ textarea {
   color: var(--text);
   background: var(--field-bg);
   line-height: 1.4;
+  transition: border-color 160ms ease, box-shadow 160ms ease, background 160ms ease;
 }
 
 .ai-assistant-composer textarea:focus {
@@ -9412,10 +9464,16 @@ textarea {
   border-radius: 7px;
   color: #ffffff;
   background: var(--blue);
+  transition: transform 160ms cubic-bezier(0.22, 1, 0.36, 1), filter 160ms ease, opacity 160ms ease;
 }
 
 .ai-assistant-composer > div > button:hover:not(:disabled) {
   filter: brightness(1.08);
+  transform: translateY(-1px);
+}
+
+.ai-assistant-composer > div > button:active:not(:disabled) {
+  transform: translateY(0) scale(0.94);
 }
 
 .ai-assistant-composer > div > button:disabled {
@@ -9457,13 +9515,19 @@ textarea {
   color: #ffffff;
   background: #246bdb;
   box-shadow: 0 16px 36px rgba(7, 19, 41, 0.34);
-  transition: transform 160ms ease, border-color 160ms ease, background 160ms ease;
+  transition: transform 220ms cubic-bezier(0.22, 1, 0.36, 1), border-color 160ms ease, background 160ms ease, box-shadow 220ms ease;
 }
 
 .ai-assistant-launcher:hover,
 .ai-plus-launcher:hover {
   border-color: rgba(255, 255, 255, 0.58);
   transform: translateY(-2px);
+  box-shadow: 0 20px 42px rgba(7, 19, 41, 0.4);
+}
+
+.ai-assistant-launcher:active,
+.ai-plus-launcher:active {
+  transform: translateY(0) scale(0.94);
 }
 
 .ai-assistant-launcher:hover {
@@ -9502,16 +9566,84 @@ textarea {
   background: var(--green);
   font-size: 9px;
   font-weight: 600;
+  animation: ai-badge-in 420ms cubic-bezier(0.22, 1, 0.36, 1) 120ms both;
 }
 
 @keyframes ai-panel-in {
   from {
     opacity: 0;
-    transform: translateY(10px);
+    transform: translateY(18px) scale(0.965);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes ai-mark-in {
+  from {
+    opacity: 0;
+    transform: scale(0.72) rotate(-12deg);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) rotate(0);
+  }
+}
+
+@keyframes ai-status-breathe {
+  0%,
+  100% {
+    box-shadow: 0 0 0 3px rgba(47, 191, 122, 0.08);
+  }
+  50% {
+    box-shadow: 0 0 0 5px rgba(47, 191, 122, 0.14);
+  }
+}
+
+@keyframes ai-message-in {
+  from {
+    opacity: 0;
+    transform: translateY(9px);
+    filter: blur(2px);
   }
   to {
     opacity: 1;
     transform: translateY(0);
+    filter: blur(0);
+  }
+}
+
+@keyframes ai-user-message-in {
+  from {
+    opacity: 0;
+    transform: translateY(7px) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes ai-prompt-in {
+  from {
+    opacity: 0;
+    transform: translateY(7px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes ai-badge-in {
+  from {
+    opacity: 0;
+    transform: scale(0.7);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
   }
 }
 
@@ -9525,6 +9657,34 @@ textarea {
   30% {
     opacity: 1;
     transform: translateY(-3px);
+  }
+}
+
+@keyframes ai-thinking-label {
+  0%,
+  100% {
+    color: var(--muted);
+    opacity: 0.72;
+  }
+  50% {
+    color: var(--text);
+    opacity: 1;
+  }
+}
+
+@keyframes ai-thinking-sweep {
+  0%,
+  18% {
+    opacity: 0;
+    transform: translateX(-60%);
+  }
+  48% {
+    opacity: 0.55;
+  }
+  82%,
+  100% {
+    opacity: 0;
+    transform: translateX(60%);
   }
 }
 
@@ -9564,8 +9724,19 @@ textarea {
 
 @media (prefers-reduced-motion: reduce) {
   .ai-assistant-panel,
-  .ai-message.thinking > div > span {
+  .ai-assistant-mark,
+  .ai-assistant-header small i,
+  .ai-message.is-latest,
+  .ai-message.thinking .ai-compact-thinking::after,
+  .ai-message.thinking .ai-compact-thinking-dots i,
+  .ai-compact-thinking-label,
+  .ai-quick-prompts button,
+  .ai-assistant-launcher > span {
     animation: none;
+  }
+
+  .ai-assistant-messages {
+    scroll-behavior: auto;
   }
 }
 
@@ -9586,6 +9757,7 @@ textarea {
   display: grid;
   align-content: center;
   gap: 28px;
+  transform-origin: center bottom;
 }
 
 .public-ai-intro {
@@ -9593,6 +9765,7 @@ textarea {
   justify-items: center;
   gap: 12px;
   text-align: center;
+  animation: public-ai-intro-in 520ms cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
 .public-ai-brand-mark {
@@ -9607,6 +9780,7 @@ textarea {
   box-shadow: 0 16px 40px rgba(21, 139, 89, 0.2);
   font-size: 15px;
   font-weight: 700;
+  animation: public-ai-brand-in 560ms cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
 .public-ai-intro h1 {
@@ -9636,6 +9810,7 @@ textarea {
   grid-template-rows: minmax(0, 1fr) auto;
   align-content: stretch;
   gap: 18px;
+  animation: public-ai-stage-settle 380ms cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
 .public-ai-thread {
@@ -9646,6 +9821,7 @@ textarea {
   overflow-y: auto;
   overscroll-behavior: contain;
   padding: 18px 14px 36px;
+  scroll-behavior: smooth;
   scrollbar-width: thin;
   scrollbar-color: var(--border) transparent;
 }
@@ -9655,6 +9831,16 @@ textarea {
   display: grid;
   gap: 8px;
   margin-inline: auto;
+}
+
+.public-ai-message.is-latest {
+  animation: public-ai-message-in 460ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.public-ai-message.user.is-latest {
+  transform-origin: right bottom;
+  animation-name: public-ai-user-message-in;
+  animation-duration: 300ms;
 }
 
 .public-ai-message.user {
@@ -9695,6 +9881,10 @@ textarea {
   color: var(--muted-strong);
   font-size: 15px;
   line-height: 1.68;
+}
+
+.public-ai-message.assistant.is-latest .public-ai-answer-content {
+  animation: public-ai-answer-reveal 620ms cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
 .public-ai-answer-loading {
@@ -9967,6 +10157,7 @@ textarea {
 
 .public-ai-code-header button.is-copied {
   color: var(--green);
+  animation: public-ai-copy-confirm 280ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 .public-ai-code pre {
@@ -9989,7 +10180,7 @@ textarea {
   width: fit-content;
   display: flex;
   align-items: center;
-  gap: 16px;
+  gap: 18px;
   min-height: 34px;
   margin-left: 8px;
   padding: 4px 10px 5px;
@@ -10008,7 +10199,7 @@ textarea {
   background: linear-gradient(90deg, transparent, var(--green), transparent);
   opacity: 0.5;
   transform: translateX(-54px);
-  animation: public-ai-thinking-sweep 1.9s ease-in-out infinite;
+  animation: public-ai-thinking-sweep 1.7s ease-in-out infinite;
 }
 
 .public-ai-message.is-thinking .public-ai-message-author svg {
@@ -10021,6 +10212,10 @@ textarea {
   font-weight: 650;
   letter-spacing: 0;
   white-space: nowrap;
+  background: linear-gradient(90deg, var(--muted) 0%, var(--text) 46%, var(--muted) 100%);
+  background-size: 220% 100%;
+  background-clip: text;
+  color: transparent;
   animation: public-ai-thinking-label 1.8s ease-in-out infinite;
 }
 
@@ -10065,15 +10260,16 @@ textarea {
 }
 
 @keyframes public-ai-thinking-label {
-  0%,
-  100% {
-    color: var(--muted);
+  0% {
+    background-position: 100% 50%;
     opacity: 0.72;
   }
-
   50% {
-    color: var(--text);
     opacity: 1;
+  }
+  100% {
+    background-position: -100% 50%;
+    opacity: 0.72;
   }
 }
 
@@ -10108,6 +10304,88 @@ textarea {
   }
 }
 
+@keyframes public-ai-intro-in {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes public-ai-brand-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.78);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes public-ai-stage-settle {
+  from {
+    opacity: 0.82;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes public-ai-message-in {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+    filter: blur(2.5px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+    filter: blur(0);
+  }
+}
+
+@keyframes public-ai-user-message-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes public-ai-answer-reveal {
+  from {
+    opacity: 0;
+    transform: translateY(7px);
+    filter: blur(3px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+    filter: blur(0);
+  }
+}
+
+@keyframes public-ai-copy-confirm {
+  0% {
+    transform: scale(0.94);
+  }
+  60% {
+    transform: scale(1.04);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
 .public-ai-access-page {
   display: grid;
   place-items: center;
@@ -10139,6 +10417,7 @@ textarea {
   display: grid;
   gap: 9px;
   margin-inline: auto;
+  animation: public-ai-composer-in 480ms cubic-bezier(0.22, 1, 0.36, 1) 80ms both;
 }
 
 .public-ai-composer > label {
@@ -10149,6 +10428,7 @@ textarea {
 }
 
 .public-ai-composer > div {
+  position: relative;
   display: grid;
   grid-template-columns: minmax(0, 1fr) 46px;
   align-items: end;
@@ -10159,11 +10439,25 @@ textarea {
   background: var(--surface-soft);
   box-shadow: var(--soft-shadow);
   transition: border-color 150ms ease, box-shadow 150ms ease;
+  overflow: hidden;
 }
 
 .public-ai-composer > div:focus-within {
   border-color: rgba(104, 168, 255, 0.55);
   box-shadow: var(--focus-ring), var(--soft-shadow);
+}
+
+.public-ai-composer.is-sending > div::after {
+  content: "";
+  position: absolute;
+  right: 10px;
+  bottom: 0;
+  left: 10px;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--green), transparent);
+  opacity: 0;
+  transform: translateX(-60%);
+  animation: public-ai-composer-progress 1.7s ease-in-out infinite;
 }
 
 .public-ai-composer textarea {
@@ -10201,9 +10495,40 @@ textarea {
   transform: translateY(-1px);
 }
 
+.public-ai-composer button:active:not(:disabled) {
+  transform: translateY(0) scale(0.92);
+}
+
 .public-ai-composer button:disabled {
   cursor: not-allowed;
   opacity: 0.38;
+}
+
+@keyframes public-ai-composer-in {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes public-ai-composer-progress {
+  0%,
+  18% {
+    opacity: 0;
+    transform: translateX(-60%);
+  }
+  48% {
+    opacity: 0.65;
+  }
+  82%,
+  100% {
+    opacity: 0;
+    transform: translateX(60%);
+  }
 }
 
 .public-ai-error {
@@ -10282,10 +10607,22 @@ textarea {
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .public-ai-intro,
+  .public-ai-brand-mark,
+  .public-ai-page.has-conversation .public-ai-stage,
+  .public-ai-message.is-latest,
+  .public-ai-message.assistant.is-latest .public-ai-answer-content,
+  .public-ai-code-header button.is-copied,
+  .public-ai-composer,
+  .public-ai-composer.is-sending > div::after,
   .public-ai-thinking::after,
   .public-ai-thinking-label,
   .public-ai-thinking-dots i,
   .public-ai-message.is-thinking .public-ai-message-author svg {
     animation: none;
+  }
+
+  .public-ai-thread {
+    scroll-behavior: auto;
   }
 }
