@@ -64,6 +64,11 @@ export interface ActiveSession {
 export interface GuildAccess {
   session: ActiveSession;
   userGuild: DiscordGuild;
+  authorization: {
+    native: boolean;
+    level: "owner" | "administrator" | "moderator" | "supporter" | "viewer";
+    capabilities: string[];
+  };
   guild: {
     id: string;
     discordGuildId: string;

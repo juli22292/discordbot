@@ -9,6 +9,12 @@ import type {
 import type { PublicGuildCounter, PublicGuildCounterSummary } from "./server/guild-counters";
 import { isAiDeleteCommand } from "./ai-chat";
 import {
+  LiveMusicPage,
+  ModerationCenterPage,
+  OperationsAuditLogPage,
+  TeamAccessPage
+} from "./operations-pages";
+import {
   Activity,
   AlertTriangle,
   ArrowLeft,
@@ -38,6 +44,7 @@ import {
   Gamepad2,
   Globe2,
   HardDrive,
+  Headphones,
   Home,
   Hash,
   KeyRound,
@@ -78,6 +85,7 @@ import {
   Trash2,
   Trophy,
   Upload,
+  UserCog,
   UserMinus,
   UserPlus,
   UserRound,
@@ -107,6 +115,11 @@ type GuildDetail = {
   botInstalled: boolean;
   botInstallStatus?: "installed" | "missing" | "unknown";
   permission: string;
+  access?: {
+    native: boolean;
+    level: "owner" | "administrator" | "moderator" | "supporter" | "viewer";
+    capabilities: string[];
+  };
 };
 
 type PublicGuildCounterResponse = {
@@ -1373,7 +1386,7 @@ const FEATURE_DEFINITIONS: FeatureDefinition[] = [
     fields: [
       { key: "requestChannelId", label: "Musikkanal", description: "Bevorzugter Kanal für Musikwünsche und Playermeldungen.", type: "channel" },
       { key: "djRoleIds", label: "DJ-Rollen", description: "Rollen mit erweiterten Playerrechten.", type: "roles", wide: true },
-      { key: "defaultVolume", label: "Standardlautstärke", description: "Startlautstärke für neue Player.", type: "number", min: 1, max: 100, suffix: "%" },
+      { key: "defaultVolume", label: "Standardlautstärke", description: "Startlautstärke für neue Player.", type: "number", min: 1, max: 200, suffix: "%" },
       { key: "maxQueueLength", label: "Queue-Limit", description: "Maximale Anzahl gespeicherter Titel pro Server.", type: "number", min: 1, max: 1000, suffix: "Titel" },
       { key: "autoplay", label: "Autoplay", description: "Nach dem Ende der Queue automatisch passende Titel suchen.", type: "toggle" }
     ]
@@ -1678,7 +1691,12 @@ const DEMO_GUILD: GuildDetail = {
   icon: null,
   botInstalled: true,
   botInstallStatus: "installed",
-  permission: "Demo-Zugriff"
+  permission: "Demo-Zugriff",
+  access: {
+    native: true,
+    level: "owner",
+    capabilities: ["view", "settings", "team", "moderation", "tickets", "music", "history"]
+  }
 };
 
 const DEMO_SETTINGS: SettingsRow = {
@@ -1877,10 +1895,85 @@ function demoApiResponse(path: string, init: RequestInit): { handled: boolean; d
     return {
       handled: true,
       data: {
+        access: DEMO_GUILD.access,
         auditLog: [
-          { id: "demo-audit-1", action: "welcome.updated", target: "#willkommen", actorDiscordUserId: DEMO_USER_ID, createdAt: "2026-07-24T10:30:00.000Z" },
-          { id: "demo-audit-2", action: "autorole.updated", target: "Mitglied", actorDiscordUserId: DEMO_USER_ID, createdAt: "2026-07-24T09:45:00.000Z" }
+          { id: "demo-audit-1", action: "feature.youtube-music.update", target: "youtube-music", actorDiscordUserId: DEMO_USER_ID, oldValue: { enabled: false }, newValue: { enabled: true }, reversible: true, createdAt: "2026-07-24T10:30:00.000Z" },
+          { id: "demo-audit-2", action: "moderation.timeout", target: "300000000000000002", actorDiscordUserId: DEMO_USER_ID, oldValue: null, newValue: { reason: "Spam", durationSeconds: 3600 }, reversible: false, createdAt: "2026-07-24T09:45:00.000Z" }
         ]
+      }
+    };
+  }
+  if (suffix === "/team-access") {
+    return {
+      handled: true,
+      data: {
+        access: DEMO_GUILD.access,
+        entries: [
+          {
+            id: "demo-team-1",
+            principalType: "role",
+            principalId: DEMO_TEAM_ROLE_ID,
+            displayName: "Support Team",
+            accessLevel: "supporter",
+            capabilities: ["view", "tickets", "history"],
+            enabled: true,
+            createdByDiscordUserId: DEMO_USER_ID,
+            createdAt: "2026-07-24T08:00:00.000Z",
+            updatedAt: "2026-07-24T08:00:00.000Z"
+          }
+        ]
+      }
+    };
+  }
+  if (suffix === "/moderation/members") {
+    return {
+      handled: true,
+      data: {
+        members: [
+          { id: "300000000000000002", username: "alex", displayName: "Alex", avatar: null, bot: false, roles: [DEMO_MEMBER_ROLE_ID], joinedAt: "2026-06-14T12:00:00.000Z" },
+          { id: "300000000000000003", username: "sam", displayName: "Sam", avatar: null, bot: false, roles: [], joinedAt: "2026-06-20T12:00:00.000Z" }
+        ]
+      }
+    };
+  }
+  if (suffix === "/moderation/cases") {
+    return {
+      handled: true,
+      data: {
+        cases: [
+          { id: "demo-case-1", caseNumber: 42, targetDiscordUserId: "300000000000000002", targetDisplayName: "Alex", actorDiscordUserId: DEMO_USER_ID, actorDisplayName: "Demo-Modus", action: "timeout", reason: "Wiederholter Spam", durationSeconds: 3600, deleteMessageSeconds: 0, syncEventId: null, status: "completed", error: null, createdAt: "2026-07-24T10:10:00.000Z", completedAt: "2026-07-24T10:10:02.000Z" }
+        ]
+      }
+    };
+  }
+  if (suffix === "/music/live") {
+    return {
+      handled: true,
+      data: {
+        music: {
+          backend: "lavalink",
+          playerSource: "youtube",
+          updatedAt: new Date().toISOString(),
+          player: {
+            guildId: DEMO_GUILD_ID,
+            channelName: "Musik",
+            playing: true,
+            paused: false,
+            volume: 100,
+            trackTitle: "Midnight Drive",
+            trackAuthor: "Modmail Sessions",
+            artworkUrl: null,
+            durationMs: 224000,
+            positionMs: 76000,
+            loopEnabled: false,
+            status: "Wird abgespielt",
+            queueLength: 2,
+            queue: [
+              { query: "Neon Skyline", requesterId: DEMO_USER_ID, volume: 100 },
+              { query: "After Hours", requesterId: "300000000000000002", volume: 100 }
+            ]
+          }
+        }
       }
     };
   }
@@ -6238,7 +6331,7 @@ function Dashboard({ path }: { path: string }) {
   const knownSection = Boolean(
     plannedSection ||
     featureDefinition ||
-    ["overview", "profile", "commands", "custom-commands", "logging", "audit-log", "welcome", "temp-voice", "counting", "level-system", "autorole", "security", "raidmode", "tickets", "backups"].includes(section)
+    ["overview", "profile", "commands", "custom-commands", "logging", "audit-log", "team-access", "music-live", "welcome", "temp-voice", "counting", "level-system", "autorole", "security", "raidmode", "tickets", "backups"].includes(section)
   );
   const me = useApi<{ user: User }>("/api/me", []);
   const detail = useApi<{ guild: GuildDetail; settings: SettingsRow }>(`/api/guilds/${guildId}`, [guildId]);
@@ -6276,6 +6369,7 @@ function Dashboard({ path }: { path: string }) {
             <SidebarGroup label="Start" tone="blue">
               <SideLink icon={<LayoutDashboard size={17} />} label="Übersicht" section="overview" current={section} guildId={guildId} />
               <SideLink icon={<Bot size={17} />} label="Bot-Profil" section="profile" current={section} guildId={guildId} />
+              <SideLink icon={<UserCog size={17} />} label="Team-Zugänge" section="team-access" current={section} guildId={guildId} />
             </SidebarGroup>
             <SidebarGroup label="Community" tone="green">
               <SideLink icon={<Sparkles size={17} />} label="Begrüßung" section="welcome" current={section} guildId={guildId} />
@@ -6304,6 +6398,7 @@ function Dashboard({ path }: { path: string }) {
             <SidebarGroup label="Voice & Unterhaltung" tone="amber">
               <SideLink icon={<Mic2 size={17} />} label="Temp-Voice" section="temp-voice" current={section} guildId={guildId} />
               <SideLink icon={<Youtube size={17} />} label="YouTube Music" section="youtube-music" current={section} guildId={guildId} />
+              <SideLink icon={<Headphones size={17} />} label="Live-Player" section="music-live" current={section} guildId={guildId} />
               <SideLink icon={<Gamepad2 size={17} />} label="Games" section="games" current={section} guildId={guildId} />
               <SideLink icon={<Server size={17} />} label="Minecraft" section="minecraft" current={section} guildId={guildId} />
             </SidebarGroup>
@@ -6363,7 +6458,9 @@ function Dashboard({ path }: { path: string }) {
                 {section === "commands" && <CommandsPage guildId={guildId} />}
                 {section === "custom-commands" && <CustomCommandsPage guildId={guildId} />}
                 {section === "logging" && <LoggingPage guildId={guildId} />}
-                {section === "audit-log" && <AuditLogPage guildId={guildId} />}
+                {section === "audit-log" && <OperationsAuditLogPage guildId={guildId} />}
+                {section === "team-access" && <TeamAccessPage guildId={guildId} />}
+                {section === "music-live" && <LiveMusicPage guildId={guildId} />}
                 {section === "welcome" && <WelcomePage guildId={guildId} />}
                 {section === "temp-voice" && <TempVoicePage guildId={guildId} />}
                 {section === "counting" && <CountingPage guildId={guildId} />}
@@ -6373,7 +6470,8 @@ function Dashboard({ path }: { path: string }) {
                 {section === "raidmode" && <RaidmodePage guildId={guildId} />}
                 {section === "tickets" && <TicketSystemPage guildId={guildId} />}
                 {section === "backups" && <BackupsPage guildId={guildId} />}
-                {featureDefinition && <FeatureModulePage guildId={guildId} definition={featureDefinition} />}
+                {section === "moderation-center" && <ModerationCenterPage guildId={guildId} />}
+                {featureDefinition && section !== "moderation-center" && <FeatureModulePage guildId={guildId} definition={featureDefinition} />}
                 {plannedSection && !featureDefinition && section !== "welcome" && section !== "logging" && section !== "temp-voice" && section !== "counting" && section !== "level-system" && section !== "autorole" && <PlannedPage section={plannedSection} />}
                 {!knownSection && (
                   <section className="control-page">

@@ -237,6 +237,50 @@ export const adminMemberModerationSchema = z.object({
   }
 });
 
+export const guildPanelAccessSchema = z.object({
+  principalType: z.enum(["user", "role"]),
+  principalId: snowflakeSchema,
+  displayName: z.string().trim().max(100).default(""),
+  accessLevel: z.enum(["administrator", "moderator", "supporter", "viewer"]),
+  capabilities: z.array(z.enum(["view", "settings", "team", "moderation", "tickets", "music", "history"])).max(7).optional(),
+  enabled: z.boolean().default(true)
+});
+
+export const guildPanelAccessPatchSchema = guildPanelAccessSchema
+  .pick({ accessLevel: true, capabilities: true, enabled: true })
+  .partial()
+  .refine((value) => Object.keys(value).length > 0, "Es wurde keine Änderung angegeben.");
+
+export const guildModerationActionSchema = z.object({
+  memberId: snowflakeSchema,
+  targetDisplayName: z.string().trim().max(100).default(""),
+  action: z.enum(["timeout", "timeout_remove", "kick", "ban"]),
+  reason: z.string().trim().max(500, "Der Moderationsgrund darf maximal 500 Zeichen lang sein.").default("Kein Grund angegeben"),
+  durationSeconds: z.number().int().min(60).max(2_419_200).optional(),
+  deleteMessageSeconds: z.number().int().min(0).max(604_800).default(0)
+}).superRefine((value, context) => {
+  if (value.action === "timeout" && value.durationSeconds === undefined) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["durationSeconds"],
+      message: "Für einen Timeout muss eine Dauer ausgewählt werden."
+    });
+  }
+});
+
+export const musicPlayerActionSchema = z.object({
+  action: z.enum(["pause", "resume", "toggle_pause", "skip", "stop", "disconnect", "loop", "volume"]),
+  volume: z.number().int().min(1).max(200).optional()
+}).superRefine((value, context) => {
+  if (value.action === "volume" && value.volume === undefined) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["volume"],
+      message: "Für die Lautstärke muss ein Wert angegeben werden."
+    });
+  }
+});
+
 export const loggingSettingsSchema = z.object({
   enabled: z.boolean().default(false),
   channelMappings: z.record(logCategorySchema, nullableSnowflakeSchema).default({}),

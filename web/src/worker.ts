@@ -28,6 +28,13 @@ import {
 } from "./server/guild-counters";
 import { mergeGuildControlState } from "./server/guild-control-state";
 import {
+  defaultCapabilities,
+  hasGuildCapability,
+  normalizeCapabilities,
+  type GuildAccessLevel,
+  type GuildCapability
+} from "./server/guild-access";
+import {
   buildPublicCountingLeaderboard,
   type PublicCountingContribution,
   type PublicCountingGuildInput
@@ -78,12 +85,16 @@ import {
   featureModuleSchema,
   featureSettingsSchema,
   guildModuleSettingsSchema,
+  guildModerationActionSchema,
+  guildPanelAccessPatchSchema,
+  guildPanelAccessSchema,
   inviteCreateSchema,
   levelSettingsSchema,
   logCategories,
   loggingSettingsSchema,
   loggingTestSchema,
   musicSourceSchema,
+  musicPlayerActionSchema,
   nicknameSchema,
   partialCustomCommandSchema,
   pterodactylPowerSchema,
@@ -157,6 +168,20 @@ interface GuildRow {
   name: string;
   icon: string | null;
   bot_joined_at: string | null;
+}
+
+interface GuildPanelAccessRow {
+  id: string;
+  guild_id: string;
+  principal_type: "user" | "role";
+  principal_id: string;
+  display_name: string;
+  access_level: Exclude<GuildAccessLevel, "owner">;
+  capabilities: string;
+  enabled: number;
+  created_by_discord_user_id: string;
+  created_at: string;
+  updated_at: string;
 }
 
 interface PublicGuildCounterRow {
@@ -1257,21 +1282,163 @@ async function getFreshGuilds(c: HonoContext, session: ActiveSession): Promise<D
   }
 }
 
+let operationsStorageReady: Promise<void> | null = null;
+
+async function ensureOperationsStorage(env: Env): Promise<void> {
+  if (!operationsStorageReady) {
+    const db = requireDb(env);
+    operationsStorageReady = (async () => {
+      await db.prepare(
+        `CREATE TABLE IF NOT EXISTS guild_panel_access (
+           id TEXT PRIMARY KEY,
+           guild_id TEXT NOT NULL REFERENCES guilds(id) ON DELETE CASCADE,
+           principal_type TEXT NOT NULL CHECK (principal_type IN ('user', 'role')),
+           principal_id TEXT NOT NULL,
+           display_name TEXT NOT NULL DEFAULT '',
+           access_level TEXT NOT NULL CHECK (access_level IN ('administrator', 'moderator', 'supporter', 'viewer')),
+           capabilities TEXT NOT NULL DEFAULT '[]',
+           enabled INTEGER NOT NULL DEFAULT 1,
+           created_by_discord_user_id TEXT NOT NULL,
+           created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+           updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+           UNIQUE(guild_id, principal_type, principal_id)
+         )`
+      ).run();
+      await db.prepare(
+        "CREATE INDEX IF NOT EXISTS idx_guild_panel_access_principal ON guild_panel_access(principal_type, principal_id, enabled)"
+      ).run();
+      await db.prepare(
+        `CREATE TABLE IF NOT EXISTS moderation_cases (
+           id TEXT PRIMARY KEY,
+           guild_id TEXT NOT NULL REFERENCES guilds(id) ON DELETE CASCADE,
+           case_number INTEGER NOT NULL,
+           target_discord_user_id TEXT NOT NULL,
+           target_display_name TEXT NOT NULL DEFAULT '',
+           actor_discord_user_id TEXT NOT NULL,
+           actor_display_name TEXT NOT NULL DEFAULT '',
+           action TEXT NOT NULL,
+           reason TEXT NOT NULL,
+           duration_seconds INTEGER,
+           delete_message_seconds INTEGER NOT NULL DEFAULT 0,
+           sync_event_id TEXT REFERENCES sync_events(id) ON DELETE SET NULL,
+           status TEXT NOT NULL DEFAULT 'pending',
+           error TEXT,
+           created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+           completed_at TEXT,
+           UNIQUE(guild_id, case_number)
+         )`
+      ).run();
+      await db.prepare(
+        "CREATE INDEX IF NOT EXISTS idx_moderation_cases_guild_created ON moderation_cases(guild_id, created_at DESC)"
+      ).run();
+      await db.prepare(
+        `CREATE TABLE IF NOT EXISTS audit_reverts (
+           id TEXT PRIMARY KEY,
+           guild_id TEXT NOT NULL REFERENCES guilds(id) ON DELETE CASCADE,
+           audit_log_id TEXT NOT NULL REFERENCES audit_logs(id) ON DELETE CASCADE,
+           actor_discord_user_id TEXT NOT NULL,
+           sync_event_id TEXT REFERENCES sync_events(id) ON DELETE SET NULL,
+           status TEXT NOT NULL DEFAULT 'pending',
+           error TEXT,
+           created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+           completed_at TEXT,
+           UNIQUE(guild_id, audit_log_id)
+         )`
+      ).run();
+    })().catch((error) => {
+      operationsStorageReady = null;
+      throw error;
+    });
+  }
+  await operationsStorageReady;
+}
+
+const accessLevelPriority: Record<Exclude<GuildAccessLevel, "owner">, number> = {
+  administrator: 4,
+  moderator: 3,
+  supporter: 2,
+  viewer: 1
+};
+
+function requestedGuildCapability(c: HonoContext): GuildCapability {
+  const path = c.req.path;
+  if (path.includes("/team-access")) return "team";
+  if (path.includes("/moderation")) return "moderation";
+  if (path.includes("/music/live")) return "music";
+  if (path.includes("/audit-log")) return "history";
+  if (path.includes("/tickets")) return "tickets";
+  return c.req.method === "GET" ? "view" : "settings";
+}
+
+async function delegatedGuildAuthorization(
+  env: Env,
+  guild: GuildRow,
+  discordUserId: string
+): Promise<GuildAccess["authorization"] | null> {
+  await ensureOperationsStorage(env);
+  const rows = await all<GuildPanelAccessRow>(
+    requireDb(env).prepare(
+      `SELECT id, guild_id, principal_type, principal_id, display_name, access_level,
+              capabilities, enabled, created_by_discord_user_id, created_at, updated_at
+         FROM guild_panel_access
+        WHERE guild_id = ? AND enabled = 1`
+    ).bind(guild.id)
+  );
+  const directRows = rows.filter((row) => row.principal_type === "user" && row.principal_id === discordUserId);
+  let roleIds = new Set<string>();
+  if (rows.some((row) => row.principal_type === "role")) {
+    try {
+      const member = await fetchDiscordBotGuildMember(env, guild.discord_guild_id, discordUserId);
+      roleIds = new Set(member?.roles ?? []);
+    } catch {
+      roleIds = new Set();
+    }
+  }
+  const matches = [
+    ...directRows,
+    ...rows.filter((row) => row.principal_type === "role" && roleIds.has(row.principal_id))
+  ];
+  if (!matches.length) return null;
+
+  const level = matches.reduce<Exclude<GuildAccessLevel, "owner">>(
+    (current, row) => accessLevelPriority[row.access_level] > accessLevelPriority[current] ? row.access_level : current,
+    "viewer"
+  );
+  const capabilities = Array.from(new Set(matches.flatMap((row) => (
+    normalizeCapabilities(parseJson<unknown>(row.capabilities, []), row.access_level)
+  ))));
+  return { native: false, level, capabilities };
+}
+
 async function requireGuildManagementAccess(
   c: HonoContext,
   discordGuildId: string,
-  options: { requireBot: boolean } = { requireBot: true }
+  options: { requireBot: boolean; capability?: GuildCapability } = { requireBot: true }
 ): Promise<GuildAccess> {
   snowflakeSchema.parse(discordGuildId);
   const session = await requireSession(c);
   const guilds = await getFreshGuilds(c, session);
   const userGuild = guilds.find((guild) => guild.id === discordGuildId);
 
-  if (!userGuild || !canManageGuild(userGuild)) {
+  if (!userGuild) {
     throw new HttpError(403, "guild_access_denied", "Du darfst diese Guild nicht verwalten.");
   }
 
   const guild = await refreshBotPresence(c.env, await upsertGuildFromDiscord(c.env, userGuild));
+  const native = canManageGuild(userGuild);
+  const authorization: GuildAccess["authorization"] | null = native
+    ? {
+        native: true,
+        level: userGuild.owner ? "owner" : "administrator",
+        capabilities: [...defaultCapabilities("administrator")]
+      }
+    : await delegatedGuildAuthorization(c.env, guild, session.user.discordUserId);
+  const capability = options.capability ?? requestedGuildCapability(c);
+
+  if (!authorization || !hasGuildCapability(authorization, capability)) {
+    throw new HttpError(403, "guild_access_denied", "Dein Team-Zugang erlaubt diese Aktion nicht.");
+  }
+
   if (options.requireBot && !guild.bot_joined_at) {
     throw new HttpError(409, "bot_not_in_guild", "Der Bot ist auf dieser Guild noch nicht installiert.");
   }
@@ -1279,6 +1446,7 @@ async function requireGuildManagementAccess(
   return {
     session,
     userGuild,
+    authorization,
     guild: {
       id: guild.id,
       discordGuildId: guild.discord_guild_id,
@@ -3250,17 +3418,40 @@ app.post("/api/logout", logoutResponse);
 app.get("/api/guilds", async (c) => {
   const session = await requireSession(c);
   const discordGuilds = await getFreshGuilds(c, session);
-  const manageable = discordGuilds.filter(canManageGuild);
   const items = [];
 
-  for (const discordGuild of manageable) {
-    const guild = await refreshBotPresence(c.env, await upsertGuildFromDiscord(c.env, discordGuild));
+  for (const discordGuild of discordGuilds) {
+    const native = canManageGuild(discordGuild);
+    const existing = native
+      ? null
+      : await first<GuildRow>(
+          requireDb(c.env).prepare(
+            "SELECT id, discord_guild_id, name, icon, bot_joined_at FROM guilds WHERE discord_guild_id = ?"
+          ).bind(discordGuild.id)
+        );
+    if (!native && !existing) continue;
+
+    const guild = await refreshBotPresence(
+      c.env,
+      native ? await upsertGuildFromDiscord(c.env, discordGuild) : existing!
+    );
+    const authorization = native
+      ? {
+          native: true,
+          level: discordGuild.owner ? "owner" as const : "administrator" as const,
+          capabilities: [...defaultCapabilities("administrator")]
+        }
+      : await delegatedGuildAuthorization(c.env, guild, session.user.discordUserId);
+    if (!authorization) continue;
+
     items.push({
       id: discordGuild.id,
       name: discordGuild.name,
       icon: discordGuildIconUrl(discordGuild),
       owner: Boolean(discordGuild.owner),
-      permission: permissionLabel(discordGuild),
+      permission: native ? permissionLabel(discordGuild) : `Team: ${authorization.level}`,
+      accessLevel: authorization.level,
+      capabilities: authorization.capabilities,
       botInstalled: Boolean(guild.bot_joined_at),
       botInstallStatus: botInstallStatus(c.env, guild),
       botJoinedAt: guild.bot_joined_at
@@ -3317,7 +3508,10 @@ app.get("/api/guilds/:guildId", async (c) => {
       icon: access.guild.icon,
       botInstalled: Boolean(access.guild.botJoinedAt),
       botInstallStatus: access.guild.botJoinedAt ? "installed" : "missing",
-      permission: permissionLabel(access.userGuild)
+      permission: access.authorization.native
+        ? permissionLabel(access.userGuild)
+        : `Team: ${access.authorization.level}`,
+      access: access.authorization
     },
     settings
   });
@@ -4748,19 +4942,370 @@ app.delete("/api/guilds/:guildId/custom-commands/:commandId", async (c) => {
   return json(c, { ok: true, eventId });
 });
 
-app.get("/api/guilds/:guildId/audit-log", async (c) => {
-  const access = await requireGuildManagementAccess(c, c.req.param("guildId"));
+function normalizePanelAccess(row: GuildPanelAccessRow) {
+  return {
+    id: row.id,
+    principalType: row.principal_type,
+    principalId: row.principal_id,
+    displayName: row.display_name,
+    accessLevel: row.access_level,
+    capabilities: normalizeCapabilities(parseJson<unknown>(row.capabilities, []), row.access_level),
+    enabled: Boolean(row.enabled),
+    createdByDiscordUserId: row.created_by_discord_user_id,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at
+  };
+}
+
+app.get("/api/guilds/:guildId/team-access", async (c) => {
+  const access = await requireGuildManagementAccess(c, c.req.param("guildId"), { requireBot: true, capability: "team" });
+  await ensureOperationsStorage(c.env);
+  const rows = await all<GuildPanelAccessRow>(
+    c.env.DB.prepare(
+      `SELECT id, guild_id, principal_type, principal_id, display_name, access_level,
+              capabilities, enabled, created_by_discord_user_id, created_at, updated_at
+         FROM guild_panel_access
+        WHERE guild_id = ?
+        ORDER BY enabled DESC,
+          CASE access_level WHEN 'administrator' THEN 1 WHEN 'moderator' THEN 2 WHEN 'supporter' THEN 3 ELSE 4 END,
+          display_name COLLATE NOCASE`
+    ).bind(access.guild.id)
+  );
+  return json(c, { access: access.authorization, entries: rows.map(normalizePanelAccess) });
+});
+
+app.post("/api/guilds/:guildId/team-access", async (c) => {
+  const access = await requireGuildManagementAccess(c, c.req.param("guildId"), { requireBot: true, capability: "team" });
+  const data = guildPanelAccessSchema.parse(await readJsonBody(c));
+  await ensureOperationsStorage(c.env);
+
+  let displayName = data.displayName;
+  if (data.principalType === "role") {
+    const role = await first<{ name: string }>(
+      c.env.DB.prepare(
+        "SELECT name FROM guild_roles WHERE guild_id = ? AND discord_role_id = ?"
+      ).bind(access.guild.id, data.principalId)
+    );
+    if (!role) throw new HttpError(400, "team_role_missing", "Diese Rolle wurde auf der Guild nicht gefunden.");
+    displayName = role.name;
+  } else if (!displayName) {
+    const member = await fetchDiscordBotGuildMember(c.env, access.guild.discordGuildId, data.principalId);
+    displayName = member?.nick || member?.user?.global_name || member?.user?.username || data.principalId;
+  }
+
+  const timestamp = nowIso();
+  const capabilities = normalizeCapabilities(data.capabilities, data.accessLevel);
+  const existing = await first<GuildPanelAccessRow>(
+    c.env.DB.prepare(
+      "SELECT * FROM guild_panel_access WHERE guild_id = ? AND principal_type = ? AND principal_id = ?"
+    ).bind(access.guild.id, data.principalType, data.principalId)
+  );
+  const id = existing?.id ?? newId("gpa");
+  await c.env.DB.prepare(
+    `INSERT INTO guild_panel_access (
+       id, guild_id, principal_type, principal_id, display_name, access_level, capabilities,
+       enabled, created_by_discord_user_id, created_at, updated_at
+     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+     ON CONFLICT(guild_id, principal_type, principal_id) DO UPDATE SET
+       display_name = excluded.display_name, access_level = excluded.access_level,
+       capabilities = excluded.capabilities, enabled = excluded.enabled, updated_at = excluded.updated_at`
+  ).bind(
+    id,
+    access.guild.id,
+    data.principalType,
+    data.principalId,
+    displayName,
+    data.accessLevel,
+    asJson(capabilities),
+    data.enabled ? 1 : 0,
+    access.session.user.discordUserId,
+    timestamp,
+    timestamp
+  ).run();
+  const saved = await first<GuildPanelAccessRow>(
+    c.env.DB.prepare("SELECT * FROM guild_panel_access WHERE id = ?").bind(id)
+  );
+  await audit(
+    c.env,
+    access.guild.id,
+    access.session.user.discordUserId,
+    existing ? "team_access.update" : "team_access.create",
+    `${data.principalType}:${data.principalId}`,
+    existing ? normalizePanelAccess(existing) : null,
+    saved ? normalizePanelAccess(saved) : null
+  );
+  return json(c, { ok: true, entry: saved ? normalizePanelAccess(saved) : null });
+});
+
+app.patch("/api/guilds/:guildId/team-access/:accessId", async (c) => {
+  const access = await requireGuildManagementAccess(c, c.req.param("guildId"), { requireBot: true, capability: "team" });
+  const data = guildPanelAccessPatchSchema.parse(await readJsonBody(c));
+  await ensureOperationsStorage(c.env);
+  const oldValue = await first<GuildPanelAccessRow>(
+    c.env.DB.prepare("SELECT * FROM guild_panel_access WHERE id = ? AND guild_id = ?")
+      .bind(c.req.param("accessId"), access.guild.id)
+  );
+  if (!oldValue) throw new HttpError(404, "team_access_missing", "Dieser Team-Zugang wurde nicht gefunden.");
+  const level = data.accessLevel ?? oldValue.access_level;
+  const capabilities = normalizeCapabilities(
+    data.capabilities ?? parseJson<unknown>(oldValue.capabilities, []),
+    level
+  );
+  await c.env.DB.prepare(
+    `UPDATE guild_panel_access
+        SET access_level = ?, capabilities = ?, enabled = ?, updated_at = ?
+      WHERE id = ? AND guild_id = ?`
+  ).bind(
+    level,
+    asJson(capabilities),
+    data.enabled === undefined ? oldValue.enabled : (data.enabled ? 1 : 0),
+    nowIso(),
+    oldValue.id,
+    access.guild.id
+  ).run();
+  const saved = await first<GuildPanelAccessRow>(
+    c.env.DB.prepare("SELECT * FROM guild_panel_access WHERE id = ?").bind(oldValue.id)
+  );
+  await audit(c.env, access.guild.id, access.session.user.discordUserId, "team_access.update", oldValue.id, normalizePanelAccess(oldValue), saved ? normalizePanelAccess(saved) : null);
+  return json(c, { ok: true, entry: saved ? normalizePanelAccess(saved) : null });
+});
+
+app.delete("/api/guilds/:guildId/team-access/:accessId", async (c) => {
+  const access = await requireGuildManagementAccess(c, c.req.param("guildId"), { requireBot: true, capability: "team" });
+  await ensureOperationsStorage(c.env);
+  const oldValue = await first<GuildPanelAccessRow>(
+    c.env.DB.prepare("SELECT * FROM guild_panel_access WHERE id = ? AND guild_id = ?")
+      .bind(c.req.param("accessId"), access.guild.id)
+  );
+  if (!oldValue) throw new HttpError(404, "team_access_missing", "Dieser Team-Zugang wurde nicht gefunden.");
+  await c.env.DB.prepare("DELETE FROM guild_panel_access WHERE id = ? AND guild_id = ?")
+    .bind(oldValue.id, access.guild.id)
+    .run();
+  await audit(c.env, access.guild.id, access.session.user.discordUserId, "team_access.delete", oldValue.id, normalizePanelAccess(oldValue), null);
+  return json(c, { ok: true });
+});
+
+app.get("/api/guilds/:guildId/moderation/members", async (c) => {
+  const access = await requireGuildManagementAccess(c, c.req.param("guildId"), { requireBot: true, capability: "moderation" });
+  const members = await fetchDiscordBotGuildMembers(c.env, access.guild.discordGuildId, 1000);
+  return json(c, {
+    members: members.map((member) => normalizeAdminMember(member as unknown as Record<string, unknown>))
+  });
+});
+
+app.get("/api/guilds/:guildId/moderation/cases", async (c) => {
+  const access = await requireGuildManagementAccess(c, c.req.param("guildId"), { requireBot: true, capability: "moderation" });
+  await ensureOperationsStorage(c.env);
   const rows = await all<Record<string, unknown>>(
     c.env.DB.prepare(
-      `SELECT id, actor_discord_user_id AS actorDiscordUserId, action, target, old_value AS oldValue,
-              new_value AS newValue, created_at AS createdAt
-         FROM audit_logs
+      `SELECT id, case_number AS caseNumber, target_discord_user_id AS targetDiscordUserId,
+              target_display_name AS targetDisplayName, actor_discord_user_id AS actorDiscordUserId,
+              actor_display_name AS actorDisplayName, action, reason, duration_seconds AS durationSeconds,
+              delete_message_seconds AS deleteMessageSeconds, sync_event_id AS syncEventId,
+              status, error, created_at AS createdAt, completed_at AS completedAt
+         FROM moderation_cases
         WHERE guild_id = ?
-        ORDER BY created_at DESC
+        ORDER BY case_number DESC
+        LIMIT 250`
+    ).bind(access.guild.id)
+  );
+  return json(c, { cases: rows });
+});
+
+app.post("/api/guilds/:guildId/moderation/actions", async (c) => {
+  const access = await requireGuildManagementAccess(c, c.req.param("guildId"), { requireBot: true, capability: "moderation" });
+  const data = guildModerationActionSchema.parse(await readJsonBody(c));
+  await ensureOperationsStorage(c.env);
+  const member = await fetchDiscordBotGuildMember(c.env, access.guild.discordGuildId, data.memberId);
+  if (!member && data.action !== "ban") {
+    throw new HttpError(404, "member_not_found", "Dieses Mitglied wurde auf der Guild nicht gefunden.");
+  }
+  const displayName = data.targetDisplayName
+    || member?.nick
+    || member?.user?.global_name
+    || member?.user?.username
+    || data.memberId;
+  const eventId = await enqueueSyncEvent(c.env, access.guild, "guild.member.moderate", {
+    discordGuildId: access.guild.discordGuildId,
+    memberId: data.memberId,
+    moderationAction: data.action,
+    reason: data.reason,
+    durationSeconds: data.durationSeconds,
+    deleteMessageSeconds: data.deleteMessageSeconds,
+    actorDiscordUserId: access.session.user.discordUserId,
+    actorUsername: access.session.user.displayName || access.session.user.username
+  });
+  const latest = await first<{ nextCaseNumber: number }>(
+    c.env.DB.prepare(
+      "SELECT COALESCE(MAX(case_number), 0) + 1 AS nextCaseNumber FROM moderation_cases WHERE guild_id = ?"
+    ).bind(access.guild.id)
+  );
+  const caseNumber = Number(latest?.nextCaseNumber ?? 1);
+  const caseId = newId("case");
+  await c.env.DB.prepare(
+    `INSERT INTO moderation_cases (
+       id, guild_id, case_number, target_discord_user_id, target_display_name,
+       actor_discord_user_id, actor_display_name, action, reason, duration_seconds,
+       delete_message_seconds, sync_event_id, status, created_at
+     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?)`
+  ).bind(
+    caseId,
+    access.guild.id,
+    caseNumber,
+    data.memberId,
+    displayName,
+    access.session.user.discordUserId,
+    access.session.user.displayName || access.session.user.username,
+    data.action,
+    data.reason,
+    data.durationSeconds ?? null,
+    data.deleteMessageSeconds,
+    eventId,
+    nowIso()
+  ).run();
+  await audit(c.env, access.guild.id, access.session.user.discordUserId, `moderation.${data.action}`, data.memberId, null, {
+    caseId,
+    caseNumber,
+    eventId,
+    reason: data.reason,
+    durationSeconds: data.durationSeconds ?? null
+  });
+  return json(c, { ok: true, eventId, caseId, caseNumber });
+});
+
+function musicFromRuntime(row: BotRuntimeRow | null): Record<string, unknown> {
+  const payload = parseJson<Record<string, unknown>>(row?.payload ?? "", {});
+  const details = recordValue(payload.details);
+  return recordValue(payload.music ?? details.music);
+}
+
+app.get("/api/guilds/:guildId/music/live", async (c) => {
+  const access = await requireGuildManagementAccess(c, c.req.param("guildId"), { requireBot: true, capability: "music" });
+  await ensureBotRuntimeTable(c.env);
+  const runtime = await first<BotRuntimeRow>(c.env.DB.prepare("SELECT * FROM bot_runtime_status WHERE id = 'latest'"));
+  const music = musicFromRuntime(runtime);
+  const players = Array.isArray(music.players)
+    ? music.players.filter((player) => recordValue(player).guildId === access.guild.discordGuildId)
+    : [];
+  return json(c, {
+    music: {
+      ...music,
+      players,
+      player: players[0] ?? null,
+      updatedAt: runtime?.updated_at ?? null
+    }
+  });
+});
+
+app.post("/api/guilds/:guildId/music/live/actions", async (c) => {
+  const access = await requireGuildManagementAccess(c, c.req.param("guildId"), { requireBot: true, capability: "music" });
+  const data = musicPlayerActionSchema.parse(await readJsonBody(c));
+  const eventId = await enqueueSyncEvent(c.env, access.guild, "music.player.control", {
+    discordGuildId: access.guild.discordGuildId,
+    action: data.action,
+    volume: data.volume,
+    actorDiscordUserId: access.session.user.discordUserId
+  });
+  await audit(c.env, access.guild.id, access.session.user.discordUserId, `music.${data.action}`, "player", null, {
+    eventId,
+    volume: data.volume ?? null
+  });
+  return json(c, { ok: true, eventId });
+});
+
+function reversibleAuditAction(action: string): boolean {
+  return /^feature\.[a-z0-9-]+\.update$/.test(action)
+    || action === "security.update"
+    || action === "raidmode.update"
+    || action === "ticket.update";
+}
+
+app.get("/api/guilds/:guildId/audit-log", async (c) => {
+  const access = await requireGuildManagementAccess(c, c.req.param("guildId"), { requireBot: true, capability: "history" });
+  await ensureOperationsStorage(c.env);
+  const rows = await all<Record<string, unknown>>(
+    c.env.DB.prepare(
+      `SELECT a.id, a.actor_discord_user_id AS actorDiscordUserId, a.action, a.target, a.old_value AS oldValue,
+              a.new_value AS newValue, a.created_at AS createdAt,
+              r.id AS revertId, r.status AS revertStatus, r.error AS revertError
+         FROM audit_logs a
+         LEFT JOIN audit_reverts r ON r.audit_log_id = a.id AND r.guild_id = a.guild_id
+        WHERE a.guild_id = ?
+        ORDER BY a.created_at DESC
         LIMIT 100`
     ).bind(access.guild.id)
   );
-  return json(c, { auditLog: rows });
+  return json(c, {
+    access: access.authorization,
+    auditLog: rows.map((row) => ({
+      ...row,
+      oldValue: parseJson(String(row.oldValue ?? ""), null),
+      newValue: parseJson(String(row.newValue ?? ""), null),
+      reversible: reversibleAuditAction(String(row.action ?? "")) && !row.revertId
+    }))
+  });
+});
+
+app.post("/api/guilds/:guildId/audit-log/:auditId/revert", async (c) => {
+  const access = await requireGuildManagementAccess(c, c.req.param("guildId"), { requireBot: true, capability: "settings" });
+  await ensureOperationsStorage(c.env);
+  const entry = await first<{ id: string; action: string; target: string; oldValue: string | null }>(
+    c.env.DB.prepare(
+      `SELECT id, action, target, old_value AS oldValue
+         FROM audit_logs WHERE id = ? AND guild_id = ?`
+    ).bind(c.req.param("auditId"), access.guild.id)
+  );
+  if (!entry) throw new HttpError(404, "audit_missing", "Dieser Änderungs-Eintrag wurde nicht gefunden.");
+  if (!reversibleAuditAction(entry.action)) {
+    throw new HttpError(409, "audit_not_reversible", "Diese Aktion kann nicht automatisch wiederhergestellt werden.");
+  }
+  const existing = await first<{ id: string }>(
+    c.env.DB.prepare("SELECT id FROM audit_reverts WHERE guild_id = ? AND audit_log_id = ?")
+      .bind(access.guild.id, entry.id)
+  );
+  if (existing) throw new HttpError(409, "audit_already_reverted", "Diese Änderung wurde bereits wiederhergestellt.");
+
+  const oldValue = recordValue(parseJson(entry.oldValue ?? "", {}));
+  let module: GuildControlModule;
+  let settings: Record<string, unknown>;
+  let syncAction: string;
+  const featureMatch = entry.action.match(/^feature\.([a-z0-9-]+)\.update$/);
+  if (featureMatch) {
+    module = featureModuleSchema.parse(featureMatch[1]);
+    const parsed = featureSettingsSchema.parse(oldValue);
+    settings = { enabled: parsed.enabled, fields: parsed.fields };
+    syncAction = "feature.settings.upsert";
+  } else if (entry.action === "security.update") {
+    module = "security";
+    settings = securitySettingsSchema.parse(oldValue);
+    syncAction = "security.settings.upsert";
+  } else if (entry.action === "raidmode.update") {
+    module = "raidmode";
+    settings = raidSettingsSchema.parse(oldValue);
+    syncAction = "raidmode.settings.upsert";
+  } else {
+    module = "tickets";
+    settings = ticketSettingsSchema.parse(oldValue);
+    syncAction = "ticket.settings.upsert";
+  }
+
+  await setGuildControlPending(c.env, access.guild.id, module, settings);
+  const eventPayload = featureMatch
+    ? { discordGuildId: access.guild.discordGuildId, module, settings }
+    : { discordGuildId: access.guild.discordGuildId, settings };
+  const eventId = await enqueueSyncEvent(c.env, access.guild, syncAction, eventPayload);
+  const revertId = newId("rev");
+  await c.env.DB.prepare(
+    `INSERT INTO audit_reverts (
+       id, guild_id, audit_log_id, actor_discord_user_id, sync_event_id, status, created_at
+     ) VALUES (?, ?, ?, ?, ?, 'pending', ?)`
+  ).bind(revertId, access.guild.id, entry.id, access.session.user.discordUserId, eventId, nowIso()).run();
+  await audit(c.env, access.guild.id, access.session.user.discordUserId, "audit.revert", entry.id, null, {
+    revertId,
+    eventId,
+    restoredAction: entry.action
+  });
+  return json(c, { ok: true, eventId, revertId });
 });
 
 app.get("/api/guilds/:guildId/sync-events/:eventId", async (c) => {
@@ -6107,6 +6652,14 @@ app.post("/api/internal/bot/sync-events/:eventId/complete", async (c) => {
     .bind(nowIso(), nowIso(), eventId)
     .run();
 
+  await ensureOperationsStorage(c.env);
+  await c.env.DB.prepare(
+    "UPDATE moderation_cases SET status = 'completed', error = NULL, completed_at = ? WHERE sync_event_id = ?"
+  ).bind(nowIso(), eventId).run();
+  await c.env.DB.prepare(
+    "UPDATE audit_reverts SET status = 'completed', error = NULL, completed_at = ? WHERE sync_event_id = ?"
+  ).bind(nowIso(), eventId).run();
+
   if (row.action === "guild.member_avatar.update") {
     await c.env.DB.prepare(
       "UPDATE guild_settings SET bot_avatar_sync_status = 'synced', bot_avatar_sync_error = NULL, updated_at = ? WHERE guild_id = ?"
@@ -6359,6 +6912,14 @@ app.post("/api/internal/bot/sync-events/:eventId/fail", async (c) => {
   await c.env.DB.prepare("UPDATE sync_events SET status = ?, last_error = ?, updated_at = ? WHERE id = ?")
     .bind(retry ? "pending" : "failed", String(body.error ?? "Unbekannter Fehler").slice(0, 1000), nowIso(), eventId)
     .run();
+
+  await ensureOperationsStorage(c.env);
+  await c.env.DB.prepare(
+    "UPDATE moderation_cases SET status = ?, error = ? WHERE sync_event_id = ?"
+  ).bind(retry ? "pending" : "failed", String(body.error ?? "Unbekannter Fehler").slice(0, 1000), eventId).run();
+  await c.env.DB.prepare(
+    "UPDATE audit_reverts SET status = ?, error = ? WHERE sync_event_id = ?"
+  ).bind(retry ? "pending" : "failed", String(body.error ?? "Unbekannter Fehler").slice(0, 1000), eventId).run();
 
   if (!retry && row.action === "guild.member_avatar.update") {
     await c.env.DB.prepare(
