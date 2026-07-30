@@ -46,10 +46,13 @@ Oberflaeche einen kontrollierten Fortsetzen-Button an.
 
 ## Minecraft-Plugin-Compiler
 
-Vollstaendige Paper-, Purpur- und Spigot-Projekte aus dem Minecraft-Modus
+Vollstaendige Paper-, Folia-, Purpur- und Spigot-Projekte aus dem Minecraft-Modus
 koennen direkt unter der KI-Antwort zu einer JAR kompiliert werden. Der
 Compiler laeuft bewusst nicht im Cloudflare Worker, sondern als isolierter
-Java-21-Dienst auf einem eigenen Pterodactyl-Server. Build-Skripte aus
+Java-25-Dienst auf einem eigenen Pterodactyl-Server. Der Builder liest
+verfuegbare Minecraft- und API-Versionen live aus den offiziellen
+Maven-Repositories und ordnet Java 8, 11, 16, 17, 21 oder 25 automatisch zu.
+Build-Skripte aus
 KI-Antworten werden ignoriert; der Dienst erzeugt eine feste
 Maven-Konfiguration und akzeptiert nur Java- und Ressourcen-Dateien.
 

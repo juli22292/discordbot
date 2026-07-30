@@ -5,8 +5,13 @@ Der Compiler besteht aus drei getrennten Teilen:
 1. Die Groq-KI erzeugt Java- und Ressourcen-Dateien.
 2. Der Cloudflare Worker prüft Dateipfade und überträgt sie mit einem geheimen
    API-Schlüssel an den Builder.
-3. Ein eigener Java-21-Server in Pterodactyl kompiliert das Projekt und liefert
+3. Ein eigener Java-25-Server in Pterodactyl kompiliert das Projekt und liefert
    die fertige JAR zurück.
+
+Der Builder lädt die verfügbaren API-Versionen direkt aus den offiziellen
+Maven-Repositories von Paper, Folia, Purpur und Spigot. Dadurch unterstützt er
+klassische `1.x`-Versionen genauso wie das moderne `26.x`-Versionsschema, ohne
+Versionsnummern blind zusammenzubauen.
 
 Der Builder bekommt **keinen** Discord-Token, Groq-Key, Bot-Key oder
 `INTERNAL_BOT_API_SECRET`.
@@ -36,7 +41,7 @@ Nachricht schreiben.
 5. Importiere:
    `plugin-builder/pterodactyl/egg-modmailbot-plugin-builder.json`
 6. Kontrolliere als Docker-Image:
-   `ghcr.io/pterodactyl/yolks:java_21`
+   `ghcr.io/pterodactyl/yolks:java_25`
 
 Das Egg lädt beim Installieren automatisch nur den Ordner `plugin-builder` aus
 dem öffentlichen GitHub-Repository. Der Startbefehl ist bereits fest auf
@@ -52,7 +57,7 @@ Empfohlene Werte:
 | Swap | 0 MiB |
 | Festplatte | mindestens 5120 MiB |
 | CPU | mindestens 200 % |
-| Docker-Image | Java 21 |
+| Docker-Image | Java 25 |
 | Allocation | ein freier TCP-Port |
 
 Trage bei den Startup-Variablen ein:
@@ -65,6 +70,7 @@ Trage bei den Startup-Variablen ein:
 | `PLUGIN_BUILDER_MAX_PENDING_BUILDS` | `8` |
 | `PLUGIN_BUILDER_TIMEOUT_SECONDS` | `180` |
 | `PLUGIN_BUILDER_ARTIFACT_TTL_HOURS` | `24` |
+| `PLUGIN_BUILDER_VERSION_CACHE_MINUTES` | `15` |
 
 Starte den Server. Erfolgreich ist der Start, sobald in der Konsole steht:
 
@@ -81,25 +87,34 @@ Das Builder-Secret darf nicht unverschlüsselt über eine öffentliche
 `http://IP:PORT`-Adresse übertragen werden. Verwende deshalb
 `https://builder.carrothd.de`.
 
-### Empfohlen: Cloudflare Tunnel
+### Nginx und Let's Encrypt
 
-1. Öffne **Cloudflare Zero Trust**.
-2. Gehe zu **Networks > Tunnels**.
-3. Erstelle einen Tunnel, zum Beispiel `modmail-plugin-builder`.
-4. Installiere den angezeigten `cloudflared service install ...`-Befehl auf dem
-   Host, auf dem Pterodactyl/Wings läuft.
-5. Erstelle im Tunnel einen **Public Hostname**:
+Für den aktuellen Server läuft der Builder auf `77.90.30.197:25610`. Der
+Nginx-VHost verwendet:
 
-```text
-Subdomain: builder
-Domain: carrothd.de
-Type: HTTP
-URL: localhost:<PTERODACTYL_ALLOCATION_PORT>
+```nginx
+server {
+    server_name builder.carrothd.de;
+
+    location / {
+        proxy_pass http://77.90.30.197:25610;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_connect_timeout 15s;
+        proxy_read_timeout 300s;
+        client_max_body_size 2m;
+    }
+}
 ```
 
-6. Aktiviere im Hostname unter TLS keine unsichere Zertifikats-Ausnahme; der
-   lokale Dienst verwendet absichtlich HTTP, der öffentliche Weg läuft durch
-   den Tunnel über HTTPS.
+Das Zertifikat wird mit Certbot verwaltet:
+
+```bash
+certbot --nginx -d builder.carrothd.de --redirect
+```
 
 Prüfe danach:
 
@@ -107,7 +122,8 @@ Prüfe danach:
 curl https://builder.carrothd.de/health
 ```
 
-Erwartet wird JSON mit `"status":"ready"`.
+Erwartet wird JSON mit `"status":"ready"`, `"version":"2.0.0"`,
+`"javaRuntime":25` und den vier Plattformen.
 
 ## 5. Cloudflare konfigurieren
 
@@ -142,9 +158,12 @@ Erstelle ein vollständiges Paper-Plugin für meine Minecraft-Version.
 Der Befehl /heal soll den Spieler heilen. Ich möchte es danach kompilieren.
 ```
 
-5. Nenne der KI die genaue Minecraft-Version.
+5. Nenne der KI Plattform und Minecraft-Version. Bereits genannte Angaben
+   werden aus dem Chatverlauf übernommen.
 6. Unter einer vollständigen Antwort erscheint **Plugin kompilieren**.
-7. Prüfe Plugin-Name, Plattform, Minecraft-Version und Java-Version.
+7. Prüfe Plugin-Name und Plattform. `latest` wählt die aktuellste offiziell
+   veröffentlichte API; **Java automatisch** wählt passend zur Minecraft-Version
+   Java 8, 11, 16, 17, 21 oder 25.
 8. Klicke **JAR erstellen**.
 9. Nach erfolgreichem Build erscheint der direkte `.jar`-Download.
 
@@ -152,8 +171,13 @@ Die JAR wird standardmäßig nach 24 Stunden vom Builder gelöscht.
 
 ## Unterstützter Umfang
 
-- Paper, Purpur und Spigot
-- Java 17 und Java 21
+- Paper, Folia, Purpur und Spigot
+- alle Versionen, die das jeweilige offizielle Maven-Repository tatsächlich
+  veröffentlicht
+- klassische `1.x`- und moderne `26.x`-Versionen
+- automatische Java-Zuordnung für Java 8, 11, 16, 17, 21 und 25
+- exakte Versionen, vollständige API-Versionen, `latest` und Wildcards wie
+  `1.21.x`
 - `src/main/java/**/*.java`
 - Ressourcen wie `plugin.yml`, YAML, JSON, Properties und Textdateien
 - maximal 64 Dateien und insgesamt 512 KiB Quelltext
@@ -184,8 +208,20 @@ Werte neu setzen und Builder sowie Worker neu starten/deployen.
 
 1. Pterodactyl-Konsole auf `[BUILDER] Bereit` prüfen.
 2. `https://builder.carrothd.de/health` aufrufen.
-3. Cloudflare-Tunnel und dessen Public Hostname prüfen.
-4. Kontrollieren, ob der Tunnel auf den richtigen Pterodactyl-Port zeigt.
+3. Nginx mit `nginx -t` prüfen und neu laden.
+4. Kontrollieren, ob `proxy_pass` auf `http://77.90.30.197:25610` zeigt.
+
+### `Java 25 oder neuer wird benötigt`
+
+Das alte Egg oder Docker-Image läuft noch mit Java 21. Das aktualisierte Egg
+importieren und als Image `ghcr.io/pterodactyl/yolks:java_25` auswählen.
+
+### Version wird nicht gefunden
+
+Der Builder akzeptiert nur Versionen, die im offiziellen Repository der
+gewählten Plattform vorhanden sind. Eine Version kann beispielsweise bei
+Spigot verfügbar sein, bei Folia oder Purpur aber fehlen. Nutze in der
+Oberfläche den Live-Katalog oder `latest`.
 
 ### Maven-Fehler
 

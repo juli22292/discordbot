@@ -11107,6 +11107,23 @@ textarea {
   font-weight: 650;
 }
 
+.minecraft-plugin-build-fields label > small {
+  min-height: 30px;
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.minecraft-plugin-build-fields label > small a {
+  color: var(--blue);
+  text-decoration: none;
+}
+
+.minecraft-plugin-build-fields label > small a:hover {
+  text-decoration: underline;
+}
+
 .minecraft-plugin-build-fields input,
 .minecraft-plugin-build-fields select {
   width: 100%;
@@ -11234,6 +11251,21 @@ textarea {
   background: color-mix(in srgb, var(--red) 8%, transparent);
   font-size: 12px;
   line-height: 1.45;
+}
+
+.minecraft-plugin-catalog-warning {
+  display: flex;
+  align-items: flex-start;
+  gap: 7px;
+  margin: 0;
+  color: var(--amber);
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.minecraft-plugin-catalog-warning svg {
+  flex: 0 0 auto;
+  margin-top: 1px;
 }
 
 .minecraft-plugin-build-error svg {

@@ -113,12 +113,19 @@ describe("public AI chat helpers", () => {
   });
 
   it("adds complete project and Minecraft consistency rules", () => {
-    const prompt = buildPublicAiSystemPrompt("minecraft");
+    const prompt = buildPublicAiSystemPrompt(
+      "minecraft",
+      "Paper: aktuell 26.2 (API 26.2.build.87-stable, Java 25)"
+    );
 
     expect(prompt).toContain("alle benötigten Dateien vollständig");
     expect(prompt).toContain("plugin.yml");
     expect(prompt).toContain("Main-Class");
     expect(prompt).toContain("Server-Thread");
     expect(prompt).toContain("Build-Befehl");
+    expect(prompt).toContain("folia-supported: true");
+    expect(prompt).toContain("Java 25");
+    expect(prompt).toContain("AKTUELLER OFFIZIELLER BUILDER-KATALOG");
+    expect(prompt).toContain("26.2.build.87-stable");
   });
 });

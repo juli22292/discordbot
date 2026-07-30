@@ -35,6 +35,13 @@ fi
 export PLUGIN_BUILDER_MAVEN_BIN="${PLUGIN_BUILDER_MAVEN_BIN:-$MAVEN_ROOT/bin/mvn}"
 export PLUGIN_BUILDER_PORT="${PLUGIN_BUILDER_PORT:-${SERVER_PORT:-8080}}"
 
+JAVA_MAJOR="$(java -version 2>&1 | awk -F '[".]' '/version/ {print $2; exit}')"
+if [ -z "$JAVA_MAJOR" ] || [ "$JAVA_MAJOR" -lt 25 ]; then
+  echo "[BUILDER] Java 25 oder neuer wird benötigt. Erkannt: ${JAVA_MAJOR:-unbekannt}."
+  echo "[BUILDER] Wähle im Pterodactyl-Egg das Docker-Image ghcr.io/pterodactyl/yolks:java_25."
+  exit 1
+fi
+
 echo "[BUILDER] Baue den Builder-Dienst..."
 "$PLUGIN_BUILDER_MAVEN_BIN" -B -ntp -DskipTests package
 

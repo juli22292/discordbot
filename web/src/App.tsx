@@ -5,6 +5,8 @@ import type { AssistantTarget } from "./server/assistant";
 import type { PublicAiMode, ResolvedPublicAiMode } from "./server/public-ai";
 import {
   shouldOfferPluginBuild,
+  type PluginBuildCapabilities,
+  type PluginBuildJavaRelease,
   type PluginBuildPlatform,
   type PluginBuildResponse
 } from "./server/plugin-builder";
@@ -2800,13 +2802,54 @@ function MinecraftPluginBuildPanel({ source }: { source: string }) {
   const [expanded, setExpanded] = useState(false);
   const [projectName, setProjectName] = useState(() => inferredMinecraftPluginName(source));
   const [platform, setPlatform] = useState<PluginBuildPlatform>("paper");
-  const [apiVersion, setApiVersion] = useState("");
-  const [javaRelease, setJavaRelease] = useState<17 | 21>(21);
+  const [apiVersion, setApiVersion] = useState("latest");
+  const [javaRelease, setJavaRelease] = useState<PluginBuildJavaRelease>(0);
+  const [capabilities, setCapabilities] = useState<PluginBuildCapabilities | null>(null);
+  const [capabilitiesLoading, setCapabilitiesLoading] = useState(false);
+  const [capabilitiesError, setCapabilitiesError] = useState<string | null>(null);
   const [build, setBuild] = useState<PluginBuildResponse | null>(null);
   const [starting, setStarting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const versionListId = React.useId();
 
   const buildRunning = build?.status === "queued" || build?.status === "running";
+  const platformCapability = capabilities?.platforms.find((item) => item.id === platform) ?? null;
+  const selectedVersion = platformCapability?.versions.find((item) => (
+    item.minecraftVersion.toLowerCase() === apiVersion.trim().toLowerCase()
+    || item.apiVersion.toLowerCase() === apiVersion.trim().toLowerCase()
+  )) ?? (["latest", "stable", "newest", "neueste", "aktuell"].includes(apiVersion.trim().toLowerCase())
+    ? platformCapability?.versions[0] ?? null
+    : null);
+  const automaticJavaRelease = selectedVersion?.javaRelease
+    ?? platformCapability?.versions[0]?.javaRelease
+    ?? capabilities?.javaRuntime
+    ?? 25;
+
+  useEffect(() => {
+    if (!expanded || capabilities || capabilitiesLoading) return undefined;
+    let cancelled = false;
+    setCapabilitiesLoading(true);
+    setCapabilitiesError(null);
+    void api<PluginBuildCapabilities>("/api/public/ai/build-capabilities")
+      .then((nextCapabilities) => {
+        if (!cancelled) setCapabilities(nextCapabilities);
+      })
+      .catch((capabilityError) => {
+        if (!cancelled) {
+          setCapabilitiesError(
+            capabilityError instanceof Error
+              ? capabilityError.message
+              : "Der offizielle Versionskatalog konnte nicht geladen werden."
+          );
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setCapabilitiesLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [expanded, capabilities]);
 
   useEffect(() => {
     if (!buildRunning || !build?.id) return undefined;
@@ -2881,8 +2924,11 @@ function MinecraftPluginBuildPanel({ source }: { source: string }) {
       {expanded && (
         <div className="minecraft-plugin-build-body">
           <div className="minecraft-plugin-build-intro">
-            <span><ShieldCheck size={15} /> Sicherer Java-21-Builder</span>
-            <p>Build-Skripte aus der KI-Antwort werden ignoriert. Der Compiler nutzt nur die gewählte Server-API.</p>
+            <span><ShieldCheck size={15} /> Sicherer Java-25-Builder mit Live-Katalog</span>
+            <p>
+              Der Builder prüft Version und Java direkt gegen die offiziellen API-Repositories.
+              {platform === "folia" && " Folia-Code muss zusätzlich regionsicher sein."}
+            </p>
           </div>
 
           <div className="minecraft-plugin-build-fields">
@@ -2901,35 +2947,90 @@ function MinecraftPluginBuildPanel({ source }: { source: string }) {
               <select
                 value={platform}
                 disabled={buildRunning}
-                onChange={(event) => setPlatform(event.target.value as PluginBuildPlatform)}
+                onChange={(event) => {
+                  setPlatform(event.target.value as PluginBuildPlatform);
+                  setApiVersion("latest");
+                  setJavaRelease(0);
+                  setBuild(null);
+                  setError(null);
+                }}
               >
                 <option value="paper">Paper</option>
+                <option value="folia">Folia</option>
                 <option value="purpur">Purpur</option>
                 <option value="spigot">Spigot</option>
               </select>
+              {platformCapability && (
+                <small>
+                  Aktuell {platformCapability.latestMinecraftVersion}
+                  {" · "}
+                  <a href={platformCapability.documentationUrl} target="_blank" rel="noreferrer">
+                    offizielle Dokumentation
+                  </a>
+                </small>
+              )}
             </label>
             <label>
               <span>Minecraft-Version</span>
               <input
+                list={versionListId}
                 value={apiVersion}
                 maxLength={48}
                 disabled={buildRunning}
-                onChange={(event) => setApiVersion(event.target.value)}
-                placeholder="z. B. 1.21.4"
+                onChange={(event) => {
+                  setApiVersion(event.target.value);
+                  setJavaRelease(0);
+                  setBuild(null);
+                  setError(null);
+                }}
+                placeholder="latest oder z. B. 1.21.4"
               />
+              <datalist id={versionListId}>
+                <option value="latest">Neueste verfügbare Version</option>
+                {platformCapability?.versions.map((version) => (
+                  <option
+                    key={version.apiVersion}
+                    value={version.minecraftVersion}
+                  >
+                    Java {version.javaRelease} · {version.apiVersion}
+                  </option>
+                ))}
+              </datalist>
+              <small>
+                {capabilitiesLoading
+                  ? "Offizielle Versionen werden geladen..."
+                  : selectedVersion
+                    ? `API ${selectedVersion.apiVersion}`
+                    : "Exakte Version, vollständige API-Version, latest oder z. B. 1.21.x"}
+              </small>
             </label>
             <label>
               <span>Java</span>
               <select
                 value={javaRelease}
                 disabled={buildRunning}
-                onChange={(event) => setJavaRelease(Number(event.target.value) as 17 | 21)}
+                onChange={(event) => setJavaRelease(
+                  Number(event.target.value) as PluginBuildJavaRelease
+                )}
               >
+                <option value={0}>Automatisch · Java {automaticJavaRelease}</option>
+                <option value={25}>Java 25</option>
                 <option value={21}>Java 21</option>
                 <option value={17}>Java 17</option>
+                <option value={16}>Java 16</option>
+                <option value={11}>Java 11</option>
+                <option value={8}>Java 8</option>
               </select>
+              <small>Automatisch verhindert unpassende Minecraft-/Java-Kombinationen.</small>
             </label>
           </div>
+
+          {capabilitiesError && (
+            <p className="minecraft-plugin-catalog-warning">
+              <AlertTriangle size={14} />
+              {capabilitiesError}
+            </p>
+          )}
 
           <div className="minecraft-plugin-build-actions">
             <button
@@ -2981,7 +3082,8 @@ function MinecraftPluginBuildPanel({ source }: { source: string }) {
                 <small>
                   {build.status === "succeeded"
                     ? "Der Download bleibt standardmäßig 24 Stunden verfügbar."
-                    : build.error || `${build.platform} ${build.apiVersion} mit Java ${build.javaRelease}`}
+                    : build.error || `${build.platform} ${build.minecraftVersion || build.apiVersion} `
+                      + `mit Java ${build.javaRelease} · API ${build.apiVersion}`}
                 </small>
               </div>
             </div>

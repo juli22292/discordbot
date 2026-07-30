@@ -49,7 +49,9 @@ public final class PluginBuilderServer {
     private static final SecureRandom RANDOM = new SecureRandom();
     private static final Pattern JOB_ID_PATTERN = Pattern.compile("^[a-f0-9]{32}$");
     private static final Pattern PROJECT_NAME_PATTERN = Pattern.compile("^[\\p{L}\\p{N}][\\p{L}\\p{N} ._-]{0,63}$");
-    private static final Pattern API_VERSION_PATTERN = Pattern.compile("^[0-9][0-9A-Za-z.+_-]{0,47}$");
+    private static final Pattern VERSION_REQUEST_PATTERN = Pattern.compile(
+            "^(?i:latest|stable|newest|neueste|aktuell|v?[0-9][0-9A-Za-z.*+_-]{0,47})$"
+    );
     private static final Pattern SAFE_PATH_PATTERN = Pattern.compile("^[A-Za-z0-9_./-]{1,240}$");
     private static final Set<String> RESOURCE_EXTENSIONS = Set.of(
             ".yml", ".yaml", ".json", ".properties", ".conf", ".txt", ".toml", ".mcmeta", ".lang"
@@ -71,6 +73,7 @@ public final class PluginBuilderServer {
     private final ExecutorService buildExecutor;
     private final ScheduledExecutorService maintenanceExecutor;
     private final Map<String, BuildJob> jobs = new ConcurrentHashMap<>();
+    private final MinecraftVersionCatalog versionCatalog;
 
     private PluginBuilderServer(BuilderConfig config) throws IOException {
         this.config = config;
@@ -78,8 +81,10 @@ public final class PluginBuilderServer {
         this.httpExecutor = Executors.newVirtualThreadPerTaskExecutor();
         this.buildExecutor = Executors.newFixedThreadPool(config.maxConcurrentBuilds());
         this.maintenanceExecutor = Executors.newSingleThreadScheduledExecutor();
+        this.versionCatalog = new MinecraftVersionCatalog(config.versionCatalogTtl());
         server.setExecutor(httpExecutor);
         server.createContext("/health", this::handleHealth);
+        server.createContext("/v1/capabilities", this::handleCapabilities);
         server.createContext("/v1/builds", this::handleBuilds);
     }
 
@@ -127,10 +132,36 @@ public final class PluginBuilderServer {
         sendJson(exchange, 200, Map.of(
                 "status", "ready",
                 "service", "modmailbot-plugin-builder",
-                "version", "1.0.0",
+                "version", "2.0.0",
+                "javaRuntime", Runtime.version().feature(),
+                "platforms", MinecraftVersionCatalog.platforms().stream()
+                        .map(MinecraftVersionCatalog.PlatformDefinition::key)
+                        .toList(),
                 "queuedJobs", jobs.values().stream().filter(job -> job.status == BuildStatus.QUEUED).count(),
                 "runningJobs", jobs.values().stream().filter(job -> job.status == BuildStatus.RUNNING).count()
         ));
+    }
+
+    private void handleCapabilities(HttpExchange exchange) throws IOException {
+        if (!isAuthorized(exchange)) {
+            sendError(exchange, 401, "unauthorized", "Die Builder-Signatur ist ungültig.");
+            return;
+        }
+        if (!"GET".equals(exchange.getRequestMethod())) {
+            sendError(exchange, 405, "method_not_allowed", "Diese Methode wird nicht unterstützt.");
+            return;
+        }
+
+        try {
+            sendJson(exchange, 200, Map.of(
+                    "builderVersion", "2.0.0",
+                    "javaRuntime", Runtime.version().feature(),
+                    "javaReleases", MinecraftVersionCatalog.SUPPORTED_JAVA_RELEASES,
+                    "platforms", versionCatalog.capabilities()
+            ));
+        } catch (MinecraftVersionCatalog.CatalogException error) {
+            sendError(exchange, 503, "version_catalog_unavailable", error.getMessage());
+        }
     }
 
     private void handleBuilds(HttpExchange exchange) throws IOException {
@@ -219,6 +250,37 @@ public final class PluginBuilderServer {
             return;
         }
 
+        MinecraftVersionCatalog.ResolvedTarget target;
+        try {
+            target = versionCatalog.resolve(
+                    request.platform,
+                    request.apiVersion,
+                    request.javaRelease
+            );
+        } catch (MinecraftVersionCatalog.VersionResolutionException error) {
+            sendError(exchange, 422, "unsupported_build_target", error.getMessage());
+            return;
+        } catch (MinecraftVersionCatalog.CatalogException error) {
+            sendError(exchange, 503, "version_catalog_unavailable", error.getMessage());
+            return;
+        }
+        if (target.javaRelease() > Runtime.version().feature()) {
+            sendError(
+                    exchange,
+                    503,
+                    "builder_java_too_old",
+                    "Der Builder läuft mit Java " + Runtime.version().feature()
+                            + ", benötigt für " + target.minecraftVersion() + " aber Java "
+                            + target.javaRelease() + ". Verwende das Java-25-Egg."
+            );
+            return;
+        }
+
+        request.requestedVersion = target.requestedVersion();
+        request.minecraftVersion = target.minecraftVersion();
+        request.apiVersion = target.apiVersion();
+        request.javaRelease = target.javaRelease();
+
         String jobId = randomJobId();
         BuildJob job = BuildJob.queued(jobId, request);
         jobs.put(jobId, job);
@@ -239,14 +301,16 @@ public final class PluginBuilderServer {
         }
 
         String platform = request.platform == null ? "" : request.platform.toLowerCase(Locale.ROOT);
-        if (!Platform.SUPPORTED.containsKey(platform)) {
-            errors.add("Unterstützte Plattformen sind Paper, Purpur und Spigot.");
+        if (MinecraftVersionCatalog.platform(platform).isEmpty()) {
+            errors.add("Unterstützte Plattformen sind Paper, Folia, Purpur und Spigot.");
         }
-        if (request.apiVersion == null || !API_VERSION_PATTERN.matcher(request.apiVersion.trim()).matches()) {
-            errors.add("Die Minecraft/API-Version ist ungültig.");
+        if (request.apiVersion == null || !VERSION_REQUEST_PATTERN.matcher(request.apiVersion.trim()).matches()) {
+            errors.add("Die Minecraft-Version ist ungültig. Nutze zum Beispiel 1.21.4, 26.2, 1.21.x oder latest.");
         }
-        if (request.javaRelease != 17 && request.javaRelease != 21) {
-            errors.add("Als Java-Version sind nur 17 und 21 erlaubt.");
+        if (request.javaRelease != MinecraftVersionCatalog.AUTO_JAVA_RELEASE
+                && !MinecraftVersionCatalog.SUPPORTED_JAVA_RELEASES.contains(request.javaRelease)) {
+            errors.add("Nutze die automatische Java-Auswahl oder Java "
+                    + MinecraftVersionCatalog.SUPPORTED_JAVA_RELEASES + ".");
         }
         if (request.files == null || request.files.isEmpty()) {
             errors.add("Das Projekt enthält keine Dateien.");
@@ -377,7 +441,7 @@ public final class PluginBuilderServer {
 
             Path builtJar = findBuiltJar(projectDirectory.resolve("target"))
                     .orElseThrow(() -> new BuildFailure("Maven hat keine Plugin-JAR erzeugt."));
-            String artifactName = sanitizeDownloadName(request.projectName) + "-" + request.apiVersion + ".jar";
+            String artifactName = sanitizeDownloadName(request.projectName) + "-" + request.minecraftVersion + ".jar";
             Path artifactPath = config.artifactsDirectory().resolve(job.id + "-" + artifactName).normalize();
             ensureWithin(config.artifactsDirectory(), artifactPath);
             Files.copy(builtJar, artifactPath, StandardCopyOption.REPLACE_EXISTING);
@@ -404,8 +468,9 @@ public final class PluginBuilderServer {
     }
 
     private String generatedPom(BuildRequest request, String artifactId) {
-        Platform platform = Platform.SUPPORTED.get(request.platform.toLowerCase(Locale.ROOT));
-        String apiVersion = normalizeApiVersion(request.apiVersion.trim());
+        MinecraftVersionCatalog.PlatformDefinition platform = MinecraftVersionCatalog
+                .platform(request.platform)
+                .orElseThrow();
         return """
                 <?xml version="1.0" encoding="UTF-8"?>
                 <project xmlns="http://maven.apache.org/POM/4.0.0"
@@ -462,21 +527,14 @@ public final class PluginBuilderServer {
                 """.formatted(
                 xml(artifactId),
                 request.javaRelease,
-                xml(platform.id),
-                xml(platform.repository),
-                xml(platform.groupId),
-                xml(platform.artifactId),
-                xml(apiVersion),
+                xml(platform.repositoryId()),
+                xml(platform.repositoryUrl()),
+                xml(platform.groupId()),
+                xml(platform.artifactId()),
+                xml(request.apiVersion),
                 xml(artifactId),
                 request.javaRelease
         );
-    }
-
-    private String normalizeApiVersion(String version) {
-        if (version.contains("-R") || version.contains(".build.")) {
-            return version;
-        }
-        return version + "-R0.1-SNAPSHOT";
     }
 
     private void downloadArtifact(HttpExchange exchange, BuildJob job) throws IOException {
@@ -703,37 +761,11 @@ public final class PluginBuilderServer {
         sendJson(exchange, status, Map.of("error", Map.of("code", code, "message", message)));
     }
 
-    private record Platform(
-            String id,
-            String repository,
-            String groupId,
-            String artifactId
-    ) {
-        private static final Map<String, Platform> SUPPORTED = Map.of(
-                "paper", new Platform(
-                        "papermc",
-                        "https://repo.papermc.io/repository/maven-public/",
-                        "io.papermc.paper",
-                        "paper-api"
-                ),
-                "purpur", new Platform(
-                        "purpur",
-                        "https://repo.purpurmc.org/snapshots",
-                        "org.purpurmc.purpur",
-                        "purpur-api"
-                ),
-                "spigot", new Platform(
-                        "spigotmc",
-                        "https://hub.spigotmc.org/nexus/content/repositories/snapshots/",
-                        "org.spigotmc",
-                        "spigot-api"
-                )
-        );
-    }
-
     public static final class BuildRequest {
         public String projectName;
         public String platform;
+        public String requestedVersion;
+        public String minecraftVersion;
         public String apiVersion;
         public int javaRelease;
         public List<BuildFile> files;
@@ -762,6 +794,8 @@ public final class PluginBuilderServer {
         public BuildStatus status;
         public String projectName;
         public String platform;
+        public String requestedVersion;
+        public String minecraftVersion;
         public String apiVersion;
         public int javaRelease;
         public Instant createdAt;
@@ -781,7 +815,9 @@ public final class PluginBuilderServer {
             job.status = BuildStatus.QUEUED;
             job.projectName = request.projectName.trim();
             job.platform = request.platform.toLowerCase(Locale.ROOT);
-            job.apiVersion = request.apiVersion.trim();
+            job.requestedVersion = request.requestedVersion;
+            job.minecraftVersion = request.minecraftVersion;
+            job.apiVersion = request.apiVersion;
             job.javaRelease = request.javaRelease;
             job.createdAt = Instant.now();
             return job;
@@ -793,6 +829,8 @@ public final class PluginBuilderServer {
             response.put("status", status.name().toLowerCase(Locale.ROOT));
             response.put("projectName", projectName);
             response.put("platform", platform);
+            response.put("requestedVersion", requestedVersion);
+            response.put("minecraftVersion", minecraftVersion);
             response.put("apiVersion", apiVersion);
             response.put("javaRelease", javaRelease);
             response.put("createdAt", createdAt);
@@ -822,7 +860,8 @@ public final class PluginBuilderServer {
             int maxLogBytes,
             int maxLogCharacters,
             Duration buildTimeout,
-            Duration artifactTtl
+            Duration artifactTtl,
+            Duration versionCatalogTtl
     ) {
         private static BuilderConfig fromEnvironment() {
             String apiSecret = requiredEnvironment("PLUGIN_BUILDER_API_SECRET");
@@ -848,7 +887,8 @@ public final class PluginBuilderServer {
                     integer(environment("PLUGIN_BUILDER_MAX_LOG_BYTES", "262144"), 8192, 1048576, "PLUGIN_BUILDER_MAX_LOG_BYTES"),
                     integer(environment("PLUGIN_BUILDER_MAX_LOG_CHARACTERS", "24000"), 2000, 100000, "PLUGIN_BUILDER_MAX_LOG_CHARACTERS"),
                     Duration.ofSeconds(integer(environment("PLUGIN_BUILDER_TIMEOUT_SECONDS", "180"), 30, 600, "PLUGIN_BUILDER_TIMEOUT_SECONDS")),
-                    Duration.ofHours(integer(environment("PLUGIN_BUILDER_ARTIFACT_TTL_HOURS", "24"), 1, 168, "PLUGIN_BUILDER_ARTIFACT_TTL_HOURS"))
+                    Duration.ofHours(integer(environment("PLUGIN_BUILDER_ARTIFACT_TTL_HOURS", "24"), 1, 168, "PLUGIN_BUILDER_ARTIFACT_TTL_HOURS")),
+                    Duration.ofMinutes(integer(environment("PLUGIN_BUILDER_VERSION_CACHE_MINUTES", "15"), 1, 1440, "PLUGIN_BUILDER_VERSION_CACHE_MINUTES"))
             );
         }
 

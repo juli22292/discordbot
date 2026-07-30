@@ -50,10 +50,13 @@ import {
 } from "./server/public-ai";
 import {
   extractMinecraftProjectFiles,
+  parsePluginBuildCapabilities,
   parsePluginBuildResponse,
+  pluginBuildCapabilitiesPrompt,
   pluginBuildStartSchema,
   PluginProjectExtractionError,
   safePluginBuildId,
+  type PluginBuildCapabilities,
   type PluginBuildResponse
 } from "./server/plugin-builder";
 import {
@@ -848,6 +851,9 @@ async function requestGroqPublicChat(
     : env.GROQ_CODING_MODEL?.trim() || "openai/gpt-oss-120b";
   const modelCandidates = [...new Set([preferredModel, generalModel])];
   const providerMessages = compactPublicAiMessages(input.messages);
+  const minecraftCatalogContext = mode === "minecraft"
+    ? await readPluginBuilderKnowledge(env)
+    : "";
 
   try {
     for (const [modelIndex, model] of modelCandidates.entries()) {
@@ -855,7 +861,7 @@ async function requestGroqPublicChat(
       const requestBody: Record<string, unknown> = {
         model,
         messages: [
-          { role: "system", content: buildPublicAiSystemPrompt(mode) },
+          { role: "system", content: buildPublicAiSystemPrompt(mode, minecraftCatalogContext) },
           ...providerMessages
         ]
       };
@@ -1032,6 +1038,41 @@ async function pluginBuilderRequest(
     throw new HttpError(503, "plugin_builder_busy", message);
   }
   throw new HttpError(response.status >= 400 && response.status < 500 ? 422 : 502, "plugin_build_failed", message);
+}
+
+let pluginBuilderCapabilitiesCache: {
+  expiresAt: number;
+  value: PluginBuildCapabilities;
+} | null = null;
+
+async function readPluginBuilderCapabilities(env: Env): Promise<PluginBuildCapabilities> {
+  if (pluginBuilderCapabilitiesCache && pluginBuilderCapabilitiesCache.expiresAt > Date.now()) {
+    return pluginBuilderCapabilitiesCache.value;
+  }
+  const response = await pluginBuilderRequest(env, "/v1/capabilities");
+  let capabilities: PluginBuildCapabilities;
+  try {
+    capabilities = parsePluginBuildCapabilities(await response.json());
+  } catch {
+    throw new HttpError(
+      502,
+      "plugin_builder_response_invalid",
+      "Der Plugin-Builder hat ungültige Versionsdaten geliefert."
+    );
+  }
+  pluginBuilderCapabilitiesCache = {
+    expiresAt: Date.now() + 5 * 60_000,
+    value: capabilities
+  };
+  return capabilities;
+}
+
+async function readPluginBuilderKnowledge(env: Env): Promise<string> {
+  try {
+    return pluginBuildCapabilitiesPrompt(await readPluginBuilderCapabilities(env));
+  } catch {
+    return "";
+  }
 }
 
 async function readPluginBuildResponse(response: Response): Promise<PluginBuildResponse> {
@@ -3467,6 +3508,19 @@ app.post("/api/public/ai/chat", async (c) => {
   const reply = await requestGroqPublicChat(c.env, input);
   const response = json(c, reply);
   response.headers.set("Cache-Control", "no-store");
+  return response;
+});
+
+app.get("/api/public/ai/build-capabilities", async (c) => {
+  const access = await resolvePublicAiAccess(c);
+  if (!access.allowed) {
+    throw new HttpError(403, "public_ai_restricted", "AI+ ist aktuell nur für den Owner verfügbar.");
+  }
+  await requireSession(c);
+
+  const capabilities = await readPluginBuilderCapabilities(c.env);
+  const response = json(c, capabilities);
+  response.headers.set("Cache-Control", "private, no-store");
   return response;
 });
 
