@@ -44,6 +44,29 @@ Groq-Free-Tier bereits vor der Verarbeitung das TPM-Limit ueberschreiten kann.
 Beendet das Modell eine Antwort wegen seiner Laengenbegrenzung, bietet die
 Oberflaeche einen kontrollierten Fortsetzen-Button an.
 
+## Minecraft-Plugin-Compiler
+
+Vollstaendige Paper-, Purpur- und Spigot-Projekte aus dem Minecraft-Modus
+koennen direkt unter der KI-Antwort zu einer JAR kompiliert werden. Der
+Compiler laeuft bewusst nicht im Cloudflare Worker, sondern als isolierter
+Java-21-Dienst auf einem eigenen Pterodactyl-Server. Build-Skripte aus
+KI-Antworten werden ignoriert; der Dienst erzeugt eine feste
+Maven-Konfiguration und akzeptiert nur Java- und Ressourcen-Dateien.
+
+Die komplette Einrichtung steht in
+[`docs/minecraft-plugin-builder.md`](../docs/minecraft-plugin-builder.md).
+
+In Cloudflare werden benoetigt:
+
+```text
+PLUGIN_BUILDER_URL=https://builder.carrothd.de
+PLUGIN_BUILDER_API_SECRET=<derselbe zufaellige Wert wie im Pterodactyl-Builder>
+```
+
+`PLUGIN_BUILDER_API_SECRET` ist ein Secret und darf nicht in `wrangler.jsonc`
+oder Git eingetragen werden. Die URL ist bereits als normale Worker-Variable in
+`wrangler.jsonc` vorbereitet.
+
 ## Bot-Server
 
 Der Bot ruft Sync-Jobs signiert vom Worker ab. Hochgeladene Dateien werden nach

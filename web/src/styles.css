@@ -10993,6 +10993,281 @@ textarea {
   opacity: 0.58;
 }
 
+.minecraft-plugin-build {
+  width: 100%;
+  margin-top: 8px;
+  border: 1px solid color-mix(in srgb, var(--green) 30%, var(--border));
+  border-radius: 8px;
+  overflow: hidden;
+  background: color-mix(in srgb, var(--surface) 86%, transparent);
+}
+
+.minecraft-plugin-build-toggle {
+  width: 100%;
+  min-height: 62px;
+  display: grid;
+  grid-template-columns: 36px minmax(0, 1fr) 20px;
+  align-items: center;
+  gap: 11px;
+  padding: 10px 13px;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+  transition: background 160ms ease;
+}
+
+.minecraft-plugin-build-toggle:hover {
+  background: color-mix(in srgb, var(--green) 8%, transparent);
+}
+
+.minecraft-plugin-build-toggle > span:nth-child(2) {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.minecraft-plugin-build-toggle strong {
+  font-size: 14px;
+  font-weight: 680;
+}
+
+.minecraft-plugin-build-toggle small {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 500;
+  overflow-wrap: anywhere;
+}
+
+.minecraft-plugin-build-toggle > svg {
+  color: var(--muted);
+  transition: transform 180ms ease;
+}
+
+.minecraft-plugin-build.is-expanded .minecraft-plugin-build-toggle > svg {
+  transform: rotate(180deg);
+}
+
+.minecraft-plugin-build-icon {
+  width: 36px;
+  height: 36px;
+  display: grid;
+  place-items: center;
+  border: 1px solid color-mix(in srgb, var(--green) 34%, var(--border));
+  border-radius: 7px;
+  color: var(--green);
+  background: color-mix(in srgb, var(--green) 10%, transparent);
+}
+
+.minecraft-plugin-build-body {
+  display: grid;
+  gap: 14px;
+  padding: 14px;
+  border-top: 1px solid var(--border-soft);
+  animation: public-ai-answer-reveal 260ms ease both;
+}
+
+.minecraft-plugin-build-intro {
+  display: grid;
+  gap: 5px;
+}
+
+.minecraft-plugin-build-intro > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--green);
+  font-size: 12px;
+  font-weight: 680;
+}
+
+.minecraft-plugin-build-intro p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.minecraft-plugin-build-fields {
+  display: grid;
+  grid-template-columns: minmax(0, 1.35fr) minmax(125px, 0.75fr) minmax(145px, 0.8fr) minmax(105px, 0.55fr);
+  gap: 10px;
+}
+
+.minecraft-plugin-build-fields label {
+  min-width: 0;
+  display: grid;
+  gap: 6px;
+}
+
+.minecraft-plugin-build-fields label > span {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 650;
+}
+
+.minecraft-plugin-build-fields input,
+.minecraft-plugin-build-fields select {
+  width: 100%;
+  min-width: 0;
+  height: 40px;
+  padding: 0 11px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  outline: 0;
+  background: var(--field-bg);
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+  transition: border-color 160ms ease, box-shadow 160ms ease;
+}
+
+.minecraft-plugin-build-fields input:focus,
+.minecraft-plugin-build-fields select:focus {
+  border-color: color-mix(in srgb, var(--blue) 68%, var(--border));
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--blue) 13%, transparent);
+}
+
+.minecraft-plugin-build-fields input:disabled,
+.minecraft-plugin-build-fields select:disabled {
+  cursor: wait;
+  opacity: 0.62;
+}
+
+.minecraft-plugin-build-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 9px;
+}
+
+.minecraft-plugin-download {
+  min-height: 40px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 14px;
+  border: 1px solid color-mix(in srgb, var(--green) 46%, var(--border));
+  border-radius: 7px;
+  background: color-mix(in srgb, var(--green) 12%, var(--surface));
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 680;
+  text-decoration: none;
+  transition: border-color 160ms ease, background 160ms ease, transform 160ms ease;
+}
+
+.minecraft-plugin-download:hover {
+  border-color: color-mix(in srgb, var(--green) 72%, var(--border));
+  background: color-mix(in srgb, var(--green) 18%, var(--surface));
+  color: var(--text);
+  transform: translateY(-1px);
+}
+
+.minecraft-plugin-build-status {
+  min-height: 58px;
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--border-soft);
+  border-radius: 7px;
+  background: color-mix(in srgb, var(--surface-strong) 72%, transparent);
+}
+
+.minecraft-plugin-build-status > span {
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  border-radius: 7px;
+  color: var(--blue);
+  background: color-mix(in srgb, var(--blue) 11%, transparent);
+}
+
+.minecraft-plugin-build-status.succeeded {
+  border-color: color-mix(in srgb, var(--green) 30%, var(--border));
+}
+
+.minecraft-plugin-build-status.succeeded > span {
+  color: var(--green);
+  background: color-mix(in srgb, var(--green) 11%, transparent);
+}
+
+.minecraft-plugin-build-status.failed {
+  border-color: color-mix(in srgb, var(--red) 34%, var(--border));
+}
+
+.minecraft-plugin-build-status.failed > span {
+  color: var(--red);
+  background: color-mix(in srgb, var(--red) 10%, transparent);
+}
+
+.minecraft-plugin-build-status > div {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.minecraft-plugin-build-status strong {
+  color: var(--text);
+  font-size: 13px;
+}
+
+.minecraft-plugin-build-status small {
+  color: var(--muted);
+  font-size: 11px;
+  overflow-wrap: anywhere;
+}
+
+.minecraft-plugin-build-error {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 0;
+  padding: 9px 11px;
+  border: 1px solid color-mix(in srgb, var(--red) 38%, var(--border));
+  border-radius: 7px;
+  color: var(--red);
+  background: color-mix(in srgb, var(--red) 8%, transparent);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.minecraft-plugin-build-error svg {
+  flex: 0 0 auto;
+  margin-top: 1px;
+}
+
+.minecraft-plugin-build-log {
+  border: 1px solid var(--border-soft);
+  border-radius: 7px;
+  overflow: hidden;
+}
+
+.minecraft-plugin-build-log summary {
+  padding: 9px 11px;
+  color: var(--muted-strong);
+  background: color-mix(in srgb, var(--surface-strong) 76%, transparent);
+  font-size: 12px;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.minecraft-plugin-build-log pre {
+  max-height: 280px;
+  margin: 0;
+  padding: 12px;
+  overflow: auto;
+  background: var(--bg-strong);
+  color: var(--muted-strong);
+  font-size: 11px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+}
+
 .public-ai-answer-content {
   min-width: 0;
   display: grid;
@@ -11769,6 +12044,10 @@ textarea {
     max-width: 94%;
   }
 
+  .minecraft-plugin-build-fields {
+    grid-template-columns: 1fr 1fr;
+  }
+
   .public-ai-composer-toolbar {
     align-items: flex-start;
     flex-direction: column;
@@ -11796,6 +12075,23 @@ textarea {
   .public-ai-composer-field button {
     width: 42px;
     height: 42px;
+  }
+}
+
+@media (max-width: 440px) {
+  .minecraft-plugin-build-fields {
+    grid-template-columns: 1fr;
+  }
+
+  .minecraft-plugin-build-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .minecraft-plugin-build-actions > *,
+  .minecraft-plugin-download {
+    width: 100%;
+    justify-content: center;
   }
 }
 

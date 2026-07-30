@@ -3,6 +3,11 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import type { AssistantTarget } from "./server/assistant";
 import type { PublicAiMode, ResolvedPublicAiMode } from "./server/public-ai";
+import {
+  shouldOfferPluginBuild,
+  type PluginBuildPlatform,
+  type PluginBuildResponse
+} from "./server/plugin-builder";
 import type {
   PublicCountingLeaderboard,
   PublicCountingPlayer
@@ -49,6 +54,7 @@ import {
   Globe2,
   HardDrive,
   Headphones,
+  Hammer,
   Home,
   Hash,
   KeyRound,
@@ -66,6 +72,7 @@ import {
   Moon,
   Music2,
   Palette,
+  PackageCheck,
   Pencil,
   PhoneCall,
   PhoneOff,
@@ -2780,6 +2787,225 @@ function readPublicAiMode(): PublicAiMode {
   return "auto";
 }
 
+function inferredMinecraftPluginName(source: string): string {
+  const descriptor = source.match(
+    /src\/main\/resources\/(?:plugin|paper-plugin)\.yml[\s\S]{0,180}?```(?:ya?ml)?\r?\n([\s\S]*?)```/i
+  )?.[1];
+  const declaredName = descriptor?.match(/^\s*name\s*:\s*["']?([^"'#\r\n]+)["']?\s*$/im)?.[1]?.trim();
+  if (!declaredName) return "MinecraftPlugin";
+  return declaredName.replace(/[^\p{L}\p{N} ._-]/gu, "").slice(0, 64) || "MinecraftPlugin";
+}
+
+function MinecraftPluginBuildPanel({ source }: { source: string }) {
+  const [expanded, setExpanded] = useState(false);
+  const [projectName, setProjectName] = useState(() => inferredMinecraftPluginName(source));
+  const [platform, setPlatform] = useState<PluginBuildPlatform>("paper");
+  const [apiVersion, setApiVersion] = useState("");
+  const [javaRelease, setJavaRelease] = useState<17 | 21>(21);
+  const [build, setBuild] = useState<PluginBuildResponse | null>(null);
+  const [starting, setStarting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const buildRunning = build?.status === "queued" || build?.status === "running";
+
+  useEffect(() => {
+    if (!buildRunning || !build?.id) return undefined;
+    let cancelled = false;
+    let requestRunning = false;
+
+    const poll = async () => {
+      if (requestRunning || cancelled) return;
+      requestRunning = true;
+      try {
+        const nextBuild = await api<PluginBuildResponse>(`/api/public/ai/builds/${build.id}`);
+        if (!cancelled) {
+          setBuild(nextBuild);
+          setError(null);
+        }
+      } catch (pollError) {
+        if (!cancelled) {
+          setError(pollError instanceof Error ? pollError.message : "Der Build-Status konnte nicht geladen werden.");
+        }
+      } finally {
+        requestRunning = false;
+      }
+    };
+
+    const timer = window.setInterval(() => void poll(), 1_800);
+    void poll();
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, [build?.id, buildRunning]);
+
+  async function startBuild() {
+    if (!projectName.trim() || !apiVersion.trim() || starting || buildRunning) return;
+    setStarting(true);
+    setError(null);
+    try {
+      const nextBuild = await api<PluginBuildResponse>("/api/public/ai/builds", {
+        method: "POST",
+        body: JSON.stringify({
+          source,
+          projectName: projectName.trim(),
+          platform,
+          apiVersion: apiVersion.trim(),
+          javaRelease
+        })
+      });
+      setBuild(nextBuild);
+    } catch (buildError) {
+      setError(buildError instanceof Error ? buildError.message : "Das Plugin konnte nicht kompiliert werden.");
+    } finally {
+      setStarting(false);
+    }
+  }
+
+  return (
+    <section className={`minecraft-plugin-build ${expanded ? "is-expanded" : ""}`}>
+      <button
+        type="button"
+        className="minecraft-plugin-build-toggle"
+        aria-expanded={expanded}
+        onClick={() => setExpanded((current) => !current)}
+      >
+        <span className="minecraft-plugin-build-icon"><Hammer size={17} /></span>
+        <span>
+          <strong>Plugin kompilieren</strong>
+          <small>Aus diesem Projekt eine fertige JAR erzeugen</small>
+        </span>
+        <ChevronDown size={17} />
+      </button>
+
+      {expanded && (
+        <div className="minecraft-plugin-build-body">
+          <div className="minecraft-plugin-build-intro">
+            <span><ShieldCheck size={15} /> Sicherer Java-21-Builder</span>
+            <p>Build-Skripte aus der KI-Antwort werden ignoriert. Der Compiler nutzt nur die gewählte Server-API.</p>
+          </div>
+
+          <div className="minecraft-plugin-build-fields">
+            <label>
+              <span>Plugin-Name</span>
+              <input
+                value={projectName}
+                maxLength={64}
+                disabled={buildRunning}
+                onChange={(event) => setProjectName(event.target.value)}
+                placeholder="MeinPlugin"
+              />
+            </label>
+            <label>
+              <span>Plattform</span>
+              <select
+                value={platform}
+                disabled={buildRunning}
+                onChange={(event) => setPlatform(event.target.value as PluginBuildPlatform)}
+              >
+                <option value="paper">Paper</option>
+                <option value="purpur">Purpur</option>
+                <option value="spigot">Spigot</option>
+              </select>
+            </label>
+            <label>
+              <span>Minecraft-Version</span>
+              <input
+                value={apiVersion}
+                maxLength={48}
+                disabled={buildRunning}
+                onChange={(event) => setApiVersion(event.target.value)}
+                placeholder="z. B. 1.21.4"
+              />
+            </label>
+            <label>
+              <span>Java</span>
+              <select
+                value={javaRelease}
+                disabled={buildRunning}
+                onChange={(event) => setJavaRelease(Number(event.target.value) as 17 | 21)}
+              >
+                <option value={21}>Java 21</option>
+                <option value={17}>Java 17</option>
+              </select>
+            </label>
+          </div>
+
+          <div className="minecraft-plugin-build-actions">
+            <button
+              type="button"
+              className="primary-action inline"
+              disabled={!projectName.trim() || !apiVersion.trim() || starting || buildRunning}
+              onClick={() => void startBuild()}
+            >
+              {starting || buildRunning ? <Loader2 className="spin" size={17} /> : <Hammer size={17} />}
+              {starting
+                ? "Build wird gestartet"
+                : build?.status === "queued"
+                  ? "Wartet auf Compiler"
+                  : build?.status === "running"
+                    ? "Plugin wird kompiliert"
+                    : build?.status === "succeeded"
+                      ? "Erneut kompilieren"
+                      : "JAR erstellen"}
+            </button>
+
+            {build?.status === "succeeded" && (
+              <a
+                className="minecraft-plugin-download"
+                href={`/api/public/ai/builds/${build.id}/download`}
+                download={build.artifactName || undefined}
+              >
+                <Download size={17} />
+                {build.artifactName || "Plugin herunterladen"}
+              </a>
+            )}
+          </div>
+
+          {build && (
+            <div className={`minecraft-plugin-build-status ${build.status}`} aria-live="polite">
+              <span>
+                {build.status === "succeeded"
+                  ? <PackageCheck size={18} />
+                  : build.status === "failed"
+                    ? <AlertTriangle size={18} />
+                    : <Loader2 className="spin" size={18} />}
+              </span>
+              <div>
+                <strong>
+                  {build.status === "queued" && "Build ist in der Warteschlange"}
+                  {build.status === "running" && "Maven kompiliert dein Plugin"}
+                  {build.status === "succeeded" && "Deine Plugin-JAR ist fertig"}
+                  {build.status === "failed" && "Das Plugin konnte nicht kompiliert werden"}
+                </strong>
+                <small>
+                  {build.status === "succeeded"
+                    ? "Der Download bleibt standardmäßig 24 Stunden verfügbar."
+                    : build.error || `${build.platform} ${build.apiVersion} mit Java ${build.javaRelease}`}
+                </small>
+              </div>
+            </div>
+          )}
+
+          {error && (
+            <p className="minecraft-plugin-build-error" role="alert">
+              <AlertTriangle size={15} />
+              {error}
+            </p>
+          )}
+
+          {build?.status === "failed" && build.logTail && (
+            <details className="minecraft-plugin-build-log">
+              <summary>Compiler-Ausgabe anzeigen</summary>
+              <pre>{build.logTail}</pre>
+            </details>
+          )}
+        </div>
+      )}
+    </section>
+  );
+}
+
 function PublicAiPage({
   accessAllowed,
   accessError,
@@ -2988,6 +3214,9 @@ function PublicAiPage({
                             })}
                           />
                         </React.Suspense>
+                        {shouldOfferPluginBuild(message.mode, message.content) && (
+                          <MinecraftPluginBuildPanel source={message.content} />
+                        )}
                         {message.truncated && index === messages.length - 1 && (
                           <button
                             type="button"

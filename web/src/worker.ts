@@ -49,6 +49,14 @@ import {
   type ResolvedPublicAiMode
 } from "./server/public-ai";
 import {
+  extractMinecraftProjectFiles,
+  parsePluginBuildResponse,
+  pluginBuildStartSchema,
+  PluginProjectExtractionError,
+  safePluginBuildId,
+  type PluginBuildResponse
+} from "./server/plugin-builder";
+import {
   DiscordApiError,
   createDiscordChannelInvite,
   deleteDiscordInvite,
@@ -929,6 +937,112 @@ async function requestGroqPublicChat(
   } catch (error) {
     if (error instanceof HttpError) throw error;
     throw new HttpError(502, "groq_unavailable", "ModmailBot KI ist gerade nicht erreichbar.");
+  }
+}
+
+function pluginBuilderEndpoint(env: Env, path: string): URL {
+  const configuredUrl = env.PLUGIN_BUILDER_URL?.trim();
+  const apiSecret = env.PLUGIN_BUILDER_API_SECRET?.trim();
+  if (!configuredUrl || !apiSecret) {
+    throw new HttpError(
+      503,
+      "plugin_builder_not_configured",
+      "Der Minecraft-Plugin-Compiler ist noch nicht konfiguriert."
+    );
+  }
+  if (apiSecret.length < 32) {
+    throw new HttpError(
+      503,
+      "plugin_builder_secret_invalid",
+      "Das Plugin-Builder-Secret ist zu kurz."
+    );
+  }
+
+  let endpoint: URL;
+  try {
+    endpoint = new URL(configuredUrl);
+  } catch {
+    throw new HttpError(503, "plugin_builder_url_invalid", "Die Plugin-Builder-URL ist ungültig.");
+  }
+  const localDevelopment = endpoint.hostname === "127.0.0.1"
+    || endpoint.hostname === "localhost"
+    || endpoint.hostname === "::1";
+  if (endpoint.protocol !== "https:" && !(localDevelopment && endpoint.protocol === "http:")) {
+    throw new HttpError(
+      503,
+      "plugin_builder_https_required",
+      "Der Plugin-Builder muss über HTTPS erreichbar sein."
+    );
+  }
+
+  endpoint.pathname = `${endpoint.pathname.replace(/\/+$/, "")}${path}`;
+  endpoint.search = "";
+  endpoint.hash = "";
+  return endpoint;
+}
+
+async function pluginBuilderRequest(
+  env: Env,
+  path: string,
+  init: RequestInit = {}
+): Promise<Response> {
+  const endpoint = pluginBuilderEndpoint(env, path);
+  const headers = new Headers(init.headers);
+  headers.set("Authorization", `Bearer ${env.PLUGIN_BUILDER_API_SECRET!.trim()}`);
+  if (!headers.has("Accept")) headers.set("Accept", "application/json");
+  if (init.body) headers.set("Content-Type", "application/json");
+
+  let response: Response;
+  try {
+    response = await fetch(endpoint, {
+      ...init,
+      headers,
+      signal: init.signal ?? AbortSignal.timeout(20_000)
+    });
+  } catch {
+    throw new HttpError(
+      503,
+      "plugin_builder_unavailable",
+      "Der Minecraft-Plugin-Compiler ist gerade nicht erreichbar."
+    );
+  }
+
+  if (response.ok) return response;
+  const payload = await response.clone().json().catch(() => null) as {
+    error?: { code?: unknown; message?: unknown };
+  } | null;
+  const message = typeof payload?.error?.message === "string"
+    ? payload.error.message
+    : "Der Plugin-Builder hat die Anfrage abgelehnt.";
+
+  if (response.status === 401 || response.status === 403) {
+    throw new HttpError(
+      503,
+      "plugin_builder_credentials_invalid",
+      "Cloudflare und der Plugin-Builder verwenden nicht dasselbe Secret."
+    );
+  }
+  if (response.status === 404) {
+    throw new HttpError(404, "plugin_build_not_found", message);
+  }
+  if (response.status === 409) {
+    throw new HttpError(409, "plugin_artifact_not_ready", message);
+  }
+  if (response.status === 429 || response.status === 503) {
+    throw new HttpError(503, "plugin_builder_busy", message);
+  }
+  throw new HttpError(response.status >= 400 && response.status < 500 ? 422 : 502, "plugin_build_failed", message);
+}
+
+async function readPluginBuildResponse(response: Response): Promise<PluginBuildResponse> {
+  try {
+    return parsePluginBuildResponse(await response.json());
+  } catch {
+    throw new HttpError(
+      502,
+      "plugin_builder_response_invalid",
+      "Der Plugin-Builder hat eine ungültige Antwort geliefert."
+    );
   }
 }
 
@@ -3354,6 +3468,82 @@ app.post("/api/public/ai/chat", async (c) => {
   const response = json(c, reply);
   response.headers.set("Cache-Control", "no-store");
   return response;
+});
+
+app.post("/api/public/ai/builds", async (c) => {
+  const access = await resolvePublicAiAccess(c);
+  if (!access.allowed) {
+    throw new HttpError(403, "public_ai_restricted", "AI+ ist aktuell nur für den Owner verfügbar.");
+  }
+  await requireSession(c);
+
+  const input = pluginBuildStartSchema.parse(await readJsonBody(c));
+  let files;
+  try {
+    files = extractMinecraftProjectFiles(input.source);
+  } catch (error) {
+    if (error instanceof PluginProjectExtractionError) {
+      const detail = error.details[0] ? ` ${error.details[0]}` : "";
+      throw new HttpError(422, "plugin_project_incomplete", `${error.message}${detail}`);
+    }
+    throw error;
+  }
+
+  const builderResponse = await pluginBuilderRequest(c.env, "/v1/builds", {
+    method: "POST",
+    body: JSON.stringify({
+      projectName: input.projectName,
+      platform: input.platform,
+      apiVersion: input.apiVersion,
+      javaRelease: input.javaRelease,
+      files
+    })
+  });
+  const build = await readPluginBuildResponse(builderResponse);
+  const response = json(c, build, 202);
+  response.headers.set("Cache-Control", "no-store");
+  return response;
+});
+
+app.get("/api/public/ai/builds/:buildId", async (c) => {
+  const access = await resolvePublicAiAccess(c);
+  if (!access.allowed) {
+    throw new HttpError(403, "public_ai_restricted", "AI+ ist aktuell nur für den Owner verfügbar.");
+  }
+  await requireSession(c);
+
+  const buildId = safePluginBuildId(c.req.param("buildId"));
+  const builderResponse = await pluginBuilderRequest(c.env, `/v1/builds/${buildId}`);
+  const build = await readPluginBuildResponse(builderResponse);
+  const response = json(c, build);
+  response.headers.set("Cache-Control", "no-store");
+  return response;
+});
+
+app.get("/api/public/ai/builds/:buildId/download", async (c) => {
+  const access = await resolvePublicAiAccess(c);
+  if (!access.allowed) {
+    throw new HttpError(403, "public_ai_restricted", "AI+ ist aktuell nur für den Owner verfügbar.");
+  }
+  await requireSession(c);
+
+  const buildId = safePluginBuildId(c.req.param("buildId"));
+  const builderResponse = await pluginBuilderRequest(c.env, `/v1/builds/${buildId}/artifact`, {
+    headers: { "Accept": "application/java-archive" }
+  });
+  if (!builderResponse.body) {
+    throw new HttpError(502, "plugin_artifact_empty", "Der Plugin-Builder hat keine JAR geliefert.");
+  }
+
+  const headers = new Headers();
+  headers.set("Content-Type", builderResponse.headers.get("Content-Type") || "application/java-archive");
+  headers.set(
+    "Content-Disposition",
+    builderResponse.headers.get("Content-Disposition") || `attachment; filename="minecraft-plugin-${buildId}.jar"`
+  );
+  headers.set("Cache-Control", "private, no-store");
+  headers.set("X-Content-Type-Options", "nosniff");
+  return new Response(builderResponse.body, { status: 200, headers });
 });
 
 app.get("/api/me", async (c) => {

@@ -21,6 +21,8 @@ export interface Env {
   GROQ_API_KEY?: string;
   GROQ_MODEL?: string;
   GROQ_CODING_MODEL?: string;
+  PLUGIN_BUILDER_URL?: string;
+  PLUGIN_BUILDER_API_SECRET?: string;
 }
 
 export interface DiscordUser {

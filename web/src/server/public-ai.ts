@@ -109,6 +109,9 @@ function minecraftInstructions(): string[] {
     "Registriere Listener und Commands korrekt im Lebenszyklus. Blockierende Datei-, HTTP- und Datenbankarbeit gehört nicht auf den Server-Thread.",
     "Beachte bei Folia ausdrücklich Region- und Entity-Scheduler. Verwende NMS, Reflection oder versionsgebundene Internals nur auf ausdrücklichen Wunsch.",
     "Nutze Adventure beziehungsweise MiniMessage nur, wenn Zielplattform und Abhängigkeiten dazu passen, und validiere nutzerdefinierte MiniMessage-Inhalte.",
+    "Wenn der Nutzer das Plugin kompilieren oder als fertige JAR herunterladen möchte, liefere ein vollständig kompilierbares Paper-, Purpur- oder Spigot-Projekt. Schreibe vor jeden Java- und Ressourcen-Codeblock den exakten Pfad, zum Beispiel src/main/java/de/beispiel/Plugin.java oder src/main/resources/plugin.yml.",
+    "Der integrierte Compiler erzeugt die Maven-Konfiguration selbst und erlaubt aus Sicherheitsgründen nur die gewählte Server-API sowie das JDK. Verwende für einen direkt kompilierbaren Download daher keine zusätzlichen Bibliotheken, Annotation-Processor, NMS-Zugriffe oder selbst definierten Build-Plugins.",
+    "Achte bei einem kompilierbaren Projekt besonders darauf, dass plugin.yml beziehungsweise paper-plugin.yml, Main-Class, Package, Commands und Permissions exakt mit dem Java-Code übereinstimmen.",
     "Erkläre am Ende knapp den Build-Befehl, den Pfad der erzeugten JAR und die Installation auf dem Server.",
     "Gib bei bestehenden Fehlerlogs zuerst die wahrscheinlichste technische Ursache an und passe den Fix an die tatsächlich gezeigte Plattform und Version an."
   ];

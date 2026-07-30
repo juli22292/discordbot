@@ -1,0 +1,92 @@
+{
+  "_comment": "DO NOT EDIT: FILE GENERATED FOR PTERODACTYL PANEL - PTERODACTYL.IO",
+  "meta": {
+    "version": "PTDL_v2",
+    "update_url": null
+  },
+  "exported_at": "2026-07-31T00:00:00+02:00",
+  "name": "ModmailBot Minecraft Plugin Builder",
+  "author": "admin@carrothd.de",
+  "description": "Isolierter Java-21-Dienst zum kontrollierten Kompilieren von Paper-, Purpur- und Spigot-Plugins aus dem ModmailBot Webpanel.",
+  "features": null,
+  "docker_images": {
+    "Java 21": "ghcr.io/pterodactyl/yolks:java_21"
+  },
+  "file_denylist": [],
+  "startup": "bash start.sh",
+  "config": {
+    "files": "{}",
+    "startup": "{\r\n    \"done\": \"[BUILDER] Bereit auf\"\r\n}",
+    "logs": "{}",
+    "stop": "^C"
+  },
+  "scripts": {
+    "installation": {
+      "script": "#!/bin/bash\nset -e\ncd /mnt/server\ncurl -fsSL https://github.com/juli22292/discordbot/archive/refs/heads/main.tar.gz -o source.tar.gz\nmkdir -p source\ntar -xzf source.tar.gz -C source --strip-components=1\ncp -R source/plugin-builder/. /mnt/server/\nrm -rf source source.tar.gz\nchmod +x start.sh\necho \"Plugin Builder installiert.\"\n",
+      "container": "ghcr.io/pterodactyl/installers:debian",
+      "entrypoint": "bash"
+    }
+  },
+  "variables": [
+    {
+      "name": "Builder API Secret",
+      "description": "Mindestens 32 zufällige Zeichen. Derselbe Wert wird als Cloudflare-Secret PLUGIN_BUILDER_API_SECRET gesetzt.",
+      "env_variable": "PLUGIN_BUILDER_API_SECRET",
+      "default_value": "",
+      "user_viewable": true,
+      "user_editable": true,
+      "rules": "required|string|min:32|max:256",
+      "field_type": "text"
+    },
+    {
+      "name": "Apache Maven Version",
+      "description": "Geprüfte stabile Maven-Version.",
+      "env_variable": "MAVEN_VERSION",
+      "default_value": "3.9.16",
+      "user_viewable": true,
+      "user_editable": false,
+      "rules": "required|string|max:20",
+      "field_type": "text"
+    },
+    {
+      "name": "Parallele Builds",
+      "description": "Wie viele Plugins gleichzeitig kompiliert werden dürfen.",
+      "env_variable": "PLUGIN_BUILDER_CONCURRENCY",
+      "default_value": "2",
+      "user_viewable": true,
+      "user_editable": true,
+      "rules": "required|integer|min:1|max:4",
+      "field_type": "text"
+    },
+    {
+      "name": "Build-Zeitlimit",
+      "description": "Maximale Dauer eines Builds in Sekunden.",
+      "env_variable": "PLUGIN_BUILDER_TIMEOUT_SECONDS",
+      "default_value": "180",
+      "user_viewable": true,
+      "user_editable": true,
+      "rules": "required|integer|min:30|max:600",
+      "field_type": "text"
+    },
+    {
+      "name": "Maximale Warteschlange",
+      "description": "Maximale Anzahl laufender und wartender Builds zusammen.",
+      "env_variable": "PLUGIN_BUILDER_MAX_PENDING_BUILDS",
+      "default_value": "8",
+      "user_viewable": true,
+      "user_editable": true,
+      "rules": "required|integer|min:1|max:32",
+      "field_type": "text"
+    },
+    {
+      "name": "Download-Aufbewahrung",
+      "description": "Stunden, bis fertige JAR-Dateien automatisch gelöscht werden.",
+      "env_variable": "PLUGIN_BUILDER_ARTIFACT_TTL_HOURS",
+      "default_value": "24",
+      "user_viewable": true,
+      "user_editable": true,
+      "rules": "required|integer|min:1|max:168",
+      "field_type": "text"
+    }
+  ]
+}
