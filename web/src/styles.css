@@ -10773,6 +10773,61 @@ textarea {
   line-height: 1.65;
 }
 
+.public-ai-coding-starters {
+  width: min(680px, 100%);
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.public-ai-coding-starters button {
+  min-width: 0;
+  min-height: 48px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 10px 13px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--muted-strong);
+  background: var(--surface-soft);
+  box-shadow: var(--soft-shadow);
+  font-size: 13px;
+  font-weight: 600;
+  transition: color 150ms ease, border-color 150ms ease, background-color 150ms ease, transform 150ms ease;
+}
+
+.public-ai-coding-starters button svg {
+  flex: 0 0 auto;
+  color: var(--blue);
+}
+
+.public-ai-coding-starters button:first-child svg {
+  color: var(--green);
+}
+
+.public-ai-coding-starters button:last-child svg {
+  color: var(--red);
+}
+
+.public-ai-coding-starters button:hover {
+  border-color: rgba(104, 168, 255, 0.42);
+  color: var(--text);
+  background: rgba(104, 168, 255, 0.08);
+  transform: translateY(-1px);
+}
+
+.public-ai-coding-starters button:active {
+  transform: translateY(0);
+}
+
+.public-ai-coding-starters button:focus-visible {
+  outline: 0;
+  box-shadow: var(--focus-ring);
+}
+
 .public-ai-page.has-conversation {
   place-items: stretch center;
   padding-top: 20px;
@@ -10833,6 +10888,20 @@ textarea {
 
 .public-ai-message.assistant .public-ai-message-author {
   color: var(--green);
+}
+
+.public-ai-message-author small {
+  min-height: 22px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 7px;
+  border: 1px solid rgba(47, 191, 122, 0.24);
+  border-radius: 6px;
+  color: var(--muted-strong);
+  background: rgba(47, 191, 122, 0.07);
+  font-size: 10px;
+  font-weight: 600;
 }
 
 .public-ai-message > p {
@@ -11395,14 +11464,64 @@ textarea {
   animation: public-ai-composer-in 480ms cubic-bezier(0.22, 1, 0.36, 1) 80ms both;
 }
 
-.public-ai-composer > label {
-  padding-left: 4px;
+.public-ai-composer-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding-inline: 4px;
+}
+
+.public-ai-composer-toolbar > label {
   color: var(--muted-strong);
   font-size: 13px;
   font-weight: 600;
 }
 
-.public-ai-composer > div {
+.public-ai-mode-selector {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 3px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-soft);
+}
+
+.public-ai-mode-selector button {
+  min-width: 0;
+  height: 29px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 0 9px;
+  border: 0;
+  border-radius: 6px;
+  color: var(--muted);
+  background: transparent;
+  font-size: 11px;
+  font-weight: 600;
+  transition: color 140ms ease, background-color 140ms ease, box-shadow 140ms ease;
+}
+
+.public-ai-mode-selector button:hover {
+  color: var(--text);
+  background: var(--surface-strong);
+}
+
+.public-ai-mode-selector button.is-active {
+  color: var(--blue);
+  background: rgba(104, 168, 255, 0.12);
+  box-shadow: inset 0 0 0 1px rgba(104, 168, 255, 0.24);
+}
+
+.public-ai-mode-selector button:focus-visible {
+  outline: 0;
+  box-shadow: var(--focus-ring);
+}
+
+.public-ai-composer-field {
   position: relative;
   display: grid;
   grid-template-columns: minmax(0, 1fr) 46px;
@@ -11417,12 +11536,12 @@ textarea {
   overflow: hidden;
 }
 
-.public-ai-composer > div:focus-within {
+.public-ai-composer-field:focus-within {
   border-color: rgba(104, 168, 255, 0.55);
   box-shadow: var(--focus-ring), var(--soft-shadow);
 }
 
-.public-ai-composer.is-sending > div::after {
+.public-ai-composer.is-sending .public-ai-composer-field::after {
   content: "";
   position: absolute;
   right: 10px;
@@ -11452,7 +11571,7 @@ textarea {
   color: var(--muted);
 }
 
-.public-ai-composer button {
+.public-ai-composer-field button {
   width: 46px;
   height: 46px;
   display: grid;
@@ -11465,16 +11584,16 @@ textarea {
   transition: transform 150ms ease, filter 150ms ease, opacity 150ms ease;
 }
 
-.public-ai-composer button:hover:not(:disabled) {
+.public-ai-composer-field button:hover:not(:disabled) {
   filter: brightness(1.08);
   transform: translateY(-1px);
 }
 
-.public-ai-composer button:active:not(:disabled) {
+.public-ai-composer-field button:active:not(:disabled) {
   transform: translateY(0) scale(0.92);
 }
 
-.public-ai-composer button:disabled {
+.public-ai-composer-field button:disabled {
   cursor: not-allowed;
   opacity: 0.38;
 }
@@ -11546,6 +11665,16 @@ textarea {
     font-size: 14px;
   }
 
+  .public-ai-coding-starters {
+    grid-template-columns: 1fr;
+    gap: 7px;
+    margin-top: 8px;
+  }
+
+  .public-ai-coding-starters button {
+    min-height: 42px;
+  }
+
   .public-ai-page.has-conversation {
     padding: 8px 10px 12px;
   }
@@ -11565,7 +11694,21 @@ textarea {
     max-width: 94%;
   }
 
-  .public-ai-composer > div {
+  .public-ai-composer-toolbar {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 7px;
+  }
+
+  .public-ai-mode-selector {
+    width: 100%;
+  }
+
+  .public-ai-mode-selector button {
+    flex: 1 1 0;
+  }
+
+  .public-ai-composer-field {
     grid-template-columns: minmax(0, 1fr) 42px;
     padding: 6px;
   }
@@ -11575,7 +11718,7 @@ textarea {
     padding: 10px;
   }
 
-  .public-ai-composer button {
+  .public-ai-composer-field button {
     width: 42px;
     height: 42px;
   }
@@ -11589,7 +11732,7 @@ textarea {
   .public-ai-message.assistant.is-latest .public-ai-answer-content,
   .public-ai-code-header button.is-copied,
   .public-ai-composer,
-  .public-ai-composer.is-sending > div::after,
+  .public-ai-composer.is-sending .public-ai-composer-field::after,
   .public-ai-thinking::after,
   .public-ai-thinking-label,
   .public-ai-thinking-dots i,

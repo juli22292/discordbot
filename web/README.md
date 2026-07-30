@@ -30,9 +30,15 @@ Cloudflare-Secret gesetzt:
 wrangler secret put GROQ_API_KEY
 ```
 
-Die optionale Worker-Variable `GROQ_MODEL` waehlt das Modell aus (Standard:
-`llama-3.3-70b-versatile`). Das Webpanel setzt weder ein Nachrichtenlimit noch
-eine eigene Begrenzung fuer die Antwortlaenge.
+Die optionale Worker-Variable `GROQ_MODEL` waehlt das Modell fuer allgemeine
+Fragen aus (Standard: `llama-3.3-70b-versatile`). Code- und
+Minecraft-Anfragen werden automatisch erkannt und standardmaessig mit
+`openai/gpt-oss-120b` verarbeitet. Dieses Coding-Modell kann optional mit
+`GROQ_CODING_MODEL` ueberschrieben werden. Ist es im Groq-Projekt nicht
+verfuegbar, faellt die Anfrage kontrolliert auf `GROQ_MODEL` zurueck. Das
+Webpanel setzt weder ein Nachrichtenlimit noch eine eigene Begrenzung fuer die
+Antwortlaenge; fuer GPT-OSS wird das vom Anbieter erlaubte Ausgabelimit
+verwendet.
 
 ## Bot-Server
 

@@ -20,6 +20,7 @@ export interface Env {
   PTERODACTYL_SERVER_ID?: string;
   GROQ_API_KEY?: string;
   GROQ_MODEL?: string;
+  GROQ_CODING_MODEL?: string;
 }
 
 export interface DiscordUser {

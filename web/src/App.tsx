@@ -2,6 +2,7 @@ import "@fontsource-variable/inter";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import type { AssistantTarget } from "./server/assistant";
+import type { PublicAiMode, ResolvedPublicAiMode } from "./server/public-ai";
 import type {
   PublicCountingLeaderboard,
   PublicCountingPlayer
@@ -24,12 +25,15 @@ import {
   Ban,
   BadgeCheck,
   BarChart3,
+  Blocks,
   Bot,
+  Bug,
   Check,
   ChevronDown,
   ChevronRight,
   Clock3,
   ClipboardList,
+  Code2,
   Command,
   Copy,
   Crown,
@@ -865,10 +869,12 @@ type PublicAiMessage = {
   id: string;
   role: "user" | "assistant";
   content: string;
+  mode?: ResolvedPublicAiMode;
 };
 
 type PublicAiReply = {
   answer: string;
+  mode: ResolvedPublicAiMode;
 };
 
 type PublicAiAccess = {
@@ -1515,6 +1521,7 @@ const ASSISTANT_QUICK_PROMPTS = [
   "Wo finde ich das Ticket-System?"
 ];
 const PUBLIC_AI_STORAGE_KEY = "modmail-manager-public-ai-chat";
+const PUBLIC_AI_MODE_STORAGE_KEY = "modmail-manager-public-ai-mode";
 const AI_VISIBILITY_CHANGED_EVENT = "modmail-manager-ai-visibility-changed";
 const PublicAiContent = React.lazy(async () => {
   const module = await import("./public-ai-content");
@@ -2714,10 +2721,60 @@ function readPublicAiMessages(): PublicAiMessage[] {
         && (message.role === "user" || message.role === "assistant")
         && "content" in message
         && typeof message.content === "string"
+        && (!("mode" in message)
+          || message.mode === "general"
+          || message.mode === "coding"
+          || message.mode === "minecraft")
       ));
   } catch {
     return [];
   }
+}
+
+const PUBLIC_AI_MODE_OPTIONS: Array<{
+  value: PublicAiMode;
+  label: string;
+  icon: typeof Sparkles;
+}> = [
+  { value: "auto", label: "Auto", icon: Sparkles },
+  { value: "coding", label: "Code", icon: Code2 },
+  { value: "minecraft", label: "Minecraft", icon: Blocks }
+];
+
+const PUBLIC_AI_CODING_STARTERS: Array<{
+  label: string;
+  prompt: string;
+  mode: PublicAiMode;
+  icon: typeof Sparkles;
+}> = [
+  {
+    label: "Minecraft-Plugin",
+    prompt: "Erstelle mir ein vollständiges Minecraft-Plugin. Frage mich zuerst kurz nach Plattform, Minecraft-Version und gewünschter Funktion.",
+    mode: "minecraft",
+    icon: Blocks
+  },
+  {
+    label: "Projekt entwickeln",
+    prompt: "Hilf mir, ein vollständiges Softwareprojekt sauber zu planen und zu programmieren. Frage zuerst nach Sprache, Framework und Anforderungen.",
+    mode: "coding",
+    icon: Code2
+  },
+  {
+    label: "Fehler beheben",
+    prompt: "Analysiere meinen Fehler gründlich, erkläre die konkrete Ursache und liefere anschließend den vollständig korrigierten Code. Ich sende dir jetzt Code und Fehlermeldung.",
+    mode: "coding",
+    icon: Bug
+  }
+];
+
+function readPublicAiMode(): PublicAiMode {
+  try {
+    const stored = window.sessionStorage.getItem(PUBLIC_AI_MODE_STORAGE_KEY);
+    if (stored === "coding" || stored === "minecraft") return stored;
+  } catch {
+    // Auto remains available if session storage is unavailable.
+  }
+  return "auto";
 }
 
 function PublicAiPage({
@@ -2730,6 +2787,7 @@ function PublicAiPage({
   accessLoading: boolean;
 }) {
   const [messages, setMessages] = useState<PublicAiMessage[]>(readPublicAiMessages);
+  const [mode, setMode] = useState<PublicAiMode>(readPublicAiMode);
   const [draft, setDraft] = useState("");
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -2746,6 +2804,14 @@ function PublicAiPage({
       // The chat still works if session storage is unavailable.
     }
   }, [messages]);
+
+  useEffect(() => {
+    try {
+      window.sessionStorage.setItem(PUBLIC_AI_MODE_STORAGE_KEY, mode);
+    } catch {
+      // The selected mode still works for the current page.
+    }
+  }, [mode]);
 
   useEffect(() => {
     const thread = threadRef.current;
@@ -2824,6 +2890,7 @@ function PublicAiPage({
       const response = await api<PublicAiReply>("/api/public/ai/chat", {
         method: "POST",
         body: JSON.stringify({
+          mode,
           messages: conversation.map(({ role, content: messageContent }) => ({
             role,
             content: messageContent
@@ -2835,7 +2902,8 @@ function PublicAiPage({
       const assistantMessage: PublicAiMessage = {
         id: assistantMessageId(),
         role: "assistant",
-        content: response.answer
+        content: response.answer,
+        mode: response.mode
       };
       setMessages((current) => [
         ...current,
@@ -2864,6 +2932,25 @@ function PublicAiPage({
               <span className="public-ai-brand-mark">AI+</span>
               <h1>Wie kann ich dir helfen?</h1>
               <p>Frag nach Wissen, Ideen, Texten, Code oder allem, wobei du gerade Unterstützung brauchst.</p>
+              <div className="public-ai-coding-starters" aria-label="Schnelleinstiege">
+                {PUBLIC_AI_CODING_STARTERS.map((starter) => {
+                  const StarterIcon = starter.icon;
+                  return (
+                    <button
+                      key={starter.label}
+                      type="button"
+                      onClick={() => {
+                        setMode(starter.mode);
+                        setDraft(starter.prompt);
+                        window.setTimeout(() => textareaRef.current?.focus(), 0);
+                      }}
+                    >
+                      <StarterIcon size={17} />
+                      <span>{starter.label}</span>
+                    </button>
+                  );
+                })}
+              </div>
             </div>
           ) : (
             <div className="public-ai-thread" ref={threadRef} aria-live="polite" aria-busy={sending}>
@@ -2875,6 +2962,12 @@ function PublicAiPage({
                   <span className="public-ai-message-author">
                     {message.role === "assistant" ? <Sparkles size={16} /> : <UserRound size={16} />}
                     {message.role === "assistant" ? "ModmailBot KI" : "Du"}
+                    {message.role === "assistant" && message.mode && message.mode !== "general" && (
+                      <small>
+                        {message.mode === "minecraft" ? <Blocks size={12} /> : <Code2 size={12} />}
+                        {message.mode === "minecraft" ? "Minecraft" : "Code"}
+                      </small>
+                    )}
                   </span>
                   {message.role === "assistant"
                     ? (
@@ -2918,8 +3011,27 @@ function PublicAiPage({
               void sendPublicAiMessage();
             }}
           >
-            <label htmlFor="public-ai-message">ModmailBot KI fragen</label>
-            <div>
+            <div className="public-ai-composer-toolbar">
+              <label htmlFor="public-ai-message">ModmailBot KI fragen</label>
+              <div className="public-ai-mode-selector" role="group" aria-label="KI-Modus">
+                {PUBLIC_AI_MODE_OPTIONS.map((option) => {
+                  const ModeIcon = option.icon;
+                  return (
+                    <button
+                      key={option.value}
+                      type="button"
+                      className={mode === option.value ? "is-active" : ""}
+                      aria-pressed={mode === option.value}
+                      onClick={() => setMode(option.value)}
+                    >
+                      <ModeIcon size={14} />
+                      {option.label}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+            <div className="public-ai-composer-field">
               <textarea
                 id="public-ai-message"
                 ref={textareaRef}

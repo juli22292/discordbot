@@ -43,7 +43,9 @@ import { combineMediaChunks, detectImageMimeType, imageExtension, splitMediaByte
 import {
   buildPublicAiSystemPrompt,
   publicAiChatSchema,
-  type PublicAiChatInput
+  resolvePublicAiMode,
+  type PublicAiChatInput,
+  type ResolvedPublicAiMode
 } from "./server/public-ai";
 import {
   DiscordApiError,
@@ -824,55 +826,79 @@ async function resolvePublicAiAccess(c: HonoContext): Promise<{
 async function requestGroqPublicChat(
   env: Env,
   input: PublicAiChatInput
-): Promise<{ answer: string }> {
+): Promise<{ answer: string; mode: ResolvedPublicAiMode }> {
   const apiKey = env.GROQ_API_KEY?.trim();
   if (!apiKey) {
     throw new HttpError(503, "public_ai_not_configured", "ModmailBot KI ist noch nicht konfiguriert.");
   }
 
-  const model = env.GROQ_MODEL?.trim() || "llama-3.3-70b-versatile";
+  const mode = resolvePublicAiMode(input);
+  const generalModel = env.GROQ_MODEL?.trim() || "llama-3.3-70b-versatile";
+  const preferredModel = mode === "general"
+    ? generalModel
+    : env.GROQ_CODING_MODEL?.trim() || "openai/gpt-oss-120b";
+  const modelCandidates = [...new Set([preferredModel, generalModel])];
 
   try {
-    const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        "Authorization": `Bearer ${apiKey}`,
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({
+    for (const [modelIndex, model] of modelCandidates.entries()) {
+      const usesGptOss = /^openai\/gpt-oss-(?:20b|120b)$/i.test(model);
+      const requestBody: Record<string, unknown> = {
         model,
-        temperature: 0.55,
         messages: [
-          { role: "system", content: buildPublicAiSystemPrompt() },
+          { role: "system", content: buildPublicAiSystemPrompt(mode) },
           ...input.messages
         ]
-      })
-    });
+      };
+      if (usesGptOss) {
+        requestBody.max_completion_tokens = 65_536;
+        requestBody.reasoning_effort = mode === "general" ? "medium" : "high";
+        requestBody.reasoning_format = "hidden";
+      } else {
+        if (/^llama-3\.3-70b-versatile$/i.test(model)) {
+          requestBody.max_completion_tokens = 32_768;
+        }
+        requestBody.temperature = mode === "general" ? 0.55 : 0.2;
+      }
 
-    if (!response.ok) {
-      if (response.status === 429) {
-        const retryAfter = response.headers.get("Retry-After");
-        throw new HttpError(
-          429,
-          "groq_rate_limited",
-          retryAfter ? `Groq ist ausgelastet. Bitte in ${retryAfter} Sekunden erneut versuchen.` : "Groq ist gerade ausgelastet. Bitte kurz warten."
-        );
+      const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${apiKey}`,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify(requestBody)
+      });
+
+      if (!response.ok) {
+        if ((response.status === 400 || response.status === 404) && modelIndex < modelCandidates.length - 1) {
+          continue;
+        }
+        if (response.status === 429) {
+          const retryAfter = response.headers.get("Retry-After");
+          throw new HttpError(
+            429,
+            "groq_rate_limited",
+            retryAfter ? `Groq ist ausgelastet. Bitte in ${retryAfter} Sekunden erneut versuchen.` : "Groq ist gerade ausgelastet. Bitte kurz warten."
+          );
+        }
+        if (response.status === 401 || response.status === 403) {
+          throw new HttpError(503, "public_ai_credentials_invalid", "Der Groq API-Key ist ungültig oder nicht mehr aktiv.");
+        }
+        throw new HttpError(502, "groq_unavailable", "Groq konnte gerade keine Antwort liefern.");
       }
-      if (response.status === 401 || response.status === 403) {
-        throw new HttpError(503, "public_ai_credentials_invalid", "Der Groq API-Key ist ungültig oder nicht mehr aktiv.");
+
+      const payload = await response.json() as {
+        choices?: Array<{ message?: { content?: unknown } }>;
+      };
+      const content = payload.choices?.[0]?.message?.content;
+      if (typeof content !== "string" || !content.trim()) {
+        throw new HttpError(502, "groq_response_invalid", "Groq hat keine verwertbare Antwort geliefert.");
       }
-      throw new HttpError(502, "groq_unavailable", "Groq konnte gerade keine Antwort liefern.");
+
+      return { answer: content.trim(), mode };
     }
 
-    const payload = await response.json() as {
-      choices?: Array<{ message?: { content?: unknown } }>;
-    };
-    const content = payload.choices?.[0]?.message?.content;
-    if (typeof content !== "string" || !content.trim()) {
-      throw new HttpError(502, "groq_response_invalid", "Groq hat keine verwertbare Antwort geliefert.");
-    }
-
-    return { answer: content.trim() };
+    throw new HttpError(502, "groq_unavailable", "Groq konnte gerade keine Antwort liefern.");
   } catch (error) {
     if (error instanceof HttpError) throw error;
     throw new HttpError(502, "groq_unavailable", "ModmailBot KI ist gerade nicht erreichbar.");
