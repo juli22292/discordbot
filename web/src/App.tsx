@@ -870,11 +870,13 @@ type PublicAiMessage = {
   role: "user" | "assistant";
   content: string;
   mode?: ResolvedPublicAiMode;
+  truncated?: boolean;
 };
 
 type PublicAiReply = {
   answer: string;
   mode: ResolvedPublicAiMode;
+  truncated: boolean;
 };
 
 type PublicAiAccess = {
@@ -2725,6 +2727,7 @@ function readPublicAiMessages(): PublicAiMessage[] {
           || message.mode === "general"
           || message.mode === "coding"
           || message.mode === "minecraft")
+        && (!("truncated" in message) || typeof message.truncated === "boolean")
       ));
   } catch {
     return [];
@@ -2852,8 +2855,8 @@ function PublicAiPage({
     );
   }
 
-  async function sendPublicAiMessage() {
-    const content = draft.trim();
+  async function sendPublicAiMessage(value = draft) {
+    const content = value.trim();
     if (!content) return;
     if (isAiDeleteCommand(content)) {
       requestAbortRef.current?.abort();
@@ -2903,7 +2906,8 @@ function PublicAiPage({
         id: assistantMessageId(),
         role: "assistant",
         content: response.answer,
-        mode: response.mode
+        mode: response.mode,
+        truncated: response.truncated
       };
       setMessages((current) => [
         ...current,
@@ -2971,18 +2975,33 @@ function PublicAiPage({
                   </span>
                   {message.role === "assistant"
                     ? (
-                      <React.Suspense
-                        fallback={<div className="public-ai-answer-loading" role="status">Antwort wird formatiert...</div>}
-                      >
-                        <PublicAiContent
-                          content={message.content}
-                          onCopyError={() => notify({
-                            tone: "warning",
-                            title: "Kopieren nicht möglich",
-                            text: "Der Code konnte nicht in die Zwischenablage kopiert werden."
-                          })}
-                        />
-                      </React.Suspense>
+                      <>
+                        <React.Suspense
+                          fallback={<div className="public-ai-answer-loading" role="status">Antwort wird formatiert...</div>}
+                        >
+                          <PublicAiContent
+                            content={message.content}
+                            onCopyError={() => notify({
+                              tone: "warning",
+                              title: "Kopieren nicht möglich",
+                              text: "Der Code konnte nicht in die Zwischenablage kopiert werden."
+                            })}
+                          />
+                        </React.Suspense>
+                        {message.truncated && index === messages.length - 1 && (
+                          <button
+                            type="button"
+                            className="public-ai-continue"
+                            disabled={sending}
+                            onClick={() => void sendPublicAiMessage(
+                              "Setze deine vorherige Antwort exakt an der abgebrochenen Stelle fort. Wiederhole bereits ausgegebenen Inhalt nicht."
+                            )}
+                          >
+                            <ArrowRight size={16} />
+                            Antwort fortsetzen
+                          </button>
+                        )}
+                      </>
                     )
                     : <p>{message.content}</p>}
                 </article>

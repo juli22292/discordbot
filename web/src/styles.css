@@ -10918,6 +10918,35 @@ textarea {
   white-space: pre-wrap;
 }
 
+.public-ai-continue {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  width: fit-content;
+  min-height: 38px;
+  margin-top: 16px;
+  padding: 0 14px;
+  border: 1px solid color-mix(in srgb, var(--accent) 46%, var(--line));
+  border-radius: 7px;
+  background: color-mix(in srgb, var(--accent) 10%, var(--surface));
+  color: var(--text);
+  font: inherit;
+  font-weight: 650;
+  cursor: pointer;
+  transition: border-color 160ms ease, background 160ms ease, transform 160ms ease;
+}
+
+.public-ai-continue:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--accent) 72%, var(--line));
+  background: color-mix(in srgb, var(--accent) 16%, var(--surface));
+  transform: translateY(-1px);
+}
+
+.public-ai-continue:disabled {
+  cursor: wait;
+  opacity: 0.58;
+}
+
 .public-ai-answer-content {
   min-width: 0;
   display: grid;

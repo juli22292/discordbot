@@ -42,6 +42,7 @@ import {
 import { combineMediaChunks, detectImageMimeType, imageExtension, splitMediaBytes } from "./server/media";
 import {
   buildPublicAiSystemPrompt,
+  compactPublicAiMessages,
   publicAiChatSchema,
   resolvePublicAiMode,
   type PublicAiChatInput,
@@ -826,7 +827,7 @@ async function resolvePublicAiAccess(c: HonoContext): Promise<{
 async function requestGroqPublicChat(
   env: Env,
   input: PublicAiChatInput
-): Promise<{ answer: string; mode: ResolvedPublicAiMode }> {
+): Promise<{ answer: string; mode: ResolvedPublicAiMode; truncated: boolean }> {
   const apiKey = env.GROQ_API_KEY?.trim();
   if (!apiKey) {
     throw new HttpError(503, "public_ai_not_configured", "ModmailBot KI ist noch nicht konfiguriert.");
@@ -838,6 +839,7 @@ async function requestGroqPublicChat(
     ? generalModel
     : env.GROQ_CODING_MODEL?.trim() || "openai/gpt-oss-120b";
   const modelCandidates = [...new Set([preferredModel, generalModel])];
+  const providerMessages = compactPublicAiMessages(input.messages);
 
   try {
     for (const [modelIndex, model] of modelCandidates.entries()) {
@@ -846,17 +848,13 @@ async function requestGroqPublicChat(
         model,
         messages: [
           { role: "system", content: buildPublicAiSystemPrompt(mode) },
-          ...input.messages
+          ...providerMessages
         ]
       };
       if (usesGptOss) {
-        requestBody.max_completion_tokens = 65_536;
         requestBody.reasoning_effort = mode === "general" ? "medium" : "high";
         requestBody.reasoning_format = "hidden";
       } else {
-        if (/^llama-3\.3-70b-versatile$/i.test(model)) {
-          requestBody.max_completion_tokens = 32_768;
-        }
         requestBody.temperature = mode === "general" ? 0.55 : 0.2;
       }
 
@@ -870,15 +868,37 @@ async function requestGroqPublicChat(
       });
 
       if (!response.ok) {
+        const errorPayload = await response.json().catch(() => null) as {
+          error?: { code?: unknown; message?: unknown; type?: unknown };
+        } | null;
+        const errorCode = typeof errorPayload?.error?.code === "string" ? errorPayload.error.code : "";
+        const errorType = typeof errorPayload?.error?.type === "string" ? errorPayload.error.type : "";
+        const errorMessage = typeof errorPayload?.error?.message === "string" ? errorPayload.error.message : "";
+        const rateLimited = response.status === 429
+          || errorCode.includes("rate_limit")
+          || errorType.includes("rate_limit")
+          || /\b(?:tpm|tokens per minute|rate limit)\b/i.test(errorMessage);
+
         if ((response.status === 400 || response.status === 404) && modelIndex < modelCandidates.length - 1) {
           continue;
         }
-        if (response.status === 429) {
-          const retryAfter = response.headers.get("Retry-After");
+        if (rateLimited) {
+          if (modelIndex < modelCandidates.length - 1) {
+            continue;
+          }
+          const retryAfter = response.headers.get("Retry-After")
+            || response.headers.get("x-ratelimit-reset-tokens");
           throw new HttpError(
             429,
             "groq_rate_limited",
-            retryAfter ? `Groq ist ausgelastet. Bitte in ${retryAfter} Sekunden erneut versuchen.` : "Groq ist gerade ausgelastet. Bitte kurz warten."
+            retryAfter ? `Groq-Tokenlimit erreicht. Bitte in ${retryAfter} erneut versuchen.` : "Groq-Tokenlimit erreicht. Bitte kurz warten."
+          );
+        }
+        if (response.status === 413) {
+          throw new HttpError(
+            413,
+            "groq_request_too_large",
+            "Der aktuelle Chatverlauf ist für Groq zu groß. Starte mit !delete einen neuen Chat oder teile sehr große Inhalte auf."
           );
         }
         if (response.status === 401 || response.status === 403) {
@@ -888,14 +908,21 @@ async function requestGroqPublicChat(
       }
 
       const payload = await response.json() as {
-        choices?: Array<{ message?: { content?: unknown } }>;
+        choices?: Array<{
+          finish_reason?: unknown;
+          message?: { content?: unknown };
+        }>;
       };
       const content = payload.choices?.[0]?.message?.content;
       if (typeof content !== "string" || !content.trim()) {
         throw new HttpError(502, "groq_response_invalid", "Groq hat keine verwertbare Antwort geliefert.");
       }
 
-      return { answer: content.trim(), mode };
+      return {
+        answer: content.trim(),
+        mode,
+        truncated: payload.choices?.[0]?.finish_reason === "length"
+      };
     }
 
     throw new HttpError(502, "groq_unavailable", "Groq konnte gerade keine Antwort liefern.");

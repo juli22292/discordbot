@@ -22,6 +22,50 @@ export const publicAiChatSchema = z.object({
 
 export type PublicAiChatInput = z.infer<typeof publicAiChatSchema>;
 
+export const PUBLIC_AI_PROVIDER_HISTORY_CHARACTERS = 12_000;
+
+function compactLongMessage(content: string, limit: number): string {
+  if (content.length <= limit) return content;
+
+  const marker = "\n\n[... mittlerer Teil für den aktuellen Modellaufruf ausgelassen ...]\n\n";
+  const available = Math.max(0, limit - marker.length);
+  const headLength = Math.ceil(available / 2);
+  const tailLength = Math.floor(available / 2);
+  return `${content.slice(0, headLength)}${marker}${content.slice(-tailLength)}`;
+}
+
+export function compactPublicAiMessages(
+  messages: PublicAiChatInput["messages"],
+  characterBudget = PUBLIC_AI_PROVIDER_HISTORY_CHARACTERS
+): PublicAiChatInput["messages"] {
+  const budget = Math.max(1_000, characterBudget);
+  const selected: PublicAiChatInput["messages"] = [];
+  let remaining = budget;
+
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    const message = messages[index];
+    if (message.content.length <= remaining) {
+      selected.unshift(message);
+      remaining -= message.content.length;
+      continue;
+    }
+
+    if (selected.length === 0) {
+      selected.unshift({
+        ...message,
+        content: compactLongMessage(message.content, remaining)
+      });
+    }
+    break;
+  }
+
+  while (selected.length > 1 && selected[0]?.role === "assistant") {
+    selected.shift();
+  }
+
+  return selected;
+}
+
 const MINECRAFT_REQUEST_PATTERN = /\b(minecraft|paper(?:mc)?|spigot|bukkit|purpur|folia|velocity|bungeecord|plugin\.yml|paper-plugin\.yml|minestom)\b/i;
 const CODING_REQUEST_PATTERN = /(?:\b(code|coding|programmier(?:en|e|t)?|entwick(?:eln|le|lung)|implementier(?:en|e|t)?|debug(?:gen|ging)?|refactor(?:ing)?|kompilier(?:en|t)?|build(?:en)?|repository|projektstruktur|quellcode|source\s*code|stacktrace|traceback|exception|syntaxfehler|typescript|javascript|python|java|kotlin|c#|c\+\+|php|rust|go|sql|html|css|react|discord\.py|node\.?js|gradle|maven|docker)\b|```)/i;
 

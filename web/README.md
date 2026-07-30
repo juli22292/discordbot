@@ -37,8 +37,12 @@ Minecraft-Anfragen werden automatisch erkannt und standardmaessig mit
 `GROQ_CODING_MODEL` ueberschrieben werden. Ist es im Groq-Projekt nicht
 verfuegbar, faellt die Anfrage kontrolliert auf `GROQ_MODEL` zurueck. Das
 Webpanel setzt weder ein Nachrichtenlimit noch eine eigene Begrenzung fuer die
-Antwortlaenge; fuer GPT-OSS wird das vom Anbieter erlaubte Ausgabelimit
-verwendet.
+Antwortlaenge. Fuer den eigentlichen Groq-Aufruf wird nur das aktuelle
+Kontextfenster uebertragen; der vollstaendige sichtbare Chat bleibt im Browser.
+Ein fest reserviertes Maximalbudget wird bewusst nicht gesendet, da dieses im
+Groq-Free-Tier bereits vor der Verarbeitung das TPM-Limit ueberschreiten kann.
+Beendet das Modell eine Antwort wegen seiner Laengenbegrenzung, bietet die
+Oberflaeche einen kontrollierten Fortsetzen-Button an.
 
 ## Bot-Server
 
