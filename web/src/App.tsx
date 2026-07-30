@@ -6500,7 +6500,7 @@ function Dashboard({ path }: { path: string }) {
             <SidebarGroup label="Start" tone="blue">
               <SideLink icon={<LayoutDashboard size={17} />} label="Übersicht" section="overview" current={section} guildId={guildId} />
               <SideLink icon={<Bot size={17} />} label="Bot-Profil" section="profile" current={section} guildId={guildId} />
-              <SideLink icon={<UserCog size={17} />} label="Team-Zugänge" section="team-access" current={section} guildId={guildId} />
+              <SideLink icon={<UserCog size={17} />} label="Team-Zugänge" section="team-access" current={section} guildId={guildId} isNew />
             </SidebarGroup>
             <SidebarGroup label="Community" tone="green">
               <SideLink icon={<Sparkles size={17} />} label="Begrüßung" section="welcome" current={section} guildId={guildId} />
@@ -6513,14 +6513,14 @@ function Dashboard({ path }: { path: string }) {
               <SideLink icon={<Star size={17} />} label="Starboard" section="starboard" current={section} guildId={guildId} />
               <SideLink icon={<Sparkles size={17} />} label="Geburtstage" section="birthdays" current={section} guildId={guildId} />
               <SideLink icon={<Crown size={17} />} label="Badges" section="badges" current={section} guildId={guildId} />
-              <SideLink icon={<UsersRound size={17} />} label="Community Tools" section="community-tools" current={section} guildId={guildId} />
+              <SideLink icon={<UsersRound size={17} />} label="Community Tools" section="community-tools" current={section} guildId={guildId} isNew />
               <SideLink icon={<LifeBuoy size={17} />} label="Ticket-System" section="tickets" current={section} guildId={guildId} />
             </SidebarGroup>
             <SidebarGroup label="Automatisierung" tone="violet">
               <SideLink icon={<Clock3 size={17} />} label="Automationen" section="automations" current={section} guildId={guildId} />
               <SideLink icon={<AtSign size={17} />} label="Auto-Nickname" section="auto-nickname" current={section} guildId={guildId} />
               <SideLink icon={<ClipboardList size={17} />} label="Bewerbungen" section="applications" current={section} guildId={guildId} />
-              <SideLink icon={<BarChart3 size={17} />} label="Server-Statistiken" section="server-stats" current={section} guildId={guildId} />
+              <SideLink icon={<BarChart3 size={17} />} label="Server-Statistiken" section="server-stats" current={section} guildId={guildId} isNew />
               <SideLink icon={<Command size={17} />} label="Slash-Befehle" section="commands" current={section} guildId={guildId} />
               <SideLink icon={<ClipboardList size={17} />} label="Custom Commands" section="custom-commands" current={section} guildId={guildId} />
               <SideLink icon={<ListFilter size={17} />} label="Logging" section="logging" current={section} guildId={guildId} />
@@ -6529,15 +6529,15 @@ function Dashboard({ path }: { path: string }) {
             <SidebarGroup label="Voice & Unterhaltung" tone="amber">
               <SideLink icon={<Mic2 size={17} />} label="Temp-Voice" section="temp-voice" current={section} guildId={guildId} />
               <SideLink icon={<Youtube size={17} />} label="YouTube Music" section="youtube-music" current={section} guildId={guildId} />
-              <SideLink icon={<Headphones size={17} />} label="Live-Player" section="music-live" current={section} guildId={guildId} />
+              <SideLink icon={<Headphones size={17} />} label="Live-Player" section="music-live" current={section} guildId={guildId} isNew />
               <SideLink icon={<Gamepad2 size={17} />} label="Games" section="games" current={section} guildId={guildId} />
-              <SideLink icon={<Server size={17} />} label="Minecraft" section="minecraft" current={section} guildId={guildId} />
+              <SideLink icon={<Server size={17} />} label="Minecraft" section="minecraft" current={section} guildId={guildId} isNew />
             </SidebarGroup>
             <SidebarGroup label="Sicherheit" tone="red">
               <SideLink icon={<ShieldCheck size={17} />} label="Security Center" section="security" current={section} guildId={guildId} />
               <SideLink icon={<AlertTriangle size={17} />} label="Raidmode" section="raidmode" current={section} guildId={guildId} />
               <SideLink icon={<Shield size={17} />} label="Moderation" section="moderation-center" current={section} guildId={guildId} />
-              <SideLink icon={<UserPlus size={17} />} label="Onboarding" section="onboarding" current={section} guildId={guildId} />
+              <SideLink icon={<UserPlus size={17} />} label="Onboarding" section="onboarding" current={section} guildId={guildId} isNew />
               <SideLink icon={<Database size={17} />} label="Backups" section="backups" current={section} guildId={guildId} />
               <SideLink icon={<AlertTriangle size={17} />} label="Gefahrenbereich" section="danger-zone" current={section} guildId={guildId} badge="geplant" />
             </SidebarGroup>
@@ -6669,7 +6669,8 @@ function SideLink({
   section,
   current,
   guildId,
-  badge
+  badge,
+  isNew = false
 }: {
   icon: React.ReactNode;
   label: string;
@@ -6677,11 +6678,18 @@ function SideLink({
   current: string;
   guildId: string;
   badge?: string;
+  isNew?: boolean;
 }) {
   return (
     <button className={`side-link ${current === section ? "active" : ""}`} onClick={() => navigate(`/dashboard/${guildId}/${section}`)}>
       {icon}
       <span className="side-link-label">{label}</span>
+      {isNew && (
+        <span className="side-badge is-new">
+          <Check size={10} strokeWidth={3} aria-hidden="true" />
+          Neu
+        </span>
+      )}
       {badge && <span className="side-badge">{badge}</span>}
     </button>
   );
