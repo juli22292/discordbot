@@ -2995,11 +2995,24 @@ function MinecraftPluginBuildPanel({ source }: { source: string }) {
       {expanded && (
         <div className="minecraft-plugin-build-body">
           <div className="minecraft-plugin-build-intro">
-            <span><ShieldCheck size={15} /> Sicherer Java-25-Builder mit Live-Katalog</span>
-            <p>
-              Der Builder prüft Version und Java direkt gegen die offiziellen API-Repositories.
-              {platform === "folia" && " Folia-Code muss zusätzlich regionsicher sein."}
-            </p>
+            <div>
+              <span><ShieldCheck size={15} /> Live-Katalog aktiv</span>
+              <p>
+                Version und Java werden direkt gegen die offiziellen API-Repositories geprüft.
+                {platform === "folia" && " Folia-Code muss zusätzlich regionsicher sein."}
+              </p>
+            </div>
+            <div className="minecraft-plugin-builder-runtime">
+              <Cpu size={15} />
+              <span>Builder</span>
+              <strong>
+                {capabilitiesLoading
+                  ? "Prüft..."
+                  : capabilities?.javaRuntime
+                    ? `Java ${capabilities.javaRuntime}`
+                    : "Java 25"}
+              </strong>
+            </div>
           </div>
 
           <div className="minecraft-plugin-build-fields">
@@ -3094,35 +3107,45 @@ function MinecraftPluginBuildPanel({ source }: { source: string }) {
           )}
 
           <div className="minecraft-plugin-build-actions">
-            <button
-              type="button"
-              className="primary-action inline"
-              disabled={!projectName.trim() || !apiVersion.trim() || starting || buildRunning}
-              onClick={() => void startBuild()}
-            >
-              {starting || buildRunning ? <Loader2 className="spin" size={17} /> : <Hammer size={17} />}
-              {starting
-                ? "Build wird gestartet"
-                : build?.status === "queued"
-                  ? "Wartet auf Compiler"
-                  : build?.status === "running"
-                    ? "Plugin wird kompiliert"
-                    : build?.status === "succeeded"
-                      ? "Erneut kompilieren"
-                      : "JAR erstellen"}
-            </button>
+            <div className="minecraft-plugin-build-output">
+              <PackageCheck size={18} />
+              <span>
+                <small>Ausgabe</small>
+                <strong>{projectName.trim() || "MinecraftPlugin"}.jar</strong>
+              </span>
+            </div>
 
-            {build?.status === "succeeded" && (
+            <div className="minecraft-plugin-build-buttons">
               <button
                 type="button"
-                className="minecraft-plugin-download"
-                disabled={downloading}
-                onClick={() => void downloadBuildArtifact()}
+                className="primary-action inline"
+                disabled={!projectName.trim() || !apiVersion.trim() || starting || buildRunning}
+                onClick={() => void startBuild()}
               >
-                {downloading ? <Loader2 className="spin" size={17} /> : <Download size={17} />}
-                {downloading ? "Download wird vorbereitet" : build.artifactName || "Plugin herunterladen"}
+                {starting || buildRunning ? <Loader2 className="spin" size={17} /> : <Hammer size={17} />}
+                {starting
+                  ? "Build wird gestartet"
+                  : build?.status === "queued"
+                    ? "Wartet auf Compiler"
+                    : build?.status === "running"
+                      ? "Plugin wird kompiliert"
+                      : build?.status === "succeeded"
+                        ? "Erneut kompilieren"
+                        : "JAR erstellen"}
               </button>
-            )}
+
+              {build?.status === "succeeded" && (
+                <button
+                  type="button"
+                  className="minecraft-plugin-download"
+                  disabled={downloading}
+                  onClick={() => void downloadBuildArtifact()}
+                >
+                  {downloading ? <Loader2 className="spin" size={17} /> : <Download size={17} />}
+                  {downloading ? "Download wird vorbereitet" : build.artifactName || "Plugin herunterladen"}
+                </button>
+              )}
+            </div>
           </div>
 
           {build && (

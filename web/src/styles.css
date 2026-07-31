@@ -11070,11 +11070,21 @@ textarea {
 }
 
 .minecraft-plugin-build-intro {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--border-soft);
+}
+
+.minecraft-plugin-build-intro > div:first-child {
+  min-width: 0;
   display: grid;
   gap: 5px;
 }
 
-.minecraft-plugin-build-intro > span {
+.minecraft-plugin-build-intro > div:first-child > span {
   display: inline-flex;
   align-items: center;
   gap: 7px;
@@ -11090,9 +11100,34 @@ textarea {
   line-height: 1.5;
 }
 
+.minecraft-plugin-builder-runtime {
+  flex: 0 0 auto;
+  min-height: 36px;
+  display: grid;
+  grid-template-columns: auto auto auto;
+  align-items: center;
+  gap: 7px;
+  padding: 0 11px;
+  border: 1px solid color-mix(in srgb, var(--green) 26%, var(--border));
+  border-radius: 7px;
+  background: color-mix(in srgb, var(--green) 7%, var(--field-bg));
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.minecraft-plugin-builder-runtime svg {
+  color: var(--green);
+}
+
+.minecraft-plugin-builder-runtime strong {
+  color: var(--text);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
 .minecraft-plugin-build-fields {
   display: grid;
-  grid-template-columns: minmax(0, 1.3fr) minmax(220px, 0.7fr);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   align-items: start;
   column-gap: 16px;
   row-gap: 14px;
@@ -11191,23 +11226,71 @@ textarea {
 }
 
 .minecraft-plugin-build-actions {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 16px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border-soft);
+}
+
+.minecraft-plugin-build-output {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  color: var(--green);
+}
+
+.minecraft-plugin-build-output > span {
+  min-width: 0;
+  display: grid;
+  gap: 1px;
+}
+
+.minecraft-plugin-build-output small {
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 600;
+}
+
+.minecraft-plugin-build-output strong {
+  overflow: hidden;
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 680;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.minecraft-plugin-build-buttons {
   display: flex;
   align-items: center;
   justify-content: flex-end;
   flex-wrap: wrap;
   gap: 9px;
-  padding-top: 14px;
-  border-top: 1px solid var(--border-soft);
 }
 
-@container minecraft-plugin-builder (min-width: 1020px) {
-  .minecraft-plugin-build-fields {
-    grid-template-columns:
-      minmax(240px, 1.25fr)
-      minmax(170px, 0.72fr)
-      minmax(190px, 0.82fr)
-      minmax(210px, 0.82fr);
-    column-gap: 12px;
+@container minecraft-plugin-builder (max-width: 620px) {
+  .minecraft-plugin-build-intro {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 11px;
+  }
+
+  .minecraft-plugin-build-fields,
+  .minecraft-plugin-build-actions {
+    grid-template-columns: 1fr;
+  }
+
+  .minecraft-plugin-build-buttons {
+    justify-content: stretch;
+  }
+
+  .minecraft-plugin-build-buttons > .primary-action.inline,
+  .minecraft-plugin-build-buttons > .minecraft-plugin-download {
+    width: 100%;
+    justify-content: center;
   }
 }
 
@@ -12173,12 +12256,7 @@ textarea {
     grid-template-columns: 1fr;
   }
 
-  .minecraft-plugin-build-actions {
-    align-items: stretch;
-    flex-direction: column;
-  }
-
-  .minecraft-plugin-build-actions > .primary-action.inline,
+  .minecraft-plugin-build-buttons > .primary-action.inline,
   .minecraft-plugin-download {
     width: 100%;
     justify-content: center;
