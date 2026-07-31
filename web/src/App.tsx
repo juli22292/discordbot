@@ -6,7 +6,6 @@ import type { PublicAiMode, ResolvedPublicAiMode } from "./server/public-ai";
 import {
   shouldOfferPluginBuild,
   type PluginBuildCapabilities,
-  type PluginBuildJavaRelease,
   type PluginBuildPlatform,
   type PluginBuildResponse
 } from "./server/plugin-builder";
@@ -2803,12 +2802,12 @@ function MinecraftPluginBuildPanel({ source }: { source: string }) {
   const [projectName, setProjectName] = useState(() => inferredMinecraftPluginName(source));
   const [platform, setPlatform] = useState<PluginBuildPlatform>("paper");
   const [apiVersion, setApiVersion] = useState("latest");
-  const [javaRelease, setJavaRelease] = useState<PluginBuildJavaRelease>(0);
   const [capabilities, setCapabilities] = useState<PluginBuildCapabilities | null>(null);
   const [capabilitiesLoading, setCapabilitiesLoading] = useState(false);
   const [capabilitiesError, setCapabilitiesError] = useState<string | null>(null);
   const [build, setBuild] = useState<PluginBuildResponse | null>(null);
   const [starting, setStarting] = useState(false);
+  const [downloading, setDownloading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const versionListId = React.useId();
 
@@ -2822,8 +2821,7 @@ function MinecraftPluginBuildPanel({ source }: { source: string }) {
     : null);
   const automaticJavaRelease = selectedVersion?.javaRelease
     ?? platformCapability?.versions[0]?.javaRelease
-    ?? capabilities?.javaRuntime
-    ?? 25;
+    ?? null;
 
   useEffect(() => {
     if (!expanded || capabilities || capabilitiesLoading) return undefined;
@@ -2894,7 +2892,7 @@ function MinecraftPluginBuildPanel({ source }: { source: string }) {
           projectName: projectName.trim(),
           platform,
           apiVersion: apiVersion.trim(),
-          javaRelease
+          javaRelease: 0
         })
       });
       setBuild(nextBuild);
@@ -2902,6 +2900,79 @@ function MinecraftPluginBuildPanel({ source }: { source: string }) {
       setError(buildError instanceof Error ? buildError.message : "Das Plugin konnte nicht kompiliert werden.");
     } finally {
       setStarting(false);
+    }
+  }
+
+  async function downloadBuildArtifact() {
+    if (build?.status !== "succeeded" || downloading) return;
+    setDownloading(true);
+    setError(null);
+    const path = `/api/public/ai/builds/${build.id}/download`;
+    let lastError: Error | null = null;
+
+    try {
+      for (let attempt = 1; attempt <= 3; attempt += 1) {
+        let retryable = true;
+        try {
+          const response = await fetch(path, {
+            credentials: "include",
+            headers: { "Accept": "application/java-archive" }
+          });
+          if (!response.ok) {
+            const payload = await response.json().catch(() => null) as ApiError | null;
+            const message = payload?.error?.message
+              ?? `Der Download ist mit HTTP ${response.status} fehlgeschlagen.`;
+            if ([502, 503, 504].includes(response.status) && attempt < 3) {
+              lastError = new Error(message);
+              await new Promise((resolve) => window.setTimeout(resolve, attempt * 650));
+              continue;
+            }
+            retryable = false;
+            throw new Error(message);
+          }
+
+          const artifact = await response.blob();
+          if (artifact.size === 0) {
+            throw new Error("Der Builder hat eine leere JAR-Datei geliefert.");
+          }
+          const contentType = response.headers.get("Content-Type") ?? "";
+          if (contentType.includes("application/json") || contentType.startsWith("text/")) {
+            throw new Error("Der Builder hat statt einer JAR eine ungültige Antwort geliefert.");
+          }
+
+          const disposition = response.headers.get("Content-Disposition") ?? "";
+          const headerFilename = disposition.match(/filename="([^"]+)"/i)?.[1];
+          const filename = headerFilename || build.artifactName || `minecraft-plugin-${build.id}.jar`;
+          const objectUrl = URL.createObjectURL(artifact);
+          const anchor = document.createElement("a");
+          anchor.href = objectUrl;
+          anchor.download = filename;
+          anchor.hidden = true;
+          document.body.appendChild(anchor);
+          anchor.click();
+          anchor.remove();
+          window.setTimeout(() => URL.revokeObjectURL(objectUrl), 30_000);
+          return;
+        } catch (downloadError) {
+          lastError = downloadError instanceof Error
+            ? downloadError
+            : new Error("Die Plugin-JAR konnte nicht heruntergeladen werden.");
+          if (retryable && attempt < 3) {
+            await new Promise((resolve) => window.setTimeout(resolve, attempt * 650));
+            continue;
+          }
+          throw lastError;
+        }
+      }
+      throw lastError ?? new Error("Die Plugin-JAR konnte nicht heruntergeladen werden.");
+    } catch (downloadError) {
+      setError(
+        downloadError instanceof Error
+          ? downloadError.message
+          : "Die Plugin-JAR konnte nicht heruntergeladen werden."
+      );
+    } finally {
+      setDownloading(false);
     }
   }
 
@@ -2950,7 +3021,6 @@ function MinecraftPluginBuildPanel({ source }: { source: string }) {
                 onChange={(event) => {
                   setPlatform(event.target.value as PluginBuildPlatform);
                   setApiVersion("latest");
-                  setJavaRelease(0);
                   setBuild(null);
                   setError(null);
                 }}
@@ -2979,7 +3049,6 @@ function MinecraftPluginBuildPanel({ source }: { source: string }) {
                 disabled={buildRunning}
                 onChange={(event) => {
                   setApiVersion(event.target.value);
-                  setJavaRelease(0);
                   setBuild(null);
                   setError(null);
                 }}
@@ -3006,22 +3075,14 @@ function MinecraftPluginBuildPanel({ source }: { source: string }) {
             </label>
             <label>
               <span>Java</span>
-              <select
-                value={javaRelease}
-                disabled={buildRunning}
-                onChange={(event) => setJavaRelease(
-                  Number(event.target.value) as PluginBuildJavaRelease
-                )}
-              >
-                <option value={0}>Automatisch · Java {automaticJavaRelease}</option>
-                <option value={25}>Java 25</option>
-                <option value={21}>Java 21</option>
-                <option value={17}>Java 17</option>
-                <option value={16}>Java 16</option>
-                <option value={11}>Java 11</option>
-                <option value={8}>Java 8</option>
-              </select>
-              <small>Automatisch verhindert unpassende Minecraft-/Java-Kombinationen.</small>
+              <div className="minecraft-plugin-java-auto">
+                <ShieldCheck size={16} />
+                <span>Automatisch</span>
+                <strong>
+                  {automaticJavaRelease ? `Java ${automaticJavaRelease}` : "Wird ermittelt"}
+                </strong>
+              </div>
+              <small>Der offizielle Versionskatalog wählt immer die passende Java-Version.</small>
             </label>
           </div>
 
@@ -3052,14 +3113,15 @@ function MinecraftPluginBuildPanel({ source }: { source: string }) {
             </button>
 
             {build?.status === "succeeded" && (
-              <a
+              <button
+                type="button"
                 className="minecraft-plugin-download"
-                href={`/api/public/ai/builds/${build.id}/download`}
-                download={build.artifactName || undefined}
+                disabled={downloading}
+                onClick={() => void downloadBuildArtifact()}
               >
-                <Download size={17} />
-                {build.artifactName || "Plugin herunterladen"}
-              </a>
+                {downloading ? <Loader2 className="spin" size={17} /> : <Download size={17} />}
+                {downloading ? "Download wird vorbereitet" : build.artifactName || "Plugin herunterladen"}
+              </button>
             )}
           </div>
 

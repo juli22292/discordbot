@@ -11152,6 +11152,30 @@ textarea {
   opacity: 0.62;
 }
 
+.minecraft-plugin-java-auto {
+  height: 40px;
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 8px;
+  padding: 0 11px;
+  border: 1px solid color-mix(in srgb, var(--green) 30%, var(--border));
+  border-radius: 7px;
+  background: color-mix(in srgb, var(--green) 7%, var(--field-bg));
+  color: var(--muted-strong);
+  font-size: 13px;
+}
+
+.minecraft-plugin-java-auto svg {
+  color: var(--green);
+}
+
+.minecraft-plugin-java-auto strong {
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 680;
+}
+
 .minecraft-plugin-build-actions {
   display: flex;
   align-items: center;
@@ -11172,14 +11196,20 @@ textarea {
   font-size: 13px;
   font-weight: 680;
   text-decoration: none;
+  cursor: pointer;
   transition: border-color 160ms ease, background 160ms ease, transform 160ms ease;
 }
 
-.minecraft-plugin-download:hover {
+.minecraft-plugin-download:hover:not(:disabled) {
   border-color: color-mix(in srgb, var(--green) 72%, var(--border));
   background: color-mix(in srgb, var(--green) 18%, var(--surface));
   color: var(--text);
   transform: translateY(-1px);
+}
+
+.minecraft-plugin-download:disabled {
+  cursor: wait;
+  opacity: 0.68;
 }
 
 .minecraft-plugin-build-status {

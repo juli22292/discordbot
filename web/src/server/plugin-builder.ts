@@ -87,6 +87,28 @@ export function parsePluginBuildResponse(value: unknown): PluginBuildResponse {
   return builderResponseSchema.parse(value);
 }
 
+const pluginBuilderErrorSchema = z.object({
+  error: z.object({
+    message: z.string().trim().min(1).optional(),
+    details: z.array(z.string().trim().min(1)).optional()
+  })
+});
+
+export function pluginBuilderErrorMessage(
+  value: unknown,
+  fallback = "Der Plugin-Builder hat die Anfrage abgelehnt."
+): string {
+  const parsed = pluginBuilderErrorSchema.safeParse(value);
+  if (!parsed.success) return fallback;
+
+  const message = parsed.data.error.message ?? fallback;
+  const details = [...new Set(parsed.data.error.details ?? [])]
+    .filter((detail) => detail !== message);
+  return details.length > 0
+    ? `${message} ${details.join(" ")}`
+    : message;
+}
+
 const pluginBuildVersionOptionSchema = z.object({
   minecraftVersion: z.string().min(1),
   apiVersion: z.string().min(1),

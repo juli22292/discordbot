@@ -51,6 +51,7 @@ import {
 import {
   extractMinecraftProjectFiles,
   parsePluginBuildCapabilities,
+  pluginBuilderErrorMessage,
   parsePluginBuildResponse,
   pluginBuildCapabilitiesPrompt,
   pluginBuildStartSchema,
@@ -998,28 +999,50 @@ async function pluginBuilderRequest(
   if (!headers.has("Accept")) headers.set("Accept", "application/json");
   if (init.body) headers.set("Content-Type", "application/json");
 
-  let response: Response;
-  try {
-    response = await fetch(endpoint, {
-      ...init,
-      headers,
-      signal: init.signal ?? AbortSignal.timeout(20_000)
-    });
-  } catch {
-    throw new HttpError(
-      503,
-      "plugin_builder_unavailable",
-      "Der Minecraft-Plugin-Compiler ist gerade nicht erreichbar."
-    );
+  const method = (init.method ?? "GET").toUpperCase();
+  const maximumAttempts = method === "GET" && !init.signal ? 3 : 1;
+  const timeoutMs = path.endsWith("/artifact") ? 60_000 : 20_000;
+  let response: Response | null = null;
+
+  for (let attempt = 1; attempt <= maximumAttempts; attempt += 1) {
+    try {
+      response = await fetch(endpoint, {
+        ...init,
+        headers,
+        signal: init.signal ?? AbortSignal.timeout(timeoutMs)
+      });
+    } catch {
+      if (attempt < maximumAttempts) {
+        await new Promise((resolve) => setTimeout(resolve, attempt * 350));
+        continue;
+      }
+      throw new HttpError(
+        503,
+        "plugin_builder_unavailable",
+        "Der Minecraft-Plugin-Compiler ist gerade nicht erreichbar. Bitte prüfe, ob der Builder-Server läuft."
+      );
+    }
+
+    if (response.ok) return response;
+    if (response.status >= 500 && attempt < maximumAttempts) {
+      await new Promise((resolve) => setTimeout(resolve, attempt * 350));
+      continue;
+    }
+    break;
   }
 
-  if (response.ok) return response;
+  if (!response) {
+    throw new HttpError(503, "plugin_builder_unavailable", "Der Minecraft-Plugin-Compiler ist nicht erreichbar.");
+  }
   const payload = await response.clone().json().catch(() => null) as {
-    error?: { code?: unknown; message?: unknown };
+    error?: { code?: unknown; message?: unknown; details?: unknown };
   } | null;
-  const message = typeof payload?.error?.message === "string"
-    ? payload.error.message
-    : "Der Plugin-Builder hat die Anfrage abgelehnt.";
+  const message = pluginBuilderErrorMessage(
+    payload,
+    response.status >= 500
+      ? "Der Builder-Server antwortet gerade nicht zuverlässig. Bitte prüfe seinen Status und versuche es erneut."
+      : "Der Plugin-Builder hat die Anfrage abgelehnt."
+  );
 
   if (response.status === 401 || response.status === 403) {
     throw new HttpError(

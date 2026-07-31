@@ -243,7 +243,7 @@ public final class PluginBuilderServer {
             sendJson(exchange, 400, Map.of(
                     "error", Map.of(
                             "code", "invalid_build",
-                            "message", "Das Plugin-Projekt konnte nicht angenommen werden.",
+                            "message", validationErrors.getFirst(),
                             "details", validationErrors
                     )
             ));

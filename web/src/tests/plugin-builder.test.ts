@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   extractMinecraftProjectFiles,
   parsePluginBuildCapabilities,
+  pluginBuilderErrorMessage,
   pluginBuildCapabilitiesPrompt,
   pluginBuildStartSchema,
   PluginProjectExtractionError,
@@ -103,5 +104,22 @@ name: Duplicate
     expect(prompt).toContain("Folia: aktuell 26.2");
     expect(prompt).toContain("26.2 -> API 26.2.build.1-beta, Java 25");
     expect(prompt).toContain("Folia-Maven-Metadaten");
+  });
+
+  it("keeps concrete builder validation details", () => {
+    expect(pluginBuilderErrorMessage({
+      error: {
+        code: "invalid_build",
+        message: "Das Plugin-Projekt konnte nicht angenommen werden.",
+        details: [
+          "Mindestens eine Java-Datei unter src/main/java wird benötigt.",
+          "src/main/resources/plugin.yml fehlt."
+        ]
+      }
+    })).toBe(
+      "Das Plugin-Projekt konnte nicht angenommen werden. "
+      + "Mindestens eine Java-Datei unter src/main/java wird benötigt. "
+      + "src/main/resources/plugin.yml fehlt."
+    );
   });
 });
