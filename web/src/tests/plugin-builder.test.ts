@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
+import { parse } from "yaml";
 import {
+  applyPluginAuthor,
   extractMinecraftProjectFiles,
   parsePluginBuildCapabilities,
   pluginBuilderErrorMessage,
@@ -61,10 +63,55 @@ name: Duplicate
 `)).toThrow(/mehrfach/);
   });
 
-  it("offers compilation only for complete Minecraft answers", () => {
+  it("offers compilation for Minecraft plugin code without requiring perfect paths", () => {
     expect(shouldOfferPluginBuild("minecraft", COMPLETE_PROJECT)).toBe(true);
+    expect(shouldOfferPluginBuild("minecraft", `
+\`\`\`java
+public final class ExamplePlugin extends JavaPlugin {}
+\`\`\`
+`)).toBe(true);
     expect(shouldOfferPluginBuild("coding", COMPLETE_PROJECT)).toBe(false);
     expect(shouldOfferPluginBuild("minecraft", "Nur eine Erklärung")).toBe(false);
+  });
+
+  it("sets the authenticated Discord name as the only Bukkit author", () => {
+    const files = extractMinecraftProjectFiles(COMPLETE_PROJECT.replace(
+      "main: de.example.HelloPlugin",
+      "main: de.example.HelloPlugin\nauthor: Erfunden\nauthors: [Fake, KI]"
+    ));
+    const descriptor = applyPluginAuthor(files, "Julia Discord").find(
+      (file) => file.path.endsWith("plugin.yml")
+    );
+    const metadata = parse(descriptor?.content ?? "");
+
+    expect(metadata).toMatchObject({ author: "Julia Discord" });
+    expect(metadata).not.toHaveProperty("authors");
+  });
+
+  it("removes AI authors for anonymous builds", () => {
+    const files = extractMinecraftProjectFiles(COMPLETE_PROJECT.replace(
+      "main: de.example.HelloPlugin",
+      "main: de.example.HelloPlugin\nauthor: Erfunden"
+    ));
+    const descriptor = applyPluginAuthor(files, null).find(
+      (file) => file.path.endsWith("plugin.yml")
+    );
+    const metadata = parse(descriptor?.content ?? "");
+
+    expect(metadata).not.toHaveProperty("author");
+    expect(metadata).not.toHaveProperty("authors");
+  });
+
+  it("uses the Paper authors list for authenticated builds", () => {
+    const files = [{
+      path: "src/main/resources/paper-plugin.yml",
+      content: "name: HelloPlugin\nversion: 1.0.0\nmain: de.example.HelloPlugin\n"
+    }];
+    const descriptor = applyPluginAuthor(files, "Julia Discord")[0];
+    const metadata = parse(descriptor.content);
+
+    expect(metadata).toMatchObject({ authors: ["Julia Discord"] });
+    expect(metadata).not.toHaveProperty("author");
   });
 
   it("accepts Folia, automatic Java and modern Minecraft versions", () => {

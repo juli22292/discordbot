@@ -49,6 +49,7 @@ import {
   type ResolvedPublicAiMode
 } from "./server/public-ai";
 import {
+  applyPluginAuthor,
   extractMinecraftProjectFiles,
   parsePluginBuildCapabilities,
   pluginBuilderErrorMessage,
@@ -820,13 +821,7 @@ async function resolvePublicAiAccess(c: HonoContext): Promise<{
   updatedAt: string | null;
 }> {
   const settings = await readAiVisibilitySettings(c.env);
-  let session: ActiveSession | null = null;
-
-  try {
-    session = await getSession(c);
-  } catch {
-    session = null;
-  }
+  const session = await getOptionalSession(c);
 
   const ownerAdmin = canUseOwnerAdmin(session?.user.discordUserId);
   return {
@@ -1324,6 +1319,14 @@ async function getSession(c: HonoContext): Promise<ActiveSession | null> {
       avatar: row.avatar
     }
   };
+}
+
+async function getOptionalSession(c: HonoContext): Promise<ActiveSession | null> {
+  try {
+    return await getSession(c);
+  } catch {
+    return null;
+  }
 }
 
 async function requireSession(c: HonoContext): Promise<ActiveSession> {
@@ -3539,8 +3542,6 @@ app.get("/api/public/ai/build-capabilities", async (c) => {
   if (!access.allowed) {
     throw new HttpError(403, "public_ai_restricted", "AI+ ist aktuell nur für den Owner verfügbar.");
   }
-  await requireSession(c);
-
   const capabilities = await readPluginBuilderCapabilities(c.env);
   const response = json(c, capabilities);
   response.headers.set("Cache-Control", "private, no-store");
@@ -3552,12 +3553,17 @@ app.post("/api/public/ai/builds", async (c) => {
   if (!access.allowed) {
     throw new HttpError(403, "public_ai_restricted", "AI+ ist aktuell nur für den Owner verfügbar.");
   }
-  await requireSession(c);
-
   const input = pluginBuildStartSchema.parse(await readJsonBody(c));
   let files;
   try {
-    files = extractMinecraftProjectFiles(input.source);
+    const session = await getOptionalSession(c);
+    const discordAuthor = session?.user.displayName?.trim()
+      || session?.user.username.trim()
+      || null;
+    files = applyPluginAuthor(
+      extractMinecraftProjectFiles(input.source),
+      discordAuthor
+    );
   } catch (error) {
     if (error instanceof PluginProjectExtractionError) {
       const detail = error.details[0] ? ` ${error.details[0]}` : "";
@@ -3587,8 +3593,6 @@ app.get("/api/public/ai/builds/:buildId", async (c) => {
   if (!access.allowed) {
     throw new HttpError(403, "public_ai_restricted", "AI+ ist aktuell nur für den Owner verfügbar.");
   }
-  await requireSession(c);
-
   const buildId = safePluginBuildId(c.req.param("buildId"));
   const builderResponse = await pluginBuilderRequest(c.env, `/v1/builds/${buildId}`);
   const build = await readPluginBuildResponse(builderResponse);
@@ -3602,8 +3606,6 @@ app.get("/api/public/ai/builds/:buildId/download", async (c) => {
   if (!access.allowed) {
     throw new HttpError(403, "public_ai_restricted", "AI+ ist aktuell nur für den Owner verfügbar.");
   }
-  await requireSession(c);
-
   const buildId = safePluginBuildId(c.req.param("buildId"));
   const builderResponse = await pluginBuilderRequest(c.env, `/v1/builds/${buildId}/artifact`, {
     headers: { "Accept": "application/java-archive" }

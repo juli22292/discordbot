@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { parse, stringify } from "yaml";
 
 export const pluginBuildPlatforms = ["paper", "folia", "purpur", "spigot"] as const;
 export type PluginBuildPlatform = (typeof pluginBuildPlatforms)[number];
@@ -307,11 +308,62 @@ export function extractMinecraftProjectFiles(markdown: string): PluginProjectFil
   return files;
 }
 
+function isYamlRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+export function applyPluginAuthor(
+  files: PluginProjectFile[],
+  discordDisplayName: string | null | undefined
+): PluginProjectFile[] {
+  const author = discordDisplayName?.trim() || null;
+
+  return files.map((file) => {
+    const descriptor = file.path.toLowerCase();
+    const isBukkitDescriptor = descriptor === "src/main/resources/plugin.yml";
+    const isPaperDescriptor = descriptor === "src/main/resources/paper-plugin.yml";
+    if (!isBukkitDescriptor && !isPaperDescriptor) return file;
+
+    let metadata: unknown;
+    try {
+      metadata = parse(file.content);
+    } catch {
+      throw new PluginProjectExtractionError(
+        "Die Plugin-Metadaten enthalten ungültiges YAML.",
+        [file.path]
+      );
+    }
+
+    if (!isYamlRecord(metadata)) {
+      throw new PluginProjectExtractionError(
+        "Die Plugin-Metadaten müssen ein YAML-Objekt sein.",
+        [file.path]
+      );
+    }
+
+    // Authorship is owned by the authenticated website session, never by AI output.
+    delete metadata.author;
+    delete metadata.authors;
+    if (author) {
+      if (isPaperDescriptor) {
+        metadata.authors = [author];
+      } else {
+        metadata.author = author;
+      }
+    }
+
+    return {
+      ...file,
+      content: stringify(metadata, { lineWidth: 0 })
+    };
+  });
+}
+
 export function shouldOfferPluginBuild(mode: string | undefined, content: string): boolean {
   if (mode !== "minecraft") return false;
-  return content.includes("```")
-    && /src\/main\/java\/[A-Za-z0-9_./-]+\.java/.test(content)
-    && /src\/main\/resources\/(?:plugin|paper-plugin)\.yml/.test(content);
+  if (!content.includes("```")) return false;
+
+  return /(?:src\/main\/(?:java|resources)\/|(?:paper-)?plugin\.ya?ml\b|\bextends\s+JavaPlugin\b|\bPluginBootstrap\b|\bPluginInitializer\b|\bJavaPlugin\b)/i.test(content);
 }
 
 export function safePluginBuildId(value: string): string {
