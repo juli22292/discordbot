@@ -1,5 +1,11 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { discordBotInviteUrl, fetchDiscordBotGuild, fetchDiscordGuilds } from "../server/discord";
+import {
+  discordAvatarUrl,
+  discordBotInviteUrl,
+  discordDefaultAvatarUrl,
+  fetchDiscordBotGuild,
+  fetchDiscordGuilds
+} from "../server/discord";
 import type { Env } from "../server/types";
 
 const originalFetch = globalThis.fetch;
@@ -10,6 +16,20 @@ afterEach(() => {
 });
 
 describe("Discord bot helpers", () => {
+  it("builds static and animated Discord avatar URLs", () => {
+    expect(discordAvatarUrl({ id: "1267171819362717828", avatar: "avatar-hash" }))
+      .toBe("https://cdn.discordapp.com/avatars/1267171819362717828/avatar-hash.png?size=128");
+    expect(discordAvatarUrl({ id: "1267171819362717828", avatar: "a_animated-hash" }))
+      .toBe("https://cdn.discordapp.com/avatars/1267171819362717828/a_animated-hash.gif?size=128");
+  });
+
+  it("uses Discord's current default avatar rules when no custom avatar exists", () => {
+    expect(discordAvatarUrl({ id: "1267171819362717828", avatar: null }))
+      .toBe(discordDefaultAvatarUrl({ id: "1267171819362717828" }));
+    expect(discordDefaultAvatarUrl({ id: "123", discriminator: "0042" }))
+      .toBe("https://cdn.discordapp.com/embed/avatars/2.png");
+  });
+
   it("builds callback-enabled bot invite URLs", () => {
     const url = new URL(
       discordBotInviteUrl(

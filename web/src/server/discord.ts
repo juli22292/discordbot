@@ -408,9 +408,29 @@ export async function fetchDiscordApplicationCommands(env: Env): Promise<Discord
   });
 }
 
-export function discordAvatarUrl(user: Pick<DiscordUser, "id" | "avatar">): string | null {
-  if (!user.avatar) return null;
-  return `https://cdn.discordapp.com/avatars/${user.id}/${user.avatar}.png?size=128`;
+export function discordDefaultAvatarUrl(
+  user: Pick<DiscordUser, "id" | "discriminator">
+): string {
+  let index = 0;
+  if (user.discriminator && user.discriminator !== "0") {
+    const discriminator = Number(user.discriminator);
+    index = Number.isFinite(discriminator) ? discriminator % 5 : 0;
+  } else {
+    try {
+      index = Number((BigInt(user.id) >> 22n) % 6n);
+    } catch {
+      index = 0;
+    }
+  }
+  return `https://cdn.discordapp.com/embed/avatars/${index}.png`;
+}
+
+export function discordAvatarUrl(
+  user: Pick<DiscordUser, "id" | "avatar" | "discriminator">
+): string {
+  if (!user.avatar) return discordDefaultAvatarUrl(user);
+  const extension = user.avatar.startsWith("a_") ? "gif" : "png";
+  return `https://cdn.discordapp.com/avatars/${user.id}/${user.avatar}.${extension}?size=128`;
 }
 
 export function discordGuildIconUrl(guild: Pick<DiscordGuild, "id" | "icon">): string | null {

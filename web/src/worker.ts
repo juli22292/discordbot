@@ -567,10 +567,6 @@ async function signedInternalBody(c: HonoContext): Promise<unknown> {
   }
 }
 
-function publicUser(session: ActiveSession): SessionUser {
-  return session.user;
-}
-
 function hasDb(env: Env): boolean {
   return Boolean((env as { DB?: D1Database }).DB);
 }
@@ -3627,9 +3623,32 @@ app.get("/api/public/ai/builds/:buildId/download", async (c) => {
 
 app.get("/api/me", async (c) => {
   const session = await requireSession(c);
+  let user = session.user;
+
+  try {
+    const discordUser = await fetchDiscordUser(session.tokenData);
+    user = {
+      ...session.user,
+      username: discordUser.username,
+      displayName: discordUser.global_name ?? null,
+      avatar: discordAvatarUrl(discordUser)
+    };
+  } catch (error) {
+    if (error instanceof DiscordApiError && error.status === 401) {
+      throw new HttpError(401, "session_required", "Deine Discord-Sitzung ist abgelaufen. Bitte melde dich erneut an.");
+    }
+
+    if (!user.avatar) {
+      user = {
+        ...user,
+        avatar: discordAvatarUrl({ id: user.discordUserId, avatar: null })
+      };
+    }
+  }
+
   return json(c, {
     user: {
-      ...publicUser(session),
+      ...user,
       ownerAdmin: canUseOwnerAdmin(session.user.discordUserId)
     },
     expiresAt: session.expiresAt
