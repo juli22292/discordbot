@@ -169,7 +169,7 @@ function demoResponse(path: string): unknown {
         targetDiscordUserId: "300000000000000002",
         targetDisplayName: "Alex",
         actorDiscordUserId: DEMO_USER_ID,
-        actorDisplayName: "Demo-Modus",
+        actorDisplayName: "Modmail Manager",
         action: "timeout",
         reason: "Wiederholter Spam",
         durationSeconds: 3600,

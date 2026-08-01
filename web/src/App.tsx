@@ -1696,8 +1696,8 @@ const DEMO_USER_ID = "300000000000000001";
 
 const DEMO_USER: User = {
   discordUserId: DEMO_USER_ID,
-  username: "demo",
-  displayName: "Demo-Modus",
+  username: "modmail-manager",
+  displayName: "Modmail Manager",
   avatar: null,
   ownerAdmin: false
 };
@@ -1958,7 +1958,7 @@ function demoApiResponse(path: string, init: RequestInit): { handled: boolean; d
       handled: true,
       data: {
         cases: [
-          { id: "demo-case-1", caseNumber: 42, targetDiscordUserId: "300000000000000002", targetDisplayName: "Alex", actorDiscordUserId: DEMO_USER_ID, actorDisplayName: "Demo-Modus", action: "timeout", reason: "Wiederholter Spam", durationSeconds: 3600, deleteMessageSeconds: 0, syncEventId: null, status: "completed", error: null, createdAt: "2026-07-24T10:10:00.000Z", completedAt: "2026-07-24T10:10:02.000Z" }
+          { id: "demo-case-1", caseNumber: 42, targetDiscordUserId: "300000000000000002", targetDisplayName: "Alex", actorDiscordUserId: DEMO_USER_ID, actorDisplayName: "Modmail Manager", action: "timeout", reason: "Wiederholter Spam", durationSeconds: 3600, deleteMessageSeconds: 0, syncEventId: null, status: "completed", error: null, createdAt: "2026-07-24T10:10:00.000Z", completedAt: "2026-07-24T10:10:02.000Z" }
         ]
       }
     };
@@ -3713,7 +3713,7 @@ function TopNav({ user, demoMode = false }: { user?: User | null; demoMode?: boo
         {demoMode ? (
           <div className="user-chip demo-user-chip">
             <Eye size={18} />
-            <span>Demo-Modus</span>
+            <span>{navUser?.displayName || navUser?.username || "Modmail Manager"}</span>
           </div>
         ) : navUser && (
           <div className="user-chip">
@@ -7421,11 +7421,12 @@ const DEFAULT_WELCOME_DRAFT: WelcomeSettings = {
   }
 };
 
-function replaceTemplateTokens(value: string) {
+function replaceTemplateTokens(value: string, memberName = "Modmail Manager") {
+  const cleanMemberName = memberName.trim().replace(/^@+/, "") || "Modmail Manager";
   const replacements: Record<string, string> = {
-    "{member}": "Niteacfort74",
-    "{member_name}": "Niteacfort74",
-    "{member_mention}": "@Niteacfort74",
+    "{member}": cleanMemberName,
+    "{member_name}": cleanMemberName,
+    "{member_mention}": `@${cleanMemberName}`,
     "{server}": "Modmail Manager Community",
     "{member_count}": "128",
     "{account_created}": "vor 2 Jahren",
@@ -8357,6 +8358,7 @@ const TEMPVOICE_ACTIONS = [
 ] as const;
 
 function TempVoicePage({ guildId }: { guildId: string }) {
+  const me = useApi<{ user: User }>("/api/me", []);
   const settings = useApi<{ tempVoice: TempVoiceSettings }>(`/api/guilds/${guildId}/temp-voice`, [guildId]);
   const channels = useApi<{ channels: ChannelOption[] }>(`/api/guilds/${guildId}/channels`, [guildId]);
   const [draft, setDraft] = useState<TempVoiceSettings>(DEFAULT_TEMP_VOICE_DRAFT);
@@ -8388,9 +8390,10 @@ function TempVoicePage({ guildId }: { guildId: string }) {
     [channels.data]
   );
   const panelChannel = textChannels.find((channel) => channel.id === draft.interfaceChannelId);
+  const previewMemberName = me.data?.user.displayName || me.data?.user.username || "Modmail Manager";
   const namePreview = draft.nameTemplate
-    .replaceAll("{user}", "Niteacfort74")
-    .replaceAll("{name}", "niteacfort74");
+    .replaceAll("{user}", previewMemberName)
+    .replaceAll("{name}", previewMemberName.toLocaleLowerCase("de-DE"));
 
   function toggleCreator(channelId: string) {
     setDraft((current) => ({
@@ -8574,7 +8577,7 @@ function TempVoicePage({ guildId }: { guildId: string }) {
                       onChange={(event) => setDraft({ ...draft, nameTemplate: event.target.value })}
                       placeholder="{user}s Raum"
                     />
-                    <small>Vorschau: {namePreview || "Niteacfort74s Raum"}</small>
+                    <small>Vorschau: {namePreview || `${previewMemberName}s Raum`}</small>
                   </label>
                   <label>
                     Benutzerlimit
@@ -8961,6 +8964,7 @@ function LoggingPage({ guildId }: { guildId: string }) {
 }
 
 function WelcomePage({ guildId }: { guildId: string }) {
+  const me = useApi<{ user: User }>("/api/me", []);
   const welcome = useApi<{ welcome: WelcomeSettings }>(`/api/guilds/${guildId}/welcome`, [guildId]);
   const channels = useApi<{ channels: ChannelOption[] }>(`/api/guilds/${guildId}/channels`, [guildId]);
   const roles = useApi<{ roles: RoleOption[] }>(`/api/guilds/${guildId}/roles`, [guildId]);
@@ -8996,6 +9000,7 @@ function WelcomePage({ guildId }: { guildId: string }) {
     [roles.data, draft.embed.allowedRoleIds]
   );
   const imageUrl = draft.embed.imageMediaKey ? `/api/guilds/${guildId}/media?key=${encodeURIComponent(draft.embed.imageMediaKey)}` : draft.embed.imageUrl;
+  const previewMemberName = me.data?.user.displayName || me.data?.user.username || "Modmail Manager";
   const loading = (welcome.loading && !welcome.data) || (channels.loading && !channels.data) || (roles.loading && !roles.data);
   const loadError = welcome.error || channels.error || roles.error;
 
@@ -9336,12 +9341,12 @@ function WelcomePage({ guildId }: { guildId: string }) {
               <div className="discord-avatar">M</div>
               <div className="discord-message-body">
                 <strong>Modmail Manager <small>gerade eben</small></strong>
-                <p>{replaceTemplateTokens(draft.message) || "Keine Nachricht gesetzt."}</p>
+                <p>{replaceTemplateTokens(draft.message, previewMemberName) || "Keine Nachricht gesetzt."}</p>
                 {draft.embed.useEmbed && (
                   <div className="welcome-embed-preview" style={{ borderLeftColor: draft.embed.color }}>
                     <div>
-                      <strong>{replaceTemplateTokens(draft.embed.title) || "Willkommen"}</strong>
-                      <p>{replaceTemplateTokens(draft.embed.description) || "Embed-Beschreibung"}</p>
+                      <strong>{replaceTemplateTokens(draft.embed.title, previewMemberName) || "Willkommen"}</strong>
+                      <p>{replaceTemplateTokens(draft.embed.description, previewMemberName) || "Embed-Beschreibung"}</p>
                     </div>
                     {imageUrl && draft.embed.imageMode !== "none" && (
                       <div className={`welcome-image-preview ${draft.embed.imageMode}`}>
