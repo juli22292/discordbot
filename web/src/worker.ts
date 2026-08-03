@@ -58,6 +58,7 @@ import {
   pluginBuildStartSchema,
   PluginProjectExtractionError,
   safePluginBuildId,
+  shouldOfferPluginBuild,
   type PluginBuildCapabilities,
   type PluginBuildResponse
 } from "./server/plugin-builder";
@@ -846,6 +847,7 @@ async function requestGroqPublicChat(
   const minecraftCatalogContext = mode === "minecraft"
     ? await readPluginBuilderKnowledge(env)
     : "";
+  const systemPrompt = buildPublicAiSystemPrompt(mode, minecraftCatalogContext);
 
   try {
     for (const [modelIndex, model] of modelCandidates.entries()) {
@@ -853,7 +855,7 @@ async function requestGroqPublicChat(
       const requestBody: Record<string, unknown> = {
         model,
         messages: [
-          { role: "system", content: buildPublicAiSystemPrompt(mode, minecraftCatalogContext) },
+          { role: "system", content: systemPrompt },
           ...providerMessages
         ]
       };
@@ -924,10 +926,26 @@ async function requestGroqPublicChat(
         throw new HttpError(502, "groq_response_invalid", "Groq hat keine verwertbare Antwort geliefert.");
       }
 
+      const answer = content.trim();
+      const truncated = payload.choices?.[0]?.finish_reason === "length";
+      if (mode === "minecraft" && !truncated && shouldOfferPluginBuild(mode, answer)) {
+        const auditedAnswer = await requestMinecraftQualityAudit({
+          apiKey,
+          model,
+          usesGptOss,
+          systemPrompt,
+          providerMessages,
+          candidate: answer
+        });
+        if (auditedAnswer) {
+          return { answer: auditedAnswer, mode, truncated: false };
+        }
+      }
+
       return {
-        answer: content.trim(),
+        answer,
         mode,
-        truncated: payload.choices?.[0]?.finish_reason === "length"
+        truncated
       };
     }
 
@@ -935,6 +953,81 @@ async function requestGroqPublicChat(
   } catch (error) {
     if (error instanceof HttpError) throw error;
     throw new HttpError(502, "groq_unavailable", "ModmailBot KI ist gerade nicht erreichbar.");
+  }
+}
+
+async function requestMinecraftQualityAudit({
+  apiKey,
+  model,
+  usesGptOss,
+  systemPrompt,
+  providerMessages,
+  candidate
+}: {
+  apiKey: string;
+  model: string;
+  usesGptOss: boolean;
+  systemPrompt: string;
+  providerMessages: PublicAiChatInput["messages"];
+  candidate: string;
+}): Promise<string | null> {
+  const auditInstruction = [
+    "Führe jetzt den abschließenden Engineering- und Compiler-Audit für deine vorherige Minecraft-Projektantwort aus.",
+    "Prüfe jede Datei auf fehlende Klassen, erfundene oder falsche API-Aufrufe, Imports, Packages, Java- und Plattformkompatibilität, Scheduler-Sicherheit, Commands, Permissions, Konfigurationsschlüssel, Ressourcenpfade und Deskriptor-Konsistenz.",
+    "Korrigiere jeden gefundenen Fehler. Verändere die verlangte Funktion nicht und füge keine unnötigen Abhängigkeiten hinzu.",
+    "Antworte ausschließlich mit der vollständigen finalen Projektantwort inklusive aller Dateien. Keine Audit-Erklärung, keine Diffs, keine Auslassungen und kein 'unverändert'."
+  ].join("\n");
+  const requestBody: Record<string, unknown> = {
+    model,
+    messages: [
+      { role: "system", content: systemPrompt },
+      ...providerMessages,
+      { role: "assistant", content: candidate },
+      { role: "user", content: auditInstruction }
+    ]
+  };
+  if (usesGptOss) {
+    requestBody.reasoning_effort = "high";
+    requestBody.reasoning_format = "hidden";
+  } else {
+    requestBody.temperature = 0.1;
+  }
+
+  try {
+    const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${apiKey}`,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify(requestBody)
+    });
+    if (!response.ok) return null;
+
+    const payload = await response.json() as {
+      choices?: Array<{
+        finish_reason?: unknown;
+        message?: { content?: unknown };
+      }>;
+    };
+    if (payload.choices?.[0]?.finish_reason === "length") return null;
+    const auditedContent = payload.choices?.[0]?.message?.content;
+    if (typeof auditedContent !== "string") return null;
+
+    const auditedAnswer = auditedContent.trim();
+    if (!shouldOfferPluginBuild("minecraft", auditedAnswer)) return null;
+
+    const auditedFiles = extractMinecraftProjectFiles(auditedAnswer);
+    try {
+      const candidateFiles = extractMinecraftProjectFiles(candidate);
+      if (auditedFiles.length < candidateFiles.length) return null;
+    } catch {
+      // A review may legitimately repair a candidate that was not extractable yet.
+    }
+    return auditedAnswer;
+  } catch {
+    // The first complete answer remains usable when the optional quality pass fails.
+    return null;
   }
 }
 

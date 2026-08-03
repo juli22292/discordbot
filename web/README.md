@@ -44,6 +44,13 @@ Groq-Free-Tier bereits vor der Verarbeitung das TPM-Limit ueberschreiten kann.
 Beendet das Modell eine Antwort wegen seiner Laengenbegrenzung, bietet die
 Oberflaeche einen kontrollierten Fortsetzen-Button an.
 
+Vollstaendige Minecraft-Projektantworten durchlaufen automatisch einen zweiten
+Engineering-Audit mit demselben Coding-Modell. Dabei werden unter anderem
+Dateivollstaendigkeit, API-Aufrufe, Packages, Commands, Permissions, Scheduler
+und Plugin-Deskriptoren erneut geprueft. Scheitert dieser optionale Audit an
+einem Provider- oder Rate-Limit, liefert die API weiterhin die erste
+vollstaendige Antwort aus.
+
 ## Minecraft-Plugin-Compiler
 
 Vollstaendige Paper-, Folia-, Purpur- und Spigot-Projekte aus dem Minecraft-Modus
