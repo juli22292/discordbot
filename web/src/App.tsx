@@ -2760,7 +2760,7 @@ const PUBLIC_AI_CODING_STARTERS: Array<{
 }> = [
   {
     label: "Minecraft-Plugin",
-    prompt: "Erstelle mir ein vollständiges Minecraft-Plugin. Frage mich zuerst kurz nach Plattform, Minecraft-Version und gewünschter Funktion.",
+    prompt: "Erstelle mir ein vollständiges, direkt kompilierbares Minecraft-Plugin für folgende Funktion: ",
     mode: "minecraft",
     icon: Blocks
   },
@@ -3210,6 +3210,7 @@ function PublicAiPage({
   const threadRef = useRef<HTMLDivElement | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const requestAbortRef = useRef<AbortController | null>(null);
+  const minecraftMode = mode === "minecraft";
 
   useEffect(() => () => requestAbortRef.current?.abort(), []);
 
@@ -3447,7 +3448,9 @@ function PublicAiPage({
             }}
           >
             <div className="public-ai-composer-toolbar">
-              <label htmlFor="public-ai-message">ModmailBot KI fragen</label>
+              <label htmlFor="public-ai-message">
+                {minecraftMode ? <><Blocks size={14} /> Minecraft-Plugin entwickeln</> : "ModmailBot KI fragen"}
+              </label>
               <div className="public-ai-mode-selector" role="group" aria-label="KI-Modus">
                 {PUBLIC_AI_MODE_OPTIONS.map((option) => {
                   const ModeIcon = option.icon;
@@ -3472,7 +3475,7 @@ function PublicAiPage({
                 ref={textareaRef}
                 rows={1}
                 value={draft}
-                placeholder="ModmailBot KI fragen"
+                placeholder={minecraftMode ? "Beschreibe die gewünschte Plugin-Funktion" : "ModmailBot KI fragen"}
                 aria-label="Nachricht an ModmailBot KI"
                 onChange={(event) => setDraft(event.target.value)}
                 onKeyDown={(event) => {

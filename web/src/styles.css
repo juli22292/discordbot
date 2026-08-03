@@ -11996,9 +11996,16 @@ textarea {
 }
 
 .public-ai-composer-toolbar > label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   color: var(--muted-strong);
   font-size: 13px;
   font-weight: 600;
+}
+
+.public-ai-composer-toolbar > label svg {
+  color: var(--green);
 }
 
 .public-ai-mode-selector {

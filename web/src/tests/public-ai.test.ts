@@ -119,6 +119,11 @@ describe("public AI chat helpers", () => {
     );
 
     expect(prompt).toContain("alle benötigten Dateien vollständig");
+    expect(prompt).toContain("Paper und die neueste stabile");
+    expect(prompt).toContain("Plattform, Minecraft-Version, Buildsystem, Package-Name und Java-Version sind allein kein Grund für eine Rückfrage");
+    expect(prompt).toContain("vollständiges, kompilierbares Projekt");
+    expect(prompt).toContain("simuliere intern einen Build- und Laufzeitcheck");
+    expect(prompt).toContain("vollständiger Dateibaum");
     expect(prompt).toContain("plugin.yml");
     expect(prompt).toContain("Main-Class");
     expect(prompt).toContain("Server-Thread");
