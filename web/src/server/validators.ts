@@ -478,6 +478,8 @@ export const ticketSettingsSchema = z.object({
   formQuestions: z.array(z.string().trim().min(1).max(250)).max(5).default([]),
   selectCategories: z.array(ticketSelectCategorySchema).max(25).default([]),
   ratingEnabled: z.boolean().default(false),
+  allowMultipleTickets: z.boolean().default(true),
+  maxOpenTicketsPerUser: z.number().int().min(1).max(10).default(3),
   autoCloseHours: z.number().int().min(0).max(720).default(0),
   reminderHours: z.number().int().min(0).max(720).default(0),
   slaHours: z.number().int().min(0).max(720).default(0),

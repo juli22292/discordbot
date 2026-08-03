@@ -221,6 +221,10 @@ describe("guild-isolated validation", () => {
     });
     expect(settings.formQuestions).toHaveLength(1);
     expect(settings.selectCategories[0].emoji).toBe(customEmoji);
+    expect(settings.allowMultipleTickets).toBe(true);
+    expect(settings.maxOpenTicketsPerUser).toBe(3);
+    expect(ticketSettingsSchema.parse({ maxOpenTicketsPerUser: 10 }).maxOpenTicketsPerUser).toBe(10);
+    expect(() => ticketSettingsSchema.parse({ maxOpenTicketsPerUser: 11 })).toThrow();
     expect(() => ticketSettingsSchema.parse({
       selectCategories: [{ label: "Support", description: "Allgemeine Hilfe", emoji: "x".repeat(101), value: "support" }]
     })).toThrow(/maximal 100/);

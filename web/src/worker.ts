@@ -2444,6 +2444,8 @@ const DEFAULT_TICKET_CONFIGURATION = {
     { label: "Sonstiges", description: "Andere Anliegen", emoji: "💬", value: "sonstiges" }
   ],
   ratingEnabled: false,
+  allowMultipleTickets: true,
+  maxOpenTicketsPerUser: 3,
   autoCloseHours: 0,
   reminderHours: 0,
   slaHours: 0,

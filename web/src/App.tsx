@@ -544,6 +544,8 @@ type TicketSettings = {
   formQuestions: string[];
   selectCategories: TicketCategory[];
   ratingEnabled: boolean;
+  allowMultipleTickets: boolean;
+  maxOpenTicketsPerUser: number;
   autoCloseHours: number;
   reminderHours: number;
   slaHours: number;
@@ -7560,6 +7562,8 @@ const DEFAULT_TICKET_DRAFT: TicketSettings = {
     { label: "Sonstiges", description: "Andere Anliegen", emoji: botCustomEmojiMarkup("chat"), value: "sonstiges" }
   ],
   ratingEnabled: false,
+  allowMultipleTickets: true,
+  maxOpenTicketsPerUser: 3,
   autoCloseHours: 0,
   reminderHours: 0,
   slaHours: 0,
@@ -10454,6 +10458,8 @@ function TicketSystemPage({ guildId }: { guildId: string }) {
       formTitle: value.formTitle, formQuestions: value.formQuestions,
       selectCategories: value.selectCategories.map((category) => ({ ...category, emoji: normalizeTicketEmoji(category.emoji) })),
       ratingEnabled: value.ratingEnabled,
+      allowMultipleTickets: value.allowMultipleTickets,
+      maxOpenTicketsPerUser: value.maxOpenTicketsPerUser,
       autoCloseHours: value.autoCloseHours, reminderHours: value.reminderHours, slaHours: value.slaHours,
       blacklistRoleIds: value.blacklistRoleIds, blacklistUserIds: value.blacklistUserIds
     };
@@ -10528,6 +10534,7 @@ function TicketSystemPage({ guildId }: { guildId: string }) {
           <div className="control-stack">
             {activeSection === "form" && <section className="panel control-panel"><div className="panel-title compact"><div><h2>Ticket-Formular</h2><p className="muted">Bis zu fünf Fragen werden im neuen Ticket angezeigt.</p></div><button type="button" className="secondary-action inline" disabled={draft.formQuestions.length >= 5} onClick={() => setDraft({ ...draft, formQuestions: [...draft.formQuestions, "Neue Frage"] })}><Plus size={16} /> Frage</button></div><label>Formular-Titel<input maxLength={100} value={draft.formTitle} onChange={(event) => setDraft({ ...draft, formTitle: event.target.value })} /></label><div className="ticket-question-list">{draft.formQuestions.map((question, index) => <div key={index}><span>{index + 1}</span><input maxLength={250} value={question} onChange={(event) => setDraft({ ...draft, formQuestions: draft.formQuestions.map((value, position) => position === index ? event.target.value : value) })} /><button type="button" className="icon-button" title="Frage entfernen" onClick={() => setDraft({ ...draft, formQuestions: draft.formQuestions.filter((_, position) => position !== index) })}><X size={16} /></button></div>)}{!draft.formQuestions.length && <p className="muted">Keine Zusatzfragen eingerichtet.</p>}</div></section>}
             {activeSection === "automation" && <section className="panel control-panel"><div className="panel-title compact"><div><h2>Automationen</h2><p className="muted">Zeiten in Stunden; 0 deaktiviert die jeweilige Funktion.</p></div></div><ControlToggle icon={<Star size={17} />} title="Bewertungen" text="Nach dem Schließen eine 1-5-Sterne-Bewertung anfragen." checked={draft.ratingEnabled} onChange={(value) => setDraft({ ...draft, ratingEnabled: value })} /><div className="control-field-grid"><NumberSetting label="Erinnerung" value={draft.reminderHours} min={0} max={720} suffix="Std." onChange={(value) => setDraft({ ...draft, reminderHours: value })} /><NumberSetting label="Auto-Close" value={draft.autoCloseHours} min={0} max={720} suffix="Std." onChange={(value) => setDraft({ ...draft, autoCloseHours: value })} /><NumberSetting label="SLA-Ziel" value={draft.slaHours} min={0} max={720} suffix="Std." onChange={(value) => setDraft({ ...draft, slaHours: value })} /></div></section>}
+            {activeSection === "access" && <section className="panel control-panel"><div className="panel-title compact"><div><h2>Ticket-Erstellung</h2><p className="muted">Lege fest, wie viele offene Tickets ein Nutzer gleichzeitig haben darf.</p></div></div><ControlToggle icon={<Plus size={17} />} title="Mehrere Tickets erlauben" text={draft.allowMultipleTickets ? `Bis zu ${draft.maxOpenTicketsPerUser} Tickets pro Nutzer gleichzeitig.` : "Jeder Nutzer darf nur ein offenes Ticket haben."} checked={draft.allowMultipleTickets} onChange={(allowMultipleTickets) => setDraft({ ...draft, allowMultipleTickets })}>{draft.allowMultipleTickets && <NumberSetting label="Maximal offen" value={draft.maxOpenTicketsPerUser} min={2} max={10} suffix="Tickets" onChange={(maxOpenTicketsPerUser) => setDraft({ ...draft, maxOpenTicketsPerUser })} />}</ControlToggle></section>}
             {activeSection === "access" && <section className="panel control-panel"><div className="panel-title compact"><div><h2>Zugriffssperren</h2><p className="muted">Rollen und einzelne Discord-Nutzer vom Erstellen ausschließen.</p></div></div><h3 className="control-subheading">Gesperrte Rollen</h3><RoleChecklist roles={manageableRoles} selected={draft.blacklistRoleIds} onToggle={(id) => toggleList("blacklistRoleIds", id)} /><label className="control-user-ids">Gesperrte Nutzer-IDs<textarea rows={4} value={draft.blacklistUserIds.join("\n")} onChange={(event) => setDraft({ ...draft, blacklistUserIds: Array.from(new Set(event.target.value.split(/[\s,;]+/).filter((value) => /^\d{17,20}$/.test(value)))) })} placeholder="Eine Discord-ID pro Zeile" /></label></section>}
             {activeSection === "panel" && <aside className="ticket-preview"><span>Discord Vorschau</span><div className="ticket-preview-embed"><h3>{draft.panelTitle || "Ticketsystem"}</h3><p>{draft.panelDescription || "Wähle eine Kategorie aus."}</p><small>Kategorien</small>{draft.selectCategories.slice(0, 5).map((category) => <div className="ticket-preview-category" key={category.value}><BotCustomEmoji value={category.emoji} size={18} /><span>{category.label}</span></div>)}</div><details className="ticket-preview-dropdown"><summary><span>Wähle eine Ticketkategorie...</span><ChevronDown size={16} /></summary><div>{draft.selectCategories.map((category) => <button type="button" key={category.value}><BotCustomEmoji value={category.emoji} size={20} /><span><strong>{category.label}</strong><small>{category.description}</small></span></button>)}</div></details></aside>}
           </div>
