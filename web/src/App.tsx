@@ -31,9 +31,11 @@ import {
   Ban,
   BadgeCheck,
   BarChart3,
+  Bell,
   Blocks,
   Bot,
   Bug,
+  CalendarDays,
   Check,
   ChevronDown,
   ChevronRight,
@@ -52,11 +54,13 @@ import {
   Folder,
   Gauge,
   Gamepad2,
+  Gift,
   Globe2,
   HardDrive,
   Headphones,
   Hammer,
   Home,
+  History,
   Hash,
   KeyRound,
   LayoutDashboard,
@@ -898,6 +902,81 @@ type PublicAiAccess = {
   updatedAt: string | null;
 };
 
+type UserCenterFavorite = {
+  id: string;
+  label: string;
+  path: string;
+  kind: "page" | "guild" | "command";
+};
+
+type UserCenterReminder = {
+  id: string;
+  title: string;
+  dueAt: string;
+  completed: boolean;
+  createdAt: string;
+};
+
+type UserCenterActivity = {
+  id: string;
+  kind: "ticket" | "giveaway" | "application" | "level" | "badge" | "reminder" | "system";
+  guildId: string | null;
+  guildName: string | null;
+  title: string;
+  detail: string;
+  status: string;
+  targetPath: string | null;
+  metadata: Record<string, unknown>;
+  read: boolean;
+  createdAt: string;
+  updatedAt: string;
+};
+
+type UserCenterAiConversation = {
+  id: string;
+  title: string;
+  preview: string;
+  mode: "general" | "coding" | "minecraft";
+  messageCount: number;
+  messages: Array<{ role: "user" | "assistant"; content: string }>;
+  updatedAt: string;
+};
+
+type UserCenterData = {
+  preferences: {
+    favorites: UserCenterFavorite[];
+    reminders: UserCenterReminder[];
+    aiHistory: UserCenterAiConversation[];
+    roadmapVotes: string[];
+    updatedAt: string;
+  };
+  activities: UserCenterActivity[];
+  unreadCount: number;
+  counting: {
+    totalCorrect: number;
+    totalFailures: number;
+    accuracy: number;
+    guilds: Array<{
+      guildId: string;
+      guildName: string;
+      correctCounts: number;
+      failures: number;
+      updatedAt: string;
+    }>;
+  };
+  commands: Array<{ name: string; description: string; type: string }>;
+  runtime: null | {
+    status: string | null;
+    latencyMs: number | null;
+    guildCount: number | null;
+    userCount: number | null;
+    commandCount: number | null;
+    uptimeSeconds: number | null;
+    botVersion: string | null;
+    updatedAt: string;
+  };
+};
+
 type AdminAiVisibility = {
   settings: {
     publicVisible: boolean;
@@ -1536,6 +1615,7 @@ const ASSISTANT_QUICK_PROMPTS = [
 ];
 const PUBLIC_AI_STORAGE_KEY = "modmail-manager-public-ai-chat";
 const PUBLIC_AI_MODE_STORAGE_KEY = "modmail-manager-public-ai-mode";
+const PUBLIC_AI_CONVERSATION_ID_KEY = "modmail-manager-public-ai-conversation";
 const AI_VISIBILITY_CHANGED_EVENT = "modmail-manager-ai-visibility-changed";
 const PublicAiContent = React.lazy(async () => {
   const module = await import("./public-ai-content");
@@ -2350,12 +2430,14 @@ function App() {
   }
   else if (cleanPath.startsWith("/admin/discordguilds/view/")) page = <AdminGuildViewPage path={cleanPath} />;
   else if (cleanPath === "/admin") page = <AdminPageModern />;
+  else if (cleanPath === "/mein-bereich") page = <UserCenterPage />;
   else if (cleanPath === "/home" || cleanPath === "/panel") page = <HomePage />;
   else if (cleanPath.startsWith("/dashboard/")) page = <Dashboard path={cleanPath} />;
   else page = <LoginPage />;
 
   const showAssistant = cleanPath === "/home"
     || cleanPath === "/panel"
+    || cleanPath === "/mein-bereich"
     || cleanPath === "/admin"
     || cleanPath.startsWith("/admin/discordguilds/view/")
     || cleanPath.startsWith("/dashboard/");
@@ -2746,6 +2828,18 @@ function readPublicAiMessages(): PublicAiMessage[] {
   }
 }
 
+function readPublicAiConversationId(): string {
+  try {
+    const stored = window.sessionStorage.getItem(PUBLIC_AI_CONVERSATION_ID_KEY);
+    if (stored && /^[a-zA-Z0-9_-]{8,100}$/.test(stored)) return stored;
+    const id = assistantMessageId();
+    window.sessionStorage.setItem(PUBLIC_AI_CONVERSATION_ID_KEY, id);
+    return id;
+  } catch {
+    return assistantMessageId();
+  }
+}
+
 const PUBLIC_AI_MODE_OPTIONS: Array<{
   value: PublicAiMode;
   label: string;
@@ -2801,8 +2895,8 @@ function inferredMinecraftPluginName(source: string): string {
   return declaredName.replace(/[^\p{L}\p{N} ._-]/gu, "").slice(0, 64) || "MinecraftPlugin";
 }
 
-function MinecraftPluginBuildPanel({ source }: { source: string }) {
-  const [expanded, setExpanded] = useState(false);
+function MinecraftPluginBuildPanel({ source, initialExpanded = false }: { source: string; initialExpanded?: boolean }) {
+  const [expanded, setExpanded] = useState(initialExpanded);
   const [projectName, setProjectName] = useState(() => inferredMinecraftPluginName(source));
   const [platform, setPlatform] = useState<PluginBuildPlatform>("paper");
   const [apiVersion, setApiVersion] = useState("latest");
@@ -3211,10 +3305,15 @@ function PublicAiPage({
   const [draft, setDraft] = useState("");
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [conversationId, setConversationId] = useState(readPublicAiConversationId);
+  const [builderSource, setBuilderSource] = useState<string | null>(null);
   const threadRef = useRef<HTMLDivElement | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const requestAbortRef = useRef<AbortController | null>(null);
   const minecraftMode = mode === "minecraft";
+  const latestMinecraftSource = useMemo(() => [...messages].reverse().find((message) => (
+    message.role === "assistant" && shouldOfferPluginBuild(message.mode, message.content)
+  ))?.content ?? null, [messages]);
 
   useEffect(() => () => requestAbortRef.current?.abort(), []);
 
@@ -3283,8 +3382,13 @@ function PublicAiPage({
       setDraft("");
       setError(null);
       setSending(false);
+      setBuilderSource(null);
+      void api(`/api/user-center/ai-history/${encodeURIComponent(conversationId)}`, { method: "DELETE" }).catch(() => undefined);
+      const nextConversationId = assistantMessageId();
+      setConversationId(nextConversationId);
       try {
         window.sessionStorage.removeItem(PUBLIC_AI_STORAGE_KEY);
+        window.sessionStorage.setItem(PUBLIC_AI_CONVERSATION_ID_KEY, nextConversationId);
       } catch {
         // The in-memory conversation is still cleared.
       }
@@ -3327,10 +3431,16 @@ function PublicAiPage({
         mode: response.mode,
         truncated: response.truncated
       };
-      setMessages((current) => [
-        ...current,
-        assistantMessage
-      ]);
+      const nextMessages = [...conversation, assistantMessage];
+      setMessages(nextMessages);
+      void api("/api/user-center/ai-history", {
+        method: "PUT",
+        body: JSON.stringify({
+          id: conversationId,
+          mode: response.mode,
+          messages: nextMessages.map(({ role, content: messageContent }) => ({ role, content: messageContent }))
+        })
+      }).catch(() => undefined);
     } catch (requestError) {
       if (controller.signal.aborted) return;
       setMessages((current) => current.filter((message) => message.id !== userMessage.id));
@@ -3407,7 +3517,11 @@ function PublicAiPage({
                           />
                         </React.Suspense>
                         {shouldOfferPluginBuild(message.mode, message.content) && (
-                          <MinecraftPluginBuildPanel source={message.content} />
+                          <button type="button" className="public-ai-message-compile" onClick={() => setBuilderSource(message.content)}>
+                            <Hammer size={16} />
+                            Plugin kompilieren
+                            <ArrowRight size={15} />
+                          </button>
                         )}
                         {message.truncated && index === messages.length - 1 && (
                           <button
@@ -3443,6 +3557,17 @@ function PublicAiPage({
             </div>
           )}
 
+          {minecraftMode && builderSource && (
+            <section className="public-ai-builder-drawer" aria-label="Minecraft Plugin Builder">
+              <header>
+                <span><Hammer size={17} /></span>
+                <div><strong>Plugin fertig kompilieren</strong><small>Projekt prüfen, Version wählen und JAR erstellen</small></div>
+                <button type="button" className="icon-button" title="Builder schließen" onClick={() => setBuilderSource(null)}><X size={16} /></button>
+              </header>
+              <MinecraftPluginBuildPanel key={builderSource} source={builderSource} initialExpanded />
+            </section>
+          )}
+
           <form
             className={`public-ai-composer ${sending ? "is-sending" : ""}`}
             aria-busy={sending}
@@ -3456,6 +3581,18 @@ function PublicAiPage({
                 {minecraftMode ? <><Blocks size={14} /> Minecraft-Plugin entwickeln</> : "ModmailBot KI fragen"}
               </label>
               <div className="public-ai-mode-selector" role="group" aria-label="KI-Modus">
+                {minecraftMode && (
+                  <button
+                    type="button"
+                    className="public-ai-compile-toolbar"
+                    disabled={!latestMinecraftSource}
+                    title={latestMinecraftSource ? "Letztes Plugin-Projekt kompilieren" : "Lass zuerst ein vollständiges Plugin erstellen"}
+                    onClick={() => latestMinecraftSource && setBuilderSource(latestMinecraftSource)}
+                  >
+                    <Hammer size={14} />
+                    Kompilieren
+                  </button>
+                )}
                 {PUBLIC_AI_MODE_OPTIONS.map((option) => {
                   const ModeIcon = option.icon;
                   return (
@@ -3673,6 +3810,7 @@ function TopNav({ user, demoMode = false }: { user?: User | null; demoMode?: boo
 
   const navItems: NavItem[] = [
     { key: "panel", label: demoMode ? "Demo" : "Panel", path: demoMode ? DEMO_GUILD_PATH : "/panel", icon: demoMode ? <Eye size={17} /> : <Home size={17} />, active: cleanPath === "/panel" || cleanPath === "/home" || cleanPath.startsWith("/dashboard/") },
+    ...(navUser && !demoMode ? [{ key: "user-center", label: "Mein Bereich", path: "/mein-bereich", icon: <UserRound size={17} />, active: cleanPath === "/mein-bereich" }] : []),
     ...(navUser?.ownerAdmin ? [{ key: "admin", label: "Admin", path: "/admin", icon: <Gauge size={17} />, active: cleanPath === "/admin" || cleanPath.startsWith("/admin/") }] : []),
     { key: "docs", label: "Dokumentation", path: "/dokumentation", icon: <ClipboardList size={17} />, active: cleanPath === "/dokumentation" },
     { key: "privacy", label: "Datenschutz", path: "/datenschutz", icon: <ShieldCheck size={17} />, active: cleanPath === "/datenschutz" },
@@ -4951,6 +5089,347 @@ function ChannelSelectOptions({
         </optgroup>
       ))}
     </>
+  );
+}
+
+type UserCenterSection = "overview" | "tickets" | "notifications" | "stats" | "commands" | "giveaways" | "applications" | "reminders" | "ai-history" | "status" | "favorites" | "updates";
+
+const USER_CENTER_ROADMAP = [
+  { id: "mobile-push", title: "Mobile Benachrichtigungen", text: "Optionale Browser- und Mobilhinweise für persönliche Bot-Ereignisse." },
+  { id: "profile-badges", title: "Öffentliche Profil-Badges", text: "Freigebbare Erfolge und Community-Abzeichen im Nutzerprofil." },
+  { id: "ticket-attachments", title: "Ticket-Anhänge", text: "Eigene Ticket-Dateien und Transkripte zentral im Webpanel verwalten." },
+  { id: "cross-guild-stats", title: "Serverübergreifende Ränge", text: "Level- und Counting-Ränge über alle verbundenen Communities vergleichen." }
+];
+
+const USER_CENTER_FAVORITE_OPTIONS: UserCenterFavorite[] = [
+  { id: "page-panel", label: "Serverpanel", path: "/panel", kind: "page" },
+  { id: "page-ai", label: "AI+", path: "/ai", kind: "page" },
+  { id: "page-docs", label: "Dokumentation", path: "/dokumentation", kind: "page" },
+  { id: "page-counting", label: "Countings Topliste", path: "/countings-topliste", kind: "page" },
+  { id: "page-clicker", label: "Discord Clicker", path: "/discord-clicker", kind: "page" }
+];
+
+function userActivityLabel(kind: UserCenterActivity["kind"]) {
+  return ({
+    ticket: "Ticket",
+    giveaway: "Giveaway",
+    application: "Bewerbung",
+    level: "Level",
+    badge: "Badge",
+    reminder: "Erinnerung",
+    system: "System"
+  } satisfies Record<UserCenterActivity["kind"], string>)[kind];
+}
+
+function UserActivityList({
+  items,
+  emptyTitle,
+  emptyText,
+  onRead
+}: {
+  items: UserCenterActivity[];
+  emptyTitle: string;
+  emptyText: string;
+  onRead: (id: string) => void;
+}) {
+  if (!items.length) return <EmptyState title={emptyTitle} text={emptyText} />;
+
+  return (
+    <div className="user-activity-list">
+      {items.map((item) => (
+        <article className={`user-activity-row ${item.read ? "is-read" : "is-unread"}`} key={item.id}>
+          <span className={`user-activity-kind ${item.kind}`}>
+            {item.kind === "ticket" ? <LifeBuoy size={17} />
+              : item.kind === "giveaway" ? <Gift size={17} />
+                : item.kind === "application" ? <ClipboardList size={17} />
+                  : item.kind === "level" ? <BarChart3 size={17} />
+                    : item.kind === "badge" ? <BadgeCheck size={17} />
+                      : item.kind === "reminder" ? <CalendarDays size={17} />
+                        : <Sparkles size={17} />}
+          </span>
+          <div>
+            <span className="user-activity-meta">{userActivityLabel(item.kind)}{item.guildName ? ` · ${item.guildName}` : ""}</span>
+            <strong>{item.title}</strong>
+            <p>{item.detail || "Keine weiteren Details."}</p>
+            <small>{formatDateTime(item.createdAt)}</small>
+          </div>
+          <div className="user-activity-actions">
+            <span className={`pill ${item.status === "failed" || item.status === "rejected" ? "danger" : item.status === "open" || item.status === "pending" ? "warn" : "neutral"}`}>{item.status}</span>
+            {!item.read && <button type="button" className="icon-button" title="Als gelesen markieren" onClick={() => onRead(item.id)}><Check size={15} /></button>}
+            {item.targetPath && <button type="button" className="icon-button" title="Öffnen" onClick={() => navigate(item.targetPath!)}><ArrowRight size={15} /></button>}
+          </div>
+        </article>
+      ))}
+    </div>
+  );
+}
+
+function UserCenterPage() {
+  const me = useApi<{ user: User }>("/api/me", []);
+  const guilds = useApi<{ guilds: GuildListItem[] }>("/api/guilds", []);
+  const center = useApi<UserCenterData>("/api/user-center", []);
+  const [section, setSection] = useState<UserCenterSection>("overview");
+  const [commandSearch, setCommandSearch] = useState("");
+  const [reminderTitle, setReminderTitle] = useState("");
+  const [reminderDueAt, setReminderDueAt] = useState("");
+  const [busy, setBusy] = useState<string | null>(null);
+
+  const data = center.data;
+  const activities = data?.activities ?? [];
+  const favorites = data?.preferences.favorites ?? [];
+  const reminders = data?.preferences.reminders ?? [];
+  const aiHistory = data?.preferences.aiHistory ?? [];
+  const roadmapVotes = data?.preferences.roadmapVotes ?? [];
+  const installedGuilds = (guilds.data?.guilds ?? []).filter((guild) => guild.botInstalled);
+  const favoriteOptions: UserCenterFavorite[] = [
+    ...USER_CENTER_FAVORITE_OPTIONS,
+    ...(guilds.data?.guilds ?? []).map((guild) => ({
+      id: `guild-${guild.id}`,
+      label: guild.name,
+      path: `/dashboard/${guild.id}/overview`,
+      kind: "guild" as const
+    }))
+  ];
+  const filteredCommands = (data?.commands ?? []).filter((command) => {
+    const needle = commandSearch.trim().toLocaleLowerCase("de-DE");
+    return !needle || command.name.toLocaleLowerCase("de-DE").includes(needle) || command.description.toLocaleLowerCase("de-DE").includes(needle);
+  });
+
+  const navigation: Array<{ key: UserCenterSection; label: string; description: string; icon: React.ReactNode; count?: number }> = [
+    { key: "overview", label: "Mein Bereich", description: "Profil & Server", icon: <LayoutDashboard size={17} /> },
+    { key: "tickets", label: "Meine Tickets", description: "Status & Transkripte", icon: <LifeBuoy size={17} />, count: activities.filter((item) => item.kind === "ticket").length },
+    { key: "notifications", label: "Benachrichtigungen", description: "Alles Wichtige", icon: <Bell size={17} />, count: data?.unreadCount ?? 0 },
+    { key: "stats", label: "Statistiken", description: "Level & Counting", icon: <BarChart3 size={17} /> },
+    { key: "commands", label: "Command Explorer", description: "Befehle durchsuchen", icon: <Command size={17} />, count: data?.commands.length ?? 0 },
+    { key: "giveaways", label: "Giveaway Center", description: "Teilnahmen & Gewinne", icon: <Gift size={17} />, count: activities.filter((item) => item.kind === "giveaway").length },
+    { key: "applications", label: "Bewerbungen", description: "Persönlicher Status", icon: <ClipboardList size={17} />, count: activities.filter((item) => item.kind === "application").length },
+    { key: "reminders", label: "Erinnerungen", description: "Eigene Termine", icon: <CalendarDays size={17} />, count: reminders.filter((item) => !item.completed).length },
+    { key: "ai-history", label: "AI+-Verlauf", description: "Chats fortsetzen", icon: <History size={17} />, count: aiHistory.length },
+    { key: "status", label: "Bot-Status", description: "Live-Systemzustand", icon: <Activity size={17} /> },
+    { key: "favorites", label: "Favoriten", description: "Schnellzugriff", icon: <Star size={17} />, count: favorites.length },
+    { key: "updates", label: "Changelog & Roadmap", description: "Neuigkeiten & Stimmen", icon: <Rocket size={17} /> }
+  ];
+
+  async function refreshCenter() {
+    await Promise.all([center.reload(), guilds.reload(), me.reload()]);
+  }
+
+  async function markActivityRead(id: string) {
+    setBusy(`activity-${id}`);
+    try {
+      await api(`/api/user-center/activities/${encodeURIComponent(id)}/read`, { method: "PUT" });
+      await center.reload();
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function saveFavorites(next: UserCenterFavorite[]) {
+    setBusy("favorites");
+    try {
+      await api("/api/user-center/favorites", { method: "PUT", body: JSON.stringify({ favorites: next }) });
+      await center.reload();
+    } catch (error) {
+      notify({ tone: "danger", title: "Favoriten nicht gespeichert", text: error instanceof Error ? error.message : "Bitte versuche es erneut." });
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function createReminder() {
+    if (!reminderTitle.trim() || !reminderDueAt) return;
+    setBusy("reminder-create");
+    try {
+      await api("/api/user-center/reminders", {
+        method: "POST",
+        body: JSON.stringify({ title: reminderTitle.trim(), dueAt: new Date(reminderDueAt).toISOString() })
+      });
+      setReminderTitle("");
+      setReminderDueAt("");
+      await center.reload();
+      notify({ tone: "success", title: "Erinnerung gespeichert", text: "Der Termin erscheint jetzt in deinem Nutzerbereich." });
+    } catch (error) {
+      notify({ tone: "danger", title: "Erinnerung fehlgeschlagen", text: error instanceof Error ? error.message : "Bitte prüfe deine Eingaben." });
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function updateReminder(reminder: UserCenterReminder, action: "toggle" | "delete") {
+    setBusy(`reminder-${reminder.id}`);
+    try {
+      await api(`/api/user-center/reminders/${encodeURIComponent(reminder.id)}`, action === "delete"
+        ? { method: "DELETE" }
+        : { method: "PATCH", body: JSON.stringify({ completed: !reminder.completed }) });
+      await center.reload();
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function removeAiHistory(id: string) {
+    setBusy(`ai-${id}`);
+    try {
+      await api(`/api/user-center/ai-history/${encodeURIComponent(id)}`, { method: "DELETE" });
+      await center.reload();
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  function openAiHistory(conversation: UserCenterAiConversation) {
+    try {
+      window.sessionStorage.setItem(PUBLIC_AI_STORAGE_KEY, JSON.stringify(conversation.messages.map((message) => ({ ...message, id: assistantMessageId(), mode: message.role === "assistant" ? conversation.mode : undefined }))));
+      window.sessionStorage.setItem(PUBLIC_AI_MODE_STORAGE_KEY, conversation.mode === "general" ? "auto" : conversation.mode);
+    } catch {
+      // Navigation still opens AI+ if browser storage is unavailable.
+    }
+    navigate("/ai");
+  }
+
+  async function toggleRoadmapVote(id: string) {
+    const next = roadmapVotes.includes(id) ? roadmapVotes.filter((vote) => vote !== id) : [...roadmapVotes, id];
+    setBusy(`roadmap-${id}`);
+    try {
+      await api("/api/user-center/roadmap-votes", { method: "PUT", body: JSON.stringify({ votes: next }) });
+      await center.reload();
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  const currentTab = navigation.find((item) => item.key === section) ?? navigation[0];
+
+  return (
+    <div className="app-shell">
+      <TopNav user={me.data?.user} />
+      <main className="content user-center-page">
+        <section className="user-center-hero">
+          <span className="user-center-avatar">
+            {me.data?.user.avatar ? <img src={me.data.user.avatar} alt="" /> : <UserRound size={30} />}
+          </span>
+          <div>
+            <p className="eyebrow"><UserRound size={15} /> Persönlicher Bereich</p>
+            <h1>{me.data?.user.displayName || me.data?.user.username || "Dein Dashboard"}</h1>
+            <p>Deine Server, Bot-Aktivitäten und persönlichen Werkzeuge an einem Ort.</p>
+          </div>
+          <div className="user-center-hero-actions">
+            <span className="pill ok"><ShieldCheck size={13} /> Discord verbunden</span>
+            <RefreshButton loading={center.loading && Boolean(center.data)} onClick={refreshCenter} />
+          </div>
+        </section>
+
+        {(center.error || guilds.error || me.error) && <Notice tone="danger" text={center.error || guilds.error || me.error || "Nutzerbereich konnte nicht geladen werden."} />}
+        {center.loading && !center.data ? <LoadingBlock /> : (
+          <div className="user-center-layout">
+            <aside className="user-center-navigation" aria-label="Persönliche Kategorien">
+              <div className="user-center-navigation-head">
+                <span>Dein Cockpit</span>
+                {(data?.unreadCount ?? 0) > 0 && <em>{data?.unreadCount} neu</em>}
+              </div>
+              {navigation.map((item) => (
+                <button type="button" className={section === item.key ? "active" : ""} onClick={() => setSection(item.key)} key={item.key}>
+                  <span>{item.icon}</span>
+                  <span><strong>{item.label}</strong><small>{item.description}</small></span>
+                  {item.count !== undefined && item.count > 0 && <em>{item.count}</em>}
+                </button>
+              ))}
+            </aside>
+
+            <section className="user-center-workspace">
+              <header className="user-center-section-head">
+                <span>{currentTab.icon}</span>
+                <div><h2>{currentTab.label}</h2><p>{currentTab.description}</p></div>
+              </header>
+
+              {section === "overview" && <>
+                <div className="user-center-metrics">
+                  <MetricCard icon={<Server size={18} />} label="Verfügbare Server" value={String(guilds.data?.guilds.length ?? 0)} tone="ok" />
+                  <MetricCard icon={<BadgeCheck size={18} />} label="Bot installiert" value={String(installedGuilds.length)} tone="ok" />
+                  <MetricCard icon={<ListOrdered size={18} />} label="Richtige Countings" value={compactNumber(data?.counting.totalCorrect)} />
+                  <MetricCard icon={<Bell size={18} />} label="Ungelesen" value={String(data?.unreadCount ?? 0)} tone={(data?.unreadCount ?? 0) > 0 ? "warn" : "ok"} />
+                </div>
+                <section className="panel user-center-panel">
+                  <div className="panel-title"><div><h3>Deine Server</h3><p className="muted">Alle Guilds, die für dich im Webpanel verfügbar sind.</p></div><button type="button" className="secondary-action inline" onClick={() => navigate("/panel")}><ArrowRight size={15} /> Serverpanel</button></div>
+                  <div className="user-center-guild-grid">
+                    {(guilds.data?.guilds ?? []).slice(0, 8).map((guild) => (
+                      <button type="button" key={guild.id} onClick={() => navigate(`/dashboard/${guild.id}/overview`)}>
+                        <GuildIcon guild={guild} />
+                        <span><strong>{guild.name}</strong><small>{guild.permission} · {guild.botInstalled ? "Bot installiert" : "Bot fehlt"}</small></span>
+                        <ChevronRight size={16} />
+                      </button>
+                    ))}
+                    {!guilds.data?.guilds.length && <p className="muted">Noch keine Server für dein Konto verfügbar.</p>}
+                  </div>
+                </section>
+              </>}
+
+              {section === "tickets" && <UserActivityList items={activities.filter((item) => item.kind === "ticket")} emptyTitle="Keine persönlichen Tickets" emptyText="Sobald ein Ticket über den Bot deinem Discord-Konto zugeordnet wurde, erscheint es mit Status und Transkript hier." onRead={(id) => void markActivityRead(id)} />}
+              {section === "notifications" && <UserActivityList items={activities} emptyTitle="Alles erledigt" emptyText="Aktuell gibt es keine persönlichen Benachrichtigungen." onRead={(id) => void markActivityRead(id)} />}
+
+              {section === "stats" && <div className="user-center-stack">
+                <div className="user-center-metrics compact">
+                  <MetricCard icon={<Check size={18} />} label="Richtig gezählt" value={compactNumber(data?.counting.totalCorrect)} tone="ok" />
+                  <MetricCard icon={<X size={18} />} label="Fehler" value={compactNumber(data?.counting.totalFailures)} tone={data?.counting.totalFailures ? "warn" : "ok"} />
+                  <MetricCard icon={<Gauge size={18} />} label="Genauigkeit" value={`${data?.counting.accuracy ?? 0}%`} tone="ok" />
+                </div>
+                <section className="panel user-center-panel">
+                  <div className="panel-title"><div><h3>Counting nach Server</h3><p className="muted">Deine synchronisierten Beiträge.</p></div></div>
+                  <div className="user-center-stat-list">
+                    {(data?.counting.guilds ?? []).map((entry) => <article key={entry.guildId}><span><ListOrdered size={16} /></span><div><strong>{entry.guildName}</strong><small>{entry.correctCounts} richtig · {entry.failures} Fehler</small></div><em>{entry.correctCounts}</em></article>)}
+                    {!data?.counting.guilds.length && <p className="muted">Noch keine Counting-Statistiken für deinen Discord-Account.</p>}
+                  </div>
+                </section>
+                <UserActivityList items={activities.filter((item) => item.kind === "level" || item.kind === "badge")} emptyTitle="Noch keine Level- oder Badge-Ereignisse" emptyText="Levelaufstiege und neue Badges werden hier gesammelt, sobald der Bot sie meldet." onRead={(id) => void markActivityRead(id)} />
+              </div>}
+
+              {section === "commands" && <section className="panel user-center-panel">
+                <div className="user-center-search"><Search size={16} /><input value={commandSearch} onChange={(event) => setCommandSearch(event.target.value)} placeholder="Befehl oder Beschreibung suchen" /></div>
+                <div className="user-command-list">
+                  {filteredCommands.map((command) => <article key={command.name}><span><Command size={16} /></span><div><strong>/{command.name}</strong><p>{command.description || "Keine Beschreibung hinterlegt."}</p></div><em>{command.type}</em></article>)}
+                  {!filteredCommands.length && <EmptyState title="Kein Befehl gefunden" text="Passe deine Suche an oder synchronisiere die Slash-Befehle erneut." />}
+                </div>
+              </section>}
+
+              {section === "giveaways" && <UserActivityList items={activities.filter((item) => item.kind === "giveaway")} emptyTitle="Keine Giveaway-Aktivität" emptyText="Teilnahmen und Gewinne erscheinen hier, sobald sie deinem Discord-Konto zugeordnet wurden." onRead={(id) => void markActivityRead(id)} />}
+              {section === "applications" && <UserActivityList items={activities.filter((item) => item.kind === "application")} emptyTitle="Keine Bewerbungen" emptyText="Eingereichte Bewerbungen und deren Prüfstatus werden hier gesammelt, sobald der Bot sie deinem Discord-Konto zuordnet." onRead={(id) => void markActivityRead(id)} />}
+
+              {section === "reminders" && <div className="user-center-stack">
+                <section className="panel user-center-panel">
+                  <div className="panel-title"><div><h3>Neue Erinnerung</h3><p className="muted">Persönlich und nur für dein Konto sichtbar.</p></div></div>
+                  <div className="user-reminder-form"><label>Titel<input value={reminderTitle} maxLength={120} onChange={(event) => setReminderTitle(event.target.value)} placeholder="Woran möchtest du erinnert werden?" /></label><label>Zeitpunkt<input type="datetime-local" value={reminderDueAt} onChange={(event) => setReminderDueAt(event.target.value)} /></label><button type="button" className="primary-action inline" disabled={!reminderTitle.trim() || !reminderDueAt || busy === "reminder-create"} onClick={() => void createReminder()}>{busy === "reminder-create" ? <Loader2 className="spin" size={16} /> : <Plus size={16} />} Speichern</button></div>
+                </section>
+                <div className="user-reminder-list">
+                  {reminders.map((reminder) => <article className={reminder.completed ? "completed" : ""} key={reminder.id}><button type="button" className="user-reminder-check" title={reminder.completed ? "Als offen markieren" : "Erledigen"} onClick={() => void updateReminder(reminder, "toggle")}>{reminder.completed ? <Check size={16} /> : <Clock3 size={16} />}</button><div><strong>{reminder.title}</strong><small>{formatDateTime(reminder.dueAt)}</small></div><button type="button" className="icon-button danger" title="Löschen" onClick={() => void updateReminder(reminder, "delete")}><Trash2 size={15} /></button></article>)}
+                  {!reminders.length && <EmptyState title="Noch keine Erinnerungen" text="Lege oben deinen ersten persönlichen Termin an." />}
+                </div>
+              </div>}
+
+              {section === "ai-history" && <div className="user-center-stack">
+                <div className="user-center-inline-action"><p>Deine angemeldeten AI+-Unterhaltungen werden automatisch hier gesichert.</p><button type="button" className="primary-action inline" onClick={() => navigate("/ai")}><Sparkles size={16} /> Neuer Chat</button></div>
+                <div className="user-ai-history-grid">{aiHistory.map((conversation) => <article key={conversation.id}><span className={`user-ai-history-mode ${conversation.mode}`}>{conversation.mode === "minecraft" ? <Blocks size={17} /> : conversation.mode === "coding" ? <Code2 size={17} /> : <Sparkles size={17} />}</span><div><strong>{conversation.title}</strong><p>{conversation.preview || "Noch keine Antwort gespeichert."}</p><small>{conversation.messageCount} Nachrichten · {formatDateTime(conversation.updatedAt)}</small></div><div><button type="button" className="secondary-action inline" onClick={() => openAiHistory(conversation)}><ArrowRight size={15} /> Fortsetzen</button><button type="button" className="icon-button danger" title="Verlauf löschen" onClick={() => void removeAiHistory(conversation.id)}><Trash2 size={15} /></button></div></article>)}</div>
+                {!aiHistory.length && <EmptyState title="Noch kein AI+-Verlauf" text="Starte einen Chat mit AI+. Angemeldete Unterhaltungen erscheinen danach automatisch hier." />}
+              </div>}
+
+              {section === "status" && <div className="user-center-stack">
+                <div className="user-center-status-board"><span className={`user-center-status-signal ${data?.runtime?.status === "online" ? "online" : "offline"}`}><Activity size={22} /></span><div><small>Botstatus</small><strong>{statusLabel(data?.runtime?.status)}</strong><p>Letzte Meldung: {formatDateTime(data?.runtime?.updatedAt)}</p></div><span className={`pill ${data?.runtime?.status === "online" ? "ok" : "warn"}`}>{data?.runtime?.status === "online" ? "Betriebsbereit" : "Prüfung erforderlich"}</span></div>
+                <div className="user-center-metrics compact"><MetricCard icon={<Gauge size={18} />} label="Latenz" value={data?.runtime?.latencyMs !== null && data?.runtime?.latencyMs !== undefined ? `${Math.round(data.runtime.latencyMs)} ms` : "-"} tone="ok" /><MetricCard icon={<Clock3 size={18} />} label="Uptime" value={formatDuration(data?.runtime?.uptimeSeconds)} /><MetricCard icon={<Server size={18} />} label="Guilds" value={compactNumber(data?.runtime?.guildCount)} /><MetricCard icon={<Command size={18} />} label="Commands" value={compactNumber(data?.runtime?.commandCount)} /></div>
+              </div>}
+
+              {section === "favorites" && <div className="user-center-stack">
+                <section className="panel user-center-panel"><div className="panel-title"><div><h3>Funktionen und Server auswählen</h3><p className="muted">Favoriten bleiben serverseitig mit deinem Discord-Konto verbunden.</p></div></div><div className="user-favorite-options">{favoriteOptions.map((option) => { const selected = favorites.some((favorite) => favorite.id === option.id); return <button type="button" className={selected ? "selected" : ""} disabled={busy === "favorites"} onClick={() => void saveFavorites(selected ? favorites.filter((favorite) => favorite.id !== option.id) : [...favorites, option])} key={option.id}><Star size={16} fill={selected ? "currentColor" : "none"} /><span><strong>{option.label}</strong><small>{option.kind === "guild" ? "Discord-Server" : option.path}</small></span>{selected ? <Check size={15} /> : <Plus size={15} />}</button>; })}</div></section>
+                <div className="user-favorite-grid">{favorites.map((favorite) => <button type="button" onClick={() => navigate(favorite.path)} key={favorite.id}><Star size={17} /><span><strong>{favorite.label}</strong><small>{favorite.path}</small></span><ArrowRight size={15} /></button>)}</div>
+              </div>}
+
+              {section === "updates" && <div className="user-center-stack">
+                <section className="panel user-center-panel"><div className="panel-title"><div><h3>Neu im Webpanel</h3><p className="muted">Aktuelle Verbesserungen für normale Nutzer.</p></div><span className="pill ok">Aktuell</span></div><div className="user-changelog"><article><time>Heute</time><div><strong>Persönlicher Nutzerbereich</strong><p>Tickets, Aktivitäten, Statistiken, Erinnerungen und KI-Verläufe wurden an einem Ort gebündelt.</p></div></article><article><time>Neu</time><div><strong>Minecraft-Kompilieren</strong><p>Plugin-Projekte lassen sich jetzt gezielt über den Kompilieren-Button an den Builder übergeben.</p></div></article><article><time>Verbessert</time><div><strong>Persönliche Navigation</strong><p>Favoriten und Command Explorer machen häufige Wege deutlich kürzer.</p></div></article></div></section>
+                <section className="panel user-center-panel"><div className="panel-title"><div><h3>Roadmap</h3><p className="muted">Stimme für Funktionen ab, die dir wichtig sind.</p></div><span className="pill neutral">{roadmapVotes.length} Stimmen</span></div><div className="user-roadmap-grid">{USER_CENTER_ROADMAP.map((item) => { const voted = roadmapVotes.includes(item.id); return <article className={voted ? "voted" : ""} key={item.id}><div><strong>{item.title}</strong><p>{item.text}</p></div><button type="button" className={voted ? "primary-action inline" : "secondary-action inline"} disabled={busy === `roadmap-${item.id}`} onClick={() => void toggleRoadmapVote(item.id)}>{voted ? <Check size={15} /> : <ArrowUp size={15} />}{voted ? "Abgestimmt" : "Stimme"}</button></article>; })}</div></section>
+              </div>}
+            </section>
+          </div>
+        )}
+      </main>
+    </div>
   );
 }
 

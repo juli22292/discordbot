@@ -1,5 +1,5 @@
 import { Hono, type Context } from "hono";
-import { ZodError } from "zod";
+import { z, ZodError } from "zod";
 import {
   assistantChatSchema,
   buildAssistantSystemPrompt,
@@ -132,6 +132,40 @@ import {
 
 type AppBindings = { Bindings: Env };
 const app = new Hono<AppBindings>();
+
+const userCenterFavoriteSchema = z.object({
+  id: z.string().trim().min(1).max(100),
+  label: z.string().trim().min(1).max(80),
+  path: z.string().trim().startsWith("/").max(300),
+  kind: z.enum(["page", "guild", "command"]).default("page")
+});
+
+const userCenterReminderSchema = z.object({
+  title: z.string().trim().min(1).max(120),
+  dueAt: z.string().trim().max(40).refine((value) => Number.isFinite(Date.parse(value)), "Ungültiger Zeitpunkt")
+});
+
+const userCenterAiHistorySchema = z.object({
+  id: z.string().trim().min(8).max(100),
+  mode: z.enum(["general", "coding", "minecraft"]),
+  messages: z.array(z.object({
+    role: z.enum(["user", "assistant"]),
+    content: z.string().max(120_000)
+  })).min(1).max(80)
+});
+
+const userCenterActivitySchema = z.object({
+  id: z.string().trim().min(1).max(120).optional(),
+  discordUserId: z.string().regex(/^\d{17,20}$/),
+  kind: z.enum(["ticket", "giveaway", "application", "level", "badge", "reminder", "system"]),
+  guildId: z.string().regex(/^\d{17,20}$/).nullable().optional(),
+  guildName: z.string().trim().max(100).nullable().optional(),
+  title: z.string().trim().min(1).max(160),
+  detail: z.string().trim().max(1000).default(""),
+  status: z.string().trim().max(40).default("info"),
+  targetPath: z.string().trim().startsWith("/").max(300).nullable().optional(),
+  metadata: z.record(z.unknown()).default({})
+});
 
 const SECURITY_HEADERS: Record<string, string> = {
   "Content-Security-Policy": [
@@ -772,6 +806,119 @@ async function registerPublicGuildClick(c: HonoContext, discordGuildId: string):
   );
   if (!row) throw new HttpError(500, "guild_click_missing", "Der Klick konnte nicht gelesen werden.");
   return normalizePublicGuildCounter(row, day);
+}
+
+interface UserCenterPreferencesRow {
+  discord_user_id: string;
+  favorites: string;
+  reminders: string;
+  ai_history: string;
+  roadmap_votes: string;
+  updated_at: string;
+}
+
+interface UserCenterActivityRow {
+  id: string;
+  discord_user_id: string;
+  kind: string;
+  guild_id: string | null;
+  guild_name: string | null;
+  title: string;
+  detail: string;
+  status: string;
+  target_path: string | null;
+  metadata: string;
+  is_read: number;
+  created_at: string;
+  updated_at: string;
+}
+
+let userCenterStorageReady: Promise<void> | null = null;
+
+async function ensureUserCenterStorage(env: Env): Promise<void> {
+  if (!userCenterStorageReady) {
+    const db = requireDb(env);
+    userCenterStorageReady = (async () => {
+      await db.prepare(
+        `CREATE TABLE IF NOT EXISTS user_center_preferences (
+           discord_user_id TEXT PRIMARY KEY,
+           favorites TEXT NOT NULL DEFAULT '[]',
+           reminders TEXT NOT NULL DEFAULT '[]',
+           ai_history TEXT NOT NULL DEFAULT '[]',
+           roadmap_votes TEXT NOT NULL DEFAULT '[]',
+           created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+           updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+         )`
+      ).run();
+      await db.prepare(
+        `CREATE TABLE IF NOT EXISTS user_center_activity (
+           id TEXT PRIMARY KEY,
+           discord_user_id TEXT NOT NULL,
+           kind TEXT NOT NULL,
+           guild_id TEXT,
+           guild_name TEXT,
+           title TEXT NOT NULL,
+           detail TEXT NOT NULL DEFAULT '',
+           status TEXT NOT NULL DEFAULT 'info',
+           target_path TEXT,
+           metadata TEXT NOT NULL DEFAULT '{}',
+           is_read INTEGER NOT NULL DEFAULT 0,
+           created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+           updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+         )`
+      ).run();
+      await db.prepare(
+        "CREATE INDEX IF NOT EXISTS idx_user_center_activity_user ON user_center_activity(discord_user_id, created_at DESC)"
+      ).run();
+    })().catch((error) => {
+      userCenterStorageReady = null;
+      throw error;
+    });
+  }
+  await userCenterStorageReady;
+}
+
+async function ensureUserCenterPreferences(env: Env, discordUserId: string): Promise<UserCenterPreferencesRow> {
+  await ensureUserCenterStorage(env);
+  const timestamp = nowIso();
+  await requireDb(env).prepare(
+    `INSERT OR IGNORE INTO user_center_preferences (discord_user_id, created_at, updated_at)
+     VALUES (?, ?, ?)`
+  ).bind(discordUserId, timestamp, timestamp).run();
+  await requireDb(env).prepare(
+    `INSERT OR IGNORE INTO user_center_activity (
+       id, discord_user_id, kind, title, detail, status, metadata, is_read, created_at, updated_at
+     ) VALUES (?, ?, 'system', ?, ?, 'ready', '{}', 0, ?, ?)`
+  ).bind(
+    `welcome-${discordUserId}`,
+    discordUserId,
+    "Dein Nutzerbereich ist bereit",
+    "Favoriten, Erinnerungen, KI-Verläufe und persönliche Bot-Aktivitäten findest du ab jetzt an einem Ort.",
+    timestamp,
+    timestamp
+  ).run();
+  const row = await first<UserCenterPreferencesRow>(
+    requireDb(env).prepare("SELECT * FROM user_center_preferences WHERE discord_user_id = ?").bind(discordUserId)
+  );
+  if (!row) throw new HttpError(500, "user_center_missing", "Der Nutzerbereich konnte nicht geladen werden.");
+  return row;
+}
+
+function normalizeUserCenterActivity(row: UserCenterActivityRow) {
+  return {
+    id: row.id,
+    kind: row.kind,
+    guildId: row.guild_id,
+    guildName: row.guild_name,
+    title: row.title,
+    detail: row.detail,
+    status: row.status,
+    targetPath: row.target_path,
+    metadata: parseJson<Record<string, unknown>>(row.metadata, {}),
+    read: Boolean(row.is_read),
+    createdAt: row.created_at,
+    updatedAt: row.updated_at
+  };
 }
 
 let appSettingsStorageReady: Promise<void> | null = null;
@@ -3750,6 +3897,216 @@ app.get("/api/me", async (c) => {
   });
 });
 
+app.get("/api/user-center", async (c) => {
+  const session = await requireSession(c);
+  const discordUserId = session.user.discordUserId;
+  const preferences = await ensureUserCenterPreferences(c.env, discordUserId);
+  await Promise.all([ensureCountingStorage(c.env), ensureBotRuntimeTable(c.env)]);
+
+  const [activityRows, countingRows, commandRows, runtimeRow] = await Promise.all([
+    all<UserCenterActivityRow>(
+      requireDb(c.env).prepare(
+        "SELECT * FROM user_center_activity WHERE discord_user_id = ? ORDER BY created_at DESC LIMIT 150"
+      ).bind(discordUserId)
+    ),
+    all<{
+      guild_id: string;
+      discord_guild_id: string;
+      guild_name: string;
+      correct_counts: number;
+      failures: number;
+      updated_at: string;
+    }>(
+      requireDb(c.env).prepare(
+        `SELECT stats.guild_id, guilds.discord_guild_id, guilds.name AS guild_name,
+                stats.correct_counts, stats.failures, stats.updated_at
+           FROM counting_user_stats stats
+           JOIN guilds ON guilds.id = stats.guild_id
+          WHERE stats.user_id = ?
+          ORDER BY stats.correct_counts DESC, stats.failures ASC`
+      ).bind(discordUserId)
+    ),
+    all<{ command_name: string; description: string; command_type: string }>(
+      requireDb(c.env).prepare(
+        `SELECT command_name, description, command_type
+           FROM bot_commands
+          ORDER BY command_name ASC
+          LIMIT 250`
+      )
+    ),
+    first<{
+      status: string | null;
+      latency_ms: number | null;
+      guild_count: number | null;
+      user_count: number | null;
+      command_count: number | null;
+      uptime_seconds: number | null;
+      bot_version: string | null;
+      updated_at: string;
+    }>(
+      requireDb(c.env).prepare(
+        `SELECT status, latency_ms, guild_count, user_count, command_count,
+                uptime_seconds, bot_version, updated_at
+           FROM bot_runtime_status
+          WHERE id = 'latest'
+          LIMIT 1`
+      )
+    )
+  ]);
+
+  const totalCorrect = countingRows.reduce((sum, row) => sum + Number(row.correct_counts || 0), 0);
+  const totalFailures = countingRows.reduce((sum, row) => sum + Number(row.failures || 0), 0);
+
+  return json(c, {
+    preferences: {
+      favorites: parseJson<unknown[]>(preferences.favorites, []),
+      reminders: parseJson<unknown[]>(preferences.reminders, []),
+      aiHistory: parseJson<unknown[]>(preferences.ai_history, []),
+      roadmapVotes: parseJson<string[]>(preferences.roadmap_votes, []),
+      updatedAt: preferences.updated_at
+    },
+    activities: activityRows.map(normalizeUserCenterActivity),
+    unreadCount: activityRows.filter((row) => !row.is_read).length,
+    counting: {
+      totalCorrect,
+      totalFailures,
+      accuracy: totalCorrect + totalFailures > 0 ? Math.round((totalCorrect / (totalCorrect + totalFailures)) * 1000) / 10 : 0,
+      guilds: countingRows.map((row) => ({
+        guildId: row.discord_guild_id,
+        guildName: row.guild_name,
+        correctCounts: row.correct_counts,
+        failures: row.failures,
+        updatedAt: row.updated_at
+      }))
+    },
+    commands: commandRows.map((row) => ({
+      name: row.command_name,
+      description: row.description,
+      type: row.command_type
+    })),
+    runtime: runtimeRow ? {
+      status: runtimeRow.status,
+      latencyMs: runtimeRow.latency_ms,
+      guildCount: runtimeRow.guild_count,
+      userCount: runtimeRow.user_count,
+      commandCount: runtimeRow.command_count,
+      uptimeSeconds: runtimeRow.uptime_seconds,
+      botVersion: runtimeRow.bot_version,
+      updatedAt: runtimeRow.updated_at
+    } : null
+  });
+});
+
+app.put("/api/user-center/favorites", async (c) => {
+  const session = await requireSession(c);
+  const input = z.object({ favorites: z.array(userCenterFavoriteSchema).max(30) }).parse(await readJsonBody(c));
+  await ensureUserCenterPreferences(c.env, session.user.discordUserId);
+  const timestamp = nowIso();
+  await requireDb(c.env).prepare(
+    "UPDATE user_center_preferences SET favorites = ?, updated_at = ? WHERE discord_user_id = ?"
+  ).bind(asJson(input.favorites), timestamp, session.user.discordUserId).run();
+  return json(c, { ok: true, favorites: input.favorites, updatedAt: timestamp });
+});
+
+app.post("/api/user-center/reminders", async (c) => {
+  const session = await requireSession(c);
+  const input = userCenterReminderSchema.parse(await readJsonBody(c));
+  const preferences = await ensureUserCenterPreferences(c.env, session.user.discordUserId);
+  const timestamp = nowIso();
+  const reminders = parseJson<Array<Record<string, unknown>>>(preferences.reminders, []);
+  const reminder = { id: newId("rem"), title: input.title, dueAt: new Date(input.dueAt).toISOString(), completed: false, createdAt: timestamp };
+  const next = [reminder, ...reminders].slice(0, 100);
+  await requireDb(c.env).prepare(
+    "UPDATE user_center_preferences SET reminders = ?, updated_at = ? WHERE discord_user_id = ?"
+  ).bind(asJson(next), timestamp, session.user.discordUserId).run();
+  return json(c, { ok: true, reminder, reminders: next });
+});
+
+app.patch("/api/user-center/reminders/:reminderId", async (c) => {
+  const session = await requireSession(c);
+  const input = z.object({ completed: z.boolean() }).parse(await readJsonBody(c));
+  const preferences = await ensureUserCenterPreferences(c.env, session.user.discordUserId);
+  const reminderId = c.req.param("reminderId");
+  const reminders = parseJson<Array<Record<string, unknown>>>(preferences.reminders, []);
+  const next = reminders.map((item) => item.id === reminderId ? { ...item, completed: input.completed } : item);
+  if (!reminders.some((item) => item.id === reminderId)) throw new HttpError(404, "reminder_not_found", "Die Erinnerung wurde nicht gefunden.");
+  const timestamp = nowIso();
+  await requireDb(c.env).prepare(
+    "UPDATE user_center_preferences SET reminders = ?, updated_at = ? WHERE discord_user_id = ?"
+  ).bind(asJson(next), timestamp, session.user.discordUserId).run();
+  return json(c, { ok: true, reminders: next });
+});
+
+app.delete("/api/user-center/reminders/:reminderId", async (c) => {
+  const session = await requireSession(c);
+  const preferences = await ensureUserCenterPreferences(c.env, session.user.discordUserId);
+  const reminderId = c.req.param("reminderId");
+  const reminders = parseJson<Array<Record<string, unknown>>>(preferences.reminders, []);
+  const next = reminders.filter((item) => item.id !== reminderId);
+  const timestamp = nowIso();
+  await requireDb(c.env).prepare(
+    "UPDATE user_center_preferences SET reminders = ?, updated_at = ? WHERE discord_user_id = ?"
+  ).bind(asJson(next), timestamp, session.user.discordUserId).run();
+  return json(c, { ok: true, reminders: next });
+});
+
+app.put("/api/user-center/ai-history", async (c) => {
+  const session = await requireSession(c);
+  const input = userCenterAiHistorySchema.parse(await readJsonBody(c));
+  const preferences = await ensureUserCenterPreferences(c.env, session.user.discordUserId);
+  const history = parseJson<Array<Record<string, unknown>>>(preferences.ai_history, []);
+  const firstPrompt = input.messages.find((message) => message.role === "user")?.content ?? "KI-Unterhaltung";
+  const latestAnswer = [...input.messages].reverse().find((message) => message.role === "assistant")?.content ?? "";
+  const timestamp = nowIso();
+  const conversation = {
+    id: input.id,
+    title: firstPrompt.replace(/\s+/g, " ").slice(0, 80),
+    preview: latestAnswer.replace(/\s+/g, " ").slice(0, 180),
+    mode: input.mode,
+    messageCount: input.messages.length,
+    messages: input.messages,
+    updatedAt: timestamp
+  };
+  const next = [conversation, ...history.filter((item) => item.id !== input.id)].slice(0, 20);
+  await requireDb(c.env).prepare(
+    "UPDATE user_center_preferences SET ai_history = ?, updated_at = ? WHERE discord_user_id = ?"
+  ).bind(asJson(next), timestamp, session.user.discordUserId).run();
+  return json(c, { ok: true, conversation, aiHistory: next });
+});
+
+app.delete("/api/user-center/ai-history/:conversationId", async (c) => {
+  const session = await requireSession(c);
+  const preferences = await ensureUserCenterPreferences(c.env, session.user.discordUserId);
+  const history = parseJson<Array<Record<string, unknown>>>(preferences.ai_history, []);
+  const next = history.filter((item) => item.id !== c.req.param("conversationId"));
+  const timestamp = nowIso();
+  await requireDb(c.env).prepare(
+    "UPDATE user_center_preferences SET ai_history = ?, updated_at = ? WHERE discord_user_id = ?"
+  ).bind(asJson(next), timestamp, session.user.discordUserId).run();
+  return json(c, { ok: true, aiHistory: next });
+});
+
+app.put("/api/user-center/activities/:activityId/read", async (c) => {
+  const session = await requireSession(c);
+  await ensureUserCenterStorage(c.env);
+  await requireDb(c.env).prepare(
+    "UPDATE user_center_activity SET is_read = 1, updated_at = ? WHERE id = ? AND discord_user_id = ?"
+  ).bind(nowIso(), c.req.param("activityId"), session.user.discordUserId).run();
+  return json(c, { ok: true });
+});
+
+app.put("/api/user-center/roadmap-votes", async (c) => {
+  const session = await requireSession(c);
+  const input = z.object({ votes: z.array(z.string().trim().min(1).max(80)).max(20) }).parse(await readJsonBody(c));
+  await ensureUserCenterPreferences(c.env, session.user.discordUserId);
+  const votes = [...new Set(input.votes)];
+  const timestamp = nowIso();
+  await requireDb(c.env).prepare(
+    "UPDATE user_center_preferences SET roadmap_votes = ?, updated_at = ? WHERE discord_user_id = ?"
+  ).bind(asJson(votes), timestamp, session.user.discordUserId).run();
+  return json(c, { ok: true, votes });
+});
+
 app.post("/api/assistant/chat", async (c) => {
   await requireSession(c);
   const input = assistantChatSchema.parse(await readJsonBody(c));
@@ -6413,6 +6770,41 @@ app.post("/api/admin/bot/presence", async (c) => {
   });
 
   return json(c, { ok: true, eventId, presence: data });
+});
+
+app.post("/api/internal/bot/user-activity", async (c) => {
+  const input = userCenterActivitySchema.parse(await signedInternalBody(c));
+  await ensureUserCenterStorage(c.env);
+  const timestamp = nowIso();
+  const id = input.id || newId("uca");
+  await requireDb(c.env).prepare(
+    `INSERT INTO user_center_activity (
+       id, discord_user_id, kind, guild_id, guild_name, title, detail, status,
+       target_path, metadata, is_read, created_at, updated_at
+     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?)
+     ON CONFLICT(id) DO UPDATE SET
+       title = excluded.title,
+       detail = excluded.detail,
+       status = excluded.status,
+       target_path = excluded.target_path,
+       metadata = excluded.metadata,
+       is_read = CASE WHEN user_center_activity.status = excluded.status THEN user_center_activity.is_read ELSE 0 END,
+       updated_at = excluded.updated_at`
+  ).bind(
+    id,
+    input.discordUserId,
+    input.kind,
+    input.guildId ?? null,
+    input.guildName ?? null,
+    input.title,
+    input.detail,
+    input.status,
+    input.targetPath ?? null,
+    asJson(input.metadata),
+    timestamp,
+    timestamp
+  ).run();
+  return json(c, { ok: true, id });
 });
 
 app.post("/api/internal/bot/runtime", async (c) => {
