@@ -3989,86 +3989,13 @@ app.patch("/api/guilds/:guildId/profile", async (c) => {
 });
 
 app.post("/api/guilds/:guildId/profile/avatar", async (c) => {
-  const access = await requireGuildManagementAccess(c, c.req.param("guildId"));
-  const previousSettings = await ensureSettings(c.env, access.guild.id);
-  const form = await c.req.formData();
-  const file = form.get("avatar");
-
-  if (!(file instanceof File)) {
-    throw new HttpError(400, "avatar_missing", "Bitte lade eine Bilddatei hoch.");
-  }
-
-  const maxBytes = 512 * 1024;
-  if (file.size > maxBytes) {
-    throw new HttpError(400, "avatar_too_large", "Das Bild darf maximal 512 KiB groß sein.");
-  }
-
-  const bytes = await file.arrayBuffer();
-  const mimeType = detectImageMimeType(bytes);
-
-  if (!mimeType) {
-    throw new HttpError(400, "avatar_type_invalid", "Die Datei enthält kein gültiges PNG-, JPEG-, GIF- oder WebP-Bild.");
-  }
-
-  const mediaId = newId("med");
-  const mediaKey = `guilds/${access.guild.discordGuildId}/bot-avatar/${mediaId}.${imageExtension(mimeType)}`;
-
-  await storeGuildMedia(c.env, {
-    id: mediaId,
-    guildId: access.guild.id,
-    mediaKey,
-    mimeType,
-    createdByDiscordUserId: access.session.user.discordUserId
-  }, bytes);
-
-  await c.env.DB.prepare(
-    `UPDATE guild_settings
-        SET bot_avatar_media_key = ?, bot_avatar_sync_status = 'pending', bot_avatar_sync_error = NULL, updated_at = ?
-      WHERE guild_id = ?`
-  )
-    .bind(mediaKey, nowIso(), access.guild.id)
-    .run();
-
-  const eventId = await enqueueSyncEvent(c.env, access.guild, "guild.member_avatar.update", {
-    discordGuildId: access.guild.discordGuildId,
-    mediaKey,
-    mimeType,
-    previousMediaKey: previousSettings.bot_avatar_media_key
-  });
-
-  await audit(c.env, access.guild.id, access.session.user.discordUserId, "profile.avatar.update", "bot_avatar", previousSettings.bot_avatar_media_key, { mediaKey, mimeType, sizeBytes: file.size });
-  return json(c, { ok: true, eventId, mediaKey, mimeType });
+  await requireGuildManagementAccess(c, c.req.param("guildId"));
+  throw new HttpError(403, "premium_required", "Der Server-Avatar benötigt künftig eine Premium-Rolle und ist aktuell gesperrt.");
 });
 
 app.delete("/api/guilds/:guildId/profile/avatar", async (c) => {
-  const access = await requireGuildManagementAccess(c, c.req.param("guildId"));
-  const settings = await ensureSettings(c.env, access.guild.id);
-
-  await c.env.DB.prepare(
-    `UPDATE guild_settings
-        SET bot_avatar_media_key = NULL, bot_avatar_sync_status = 'pending', bot_avatar_sync_error = NULL, updated_at = ?
-      WHERE guild_id = ?`
-  )
-    .bind(nowIso(), access.guild.id)
-    .run();
-
-  const eventId = await enqueueSyncEvent(c.env, access.guild, "guild.member_avatar.update", {
-    discordGuildId: access.guild.discordGuildId,
-    mediaKey: null,
-    mimeType: null,
-    previousMediaKey: settings.bot_avatar_media_key
-  });
-
-  await audit(
-    c.env,
-    access.guild.id,
-    access.session.user.discordUserId,
-    "profile.avatar.reset",
-    "bot_avatar",
-    settings.bot_avatar_media_key,
-    null
-  );
-  return json(c, { ok: true, eventId });
+  await requireGuildManagementAccess(c, c.req.param("guildId"));
+  throw new HttpError(403, "premium_required", "Der Server-Avatar benötigt künftig eine Premium-Rolle und ist aktuell gesperrt.");
 });
 
 app.get("/api/guilds/:guildId/channels", async (c) => {

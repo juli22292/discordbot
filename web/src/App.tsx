@@ -258,7 +258,9 @@ type FeatureDefinition = {
   tabs?: FeatureTabDefinition[];
 };
 
-type PageSectionTab = Pick<FeatureTabDefinition, "key" | "label" | "description" | "icon">;
+type PageSectionTab = Pick<FeatureTabDefinition, "key" | "label" | "description" | "icon"> & {
+  badge?: "premium";
+};
 
 type FeatureSettings = {
   enabled: boolean;
@@ -5081,6 +5083,10 @@ function AdminPageModern() {
   const [autoRefresh, setAutoRefresh] = useState(true);
   const [savingAiVisibility, setSavingAiVisibility] = useState(false);
 
+  function scrollToOwnerSection(sectionId: string) {
+    document.getElementById(sectionId)?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
   useEffect(() => {
     if (!runtime) return;
     setPresence({
@@ -5354,8 +5360,8 @@ function AdminPageModern() {
               <ShieldCheck size={15} />
               Owner Operations
             </p>
-            <h1>Bot Control Center</h1>
-            <p>Live-Status, Präsenz, Guilds und Sync-Jobs sauber gebündelt. Alles Wichtige ist sofort sichtbar und die Bedienung bleibt schnell.</p>
+            <h1>Admin Center</h1>
+            <p>Bot-Betrieb, Guilds, Musik und Sync-Jobs in einer klaren Kommandozentrale. Alle Aktionen arbeiten mit den bereits verbundenen Diensten.</p>
           </div>
           <div className="owner-hero-actions">
             <button className={`secondary-action inline ${autoRefresh ? "is-active" : ""}`} onClick={() => setAutoRefresh((value) => !value)}>
@@ -5365,6 +5371,29 @@ function AdminPageModern() {
             <RefreshButton loading={ownerRefreshing} onClick={admin.reload} />
           </div>
         </section>
+
+        <nav className="owner-command-nav" aria-label="Admin-Center Bereiche">
+          <button type="button" onClick={() => scrollToOwnerSection("owner-status")}>
+            <Gauge size={17} />
+            <span><strong>Lagebild</strong><small>Health & Runtime</small></span>
+          </button>
+          <button type="button" onClick={() => scrollToOwnerSection("owner-actions")}>
+            <Rocket size={17} />
+            <span><strong>Aktionen</strong><small>Bot & Musik</small></span>
+          </button>
+          <button type="button" onClick={() => scrollToOwnerSection("owner-presence")}>
+            <Activity size={17} />
+            <span><strong>Präsenz</strong><small>Status steuern</small></span>
+          </button>
+          <button type="button" onClick={() => scrollToOwnerSection("owner-guilds")}>
+            <Server size={17} />
+            <span><strong>Guilds</strong><small>Server & Queue</small></span>
+          </button>
+          <button type="button" onClick={() => scrollToOwnerSection("owner-logs")}>
+            <ClipboardList size={17} />
+            <span><strong>Protokoll</strong><small>Logs & History</small></span>
+          </button>
+        </nav>
 
         {me.data?.user?.ownerAdmin && (
           <section className="owner-security-banner">
@@ -5421,7 +5450,7 @@ function AdminPageModern() {
 
         {admin.data && (
           <>
-            <section className="owner-overview-grid">
+            <section className="owner-overview-grid owner-scroll-target" id="owner-status">
               <StatusTile icon={<Wifi size={19} />} label={signalLabel} value={signalValue} tone={signalTone} />
               <StatusTile icon={<Gauge size={19} />} label="Latenz" value={latencyMs !== null && latencyMs !== undefined ? `${Math.round(latencyMs)} ms` : "-"} tone={latencyMs !== null && latencyMs !== undefined && latencyMs > 250 ? "warn" : "ok"} />
               <StatusTile icon={<HardDrive size={19} />} label="RAM" value={ramMb !== null && ramMb !== undefined ? `${ramMb.toFixed(1)} MB` : "-"} tone={ramMb !== null && ramMb !== undefined && ramMb > 1536 ? "warn" : "ok"} />
@@ -5430,7 +5459,7 @@ function AdminPageModern() {
               <StatusTile icon={<Command size={19} />} label="Commands" value={compactNumber(runtime?.commandCount ?? admin.data.stats.knownCommands)} />
             </section>
 
-            <section className="owner-admin-grid owner-tools-grid">
+            <section className="owner-admin-grid owner-tools-grid owner-scroll-target" id="owner-actions">
               <div className="panel owner-quick-panel">
                 <div className="panel-title">
                   <div>
@@ -5542,7 +5571,7 @@ function AdminPageModern() {
               </div>
             </section>
 
-            <section className="owner-admin-grid">
+            <section className="owner-admin-grid owner-scroll-target" id="owner-presence">
               <div className="panel owner-presence-panel">
                 <div className="panel-title">
                   <div>
@@ -5661,7 +5690,7 @@ function AdminPageModern() {
               </div>
             </section>
 
-            <section className="owner-admin-grid owner-admin-grid-wide">
+            <section className="owner-admin-grid owner-admin-grid-wide owner-scroll-target" id="owner-guilds">
               <div className="panel owner-guilds-panel">
                 <div className="panel-title">
                   <div>
@@ -5778,7 +5807,7 @@ function AdminPageModern() {
               </div>
             </section>
 
-            <section className="panel owner-live-log-panel">
+            <section className="panel owner-live-log-panel owner-scroll-target" id="owner-logs">
               <div className="panel-title">
                 <div>
                   <h2>Live-Logs & History</h2>
@@ -6920,7 +6949,7 @@ function Dashboard({ path }: { path: string }) {
           <nav className="sidebar-navigation" aria-label="Guild-Kategorien">
             <SidebarGroup label="Start" tone="blue">
               <SideLink icon={<LayoutDashboard size={17} />} label="Übersicht" section="overview" current={section} guildId={guildId} />
-              <SideLink icon={<Bot size={17} />} label="Bot-Profil" section="profile" current={section} guildId={guildId} />
+              <SideLink icon={<Bot size={17} />} label="Bot-Profil" section="profile" current={section} guildId={guildId} badge="premium" />
               <SideLink icon={<UserCog size={17} />} label="Team-Zugänge" section="team-access" current={section} guildId={guildId} isNew />
             </SidebarGroup>
             <SidebarGroup label="Community" tone="green">
@@ -6930,8 +6959,8 @@ function Dashboard({ path }: { path: string }) {
               <SideLink icon={<ListOrdered size={17} />} label="Counting" section="counting" current={section} guildId={guildId} />
               <SideLink icon={<Trophy size={17} />} label="Giveaways" section="giveaways" current={section} guildId={guildId} />
               <SideLink icon={<BadgeCheck size={17} />} label="Reaction Roles" section="reaction-roles" current={section} guildId={guildId} />
-              <SideLink icon={<MessageSquare size={17} />} label="Vorschläge" section="suggestions" current={section} guildId={guildId} />
-              <SideLink icon={<Star size={17} />} label="Starboard" section="starboard" current={section} guildId={guildId} />
+              <SideLink icon={<MessageSquare size={17} />} label="Vorschläge" section="suggestions" current={section} guildId={guildId} isNew />
+              <SideLink icon={<Star size={17} />} label="Starboard" section="starboard" current={section} guildId={guildId} isNew />
               <SideLink icon={<Sparkles size={17} />} label="Geburtstage" section="birthdays" current={section} guildId={guildId} />
               <SideLink icon={<Crown size={17} />} label="Badges" section="badges" current={section} guildId={guildId} />
               <SideLink icon={<UsersRound size={17} />} label="Community Tools" section="community-tools" current={section} guildId={guildId} isNew />
@@ -6943,13 +6972,13 @@ function Dashboard({ path }: { path: string }) {
               <SideLink icon={<ClipboardList size={17} />} label="Bewerbungen" section="applications" current={section} guildId={guildId} />
               <SideLink icon={<BarChart3 size={17} />} label="Server-Statistiken" section="server-stats" current={section} guildId={guildId} isNew />
               <SideLink icon={<Command size={17} />} label="Slash-Befehle" section="commands" current={section} guildId={guildId} />
-              <SideLink icon={<ClipboardList size={17} />} label="Custom Commands" section="custom-commands" current={section} guildId={guildId} />
+              <SideLink icon={<ClipboardList size={17} />} label="Custom Commands" section="custom-commands" current={section} guildId={guildId} badge="beta" />
               <SideLink icon={<ListFilter size={17} />} label="Logging" section="logging" current={section} guildId={guildId} />
               <SideLink icon={<ShieldCheck size={17} />} label="Audit-Log" section="audit-log" current={section} guildId={guildId} />
             </SidebarGroup>
             <SidebarGroup label="Voice & Unterhaltung" tone="amber">
               <SideLink icon={<Mic2 size={17} />} label="Temp-Voice" section="temp-voice" current={section} guildId={guildId} />
-              <SideLink icon={<Youtube size={17} />} label="YouTube Music" section="youtube-music" current={section} guildId={guildId} />
+              <SideLink icon={<Youtube size={17} />} label="YouTube Musik" section="youtube-music" current={section} guildId={guildId} badge="beta" />
               <SideLink icon={<Headphones size={17} />} label="Live-Player" section="music-live" current={section} guildId={guildId} isNew />
               <SideLink icon={<Gamepad2 size={17} />} label="Games" section="games" current={section} guildId={guildId} />
               <SideLink icon={<Server size={17} />} label="Minecraft" section="minecraft" current={section} guildId={guildId} isNew />
@@ -6959,8 +6988,8 @@ function Dashboard({ path }: { path: string }) {
               <SideLink icon={<AlertTriangle size={17} />} label="Raidmode" section="raidmode" current={section} guildId={guildId} />
               <SideLink icon={<Shield size={17} />} label="Moderation" section="moderation-center" current={section} guildId={guildId} />
               <SideLink icon={<UserPlus size={17} />} label="Onboarding" section="onboarding" current={section} guildId={guildId} isNew />
-              <SideLink icon={<Database size={17} />} label="Backups" section="backups" current={section} guildId={guildId} />
-              <SideLink icon={<AlertTriangle size={17} />} label="Gefahrenbereich" section="danger-zone" current={section} guildId={guildId} badge="geplant" />
+              <SideLink icon={<Database size={17} />} label="Backups" section="backups" current={section} guildId={guildId} badge="beta" />
+              <SideLink icon={<AlertTriangle size={17} />} label="Gefahrenbereich" section="danger-zone" current={section} guildId={guildId} badge="planned" />
             </SidebarGroup>
           </nav>
           <button className="sidebar-account" onClick={() => navigate(demoMode ? "/" : "/panel")} title={demoMode ? "Demo beenden" : "Zur Serverauswahl"}>
@@ -7098,7 +7127,7 @@ function SideLink({
   section: string;
   current: string;
   guildId: string;
-  badge?: string;
+  badge?: "beta" | "premium" | "planned";
   isNew?: boolean;
 }) {
   return (
@@ -7111,7 +7140,24 @@ function SideLink({
           Neu
         </span>
       )}
-      {badge && <span className="side-badge">{badge}</span>}
+      {badge === "beta" && (
+        <span className="side-badge is-beta">
+          <AlertTriangle size={10} strokeWidth={2.6} aria-hidden="true" />
+          Beta
+        </span>
+      )}
+      {badge === "premium" && (
+        <span className="side-badge is-premium">
+          <Crown size={10} strokeWidth={2.6} aria-hidden="true" />
+          Premium
+        </span>
+      )}
+      {badge === "planned" && (
+        <span className="side-badge is-planned">
+          <Clock3 size={10} strokeWidth={2.5} aria-hidden="true" />
+          Geplant
+        </span>
+      )}
     </button>
   );
 }
@@ -7207,80 +7253,22 @@ function StatusTile({ icon, label, value, tone }: { icon: React.ReactNode; label
 
 function ProfilePage({ guildId, settings, onSaved }: { guildId: string; settings: SettingsRow; onSaved: () => void | Promise<void> }) {
   const [nickname, setNickname] = useState(settings.bot_nickname ?? "");
-  const [file, setFile] = useState<File | null>(null);
-  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [nicknameStatus, setNicknameStatus] = useState<string | null>(null);
-  const [avatarStatus, setAvatarStatus] = useState<string | null>(null);
   const [savingNickname, setSavingNickname] = useState(false);
-  const [avatarBusy, setAvatarBusy] = useState(false);
-  const [fileInputKey, setFileInputKey] = useState(0);
   const [activeSection, setActiveSection] = useState("nickname");
   const sectionTabs: PageSectionTab[] = [
     { key: "nickname", label: "Bot-Nickname", description: "Den sichtbaren Namen des Bots nur für diese Guild anpassen.", icon: <AtSign size={16} /> },
-    { key: "avatar", label: "Server-Avatar", description: "Ein eigenes Profilbild für diese Guild hochladen und synchronisieren.", icon: <Bot size={16} /> }
+    { key: "avatar", label: "Server-Avatar", description: "Premium-Funktion für ein eigenes Bot-Profilbild auf dieser Guild.", icon: <Bot size={16} />, badge: "premium" }
   ];
   const activeSectionTab = sectionTabs.find((tab) => tab.key === activeSection) ?? sectionTabs[0];
   const storedAvatarUrl = settings.bot_avatar_media_key
     ? `/api/guilds/${guildId}/media?key=${encodeURIComponent(settings.bot_avatar_media_key)}`
     : null;
-  const displayedAvatarUrl = previewUrl ?? storedAvatarUrl;
-  const syncLabel = settings.bot_avatar_sync_status === "synced"
-    ? "Synchronisiert"
-    : settings.bot_avatar_sync_status === "pending"
-      ? "Wird synchronisiert"
-      : settings.bot_avatar_sync_status === "failed"
-        ? "Synchronisierung fehlgeschlagen"
-        : "Standard-Avatar";
+  const displayedAvatarUrl = storedAvatarUrl;
 
   useEffect(() => {
     setNickname(settings.bot_nickname ?? "");
   }, [settings.bot_nickname]);
-
-  useEffect(() => {
-    if (settings.bot_avatar_sync_status !== "pending") return;
-    const timer = window.setInterval(() => void onSaved(), 2500);
-    return () => window.clearInterval(timer);
-    // onSaved is the current guild loader and does not change the requested resource.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [guildId, settings.bot_avatar_sync_status]);
-
-  useEffect(() => {
-    if (!file) {
-      setPreviewUrl(null);
-      return;
-    }
-
-    const objectUrl = URL.createObjectURL(file);
-    setPreviewUrl(objectUrl);
-    return () => URL.revokeObjectURL(objectUrl);
-  }, [file]);
-
-  function selectAvatar(nextFile: File | null) {
-    setAvatarStatus(null);
-
-    if (!nextFile) {
-      setFile(null);
-      return;
-    }
-
-    const allowedTypes = new Set(["image/png", "image/jpeg", "image/gif", "image/webp"]);
-
-    if (!allowedTypes.has(nextFile.type)) {
-      setFile(null);
-      setFileInputKey((value) => value + 1);
-      setAvatarStatus("Erlaubt sind PNG, JPEG, GIF und WebP.");
-      return;
-    }
-
-    if (nextFile.size > 512 * 1024) {
-      setFile(null);
-      setFileInputKey((value) => value + 1);
-      setAvatarStatus("Das Profilbild darf maximal 512 KiB groß sein.");
-      return;
-    }
-
-    setFile(nextFile);
-  }
 
   async function saveNickname() {
     setSavingNickname(true);
@@ -7296,44 +7284,6 @@ function ProfilePage({ guildId, settings, onSaved }: { guildId: string; settings
       setNicknameStatus(error instanceof Error ? error.message : "Speichern fehlgeschlagen.");
     } finally {
       setSavingNickname(false);
-    }
-  }
-
-  async function uploadAvatar() {
-    if (!file) return;
-    setAvatarBusy(true);
-    setAvatarStatus(null);
-    const formData = new FormData();
-    formData.set("avatar", file);
-    try {
-      await api(`/api/guilds/${guildId}/profile/avatar`, {
-        method: "POST",
-        body: formData
-      });
-      setAvatarStatus("Profilbild gespeichert. Der Bot übernimmt es jetzt auf dieser Guild.");
-      setFile(null);
-      setFileInputKey((value) => value + 1);
-      await onSaved();
-    } catch (error) {
-      setAvatarStatus(error instanceof Error ? error.message : "Upload fehlgeschlagen.");
-    } finally {
-      setAvatarBusy(false);
-    }
-  }
-
-  async function resetAvatar() {
-    setAvatarBusy(true);
-    setAvatarStatus(null);
-    try {
-      await api(`/api/guilds/${guildId}/profile/avatar`, { method: "DELETE" });
-      setFile(null);
-      setFileInputKey((value) => value + 1);
-      setAvatarStatus("Der Server-Avatar wird auf das normale Bot-Profilbild zurückgesetzt.");
-      await onSaved();
-    } catch (error) {
-      setAvatarStatus(error instanceof Error ? error.message : "Zurücksetzen fehlgeschlagen.");
-    } finally {
-      setAvatarBusy(false);
     }
   }
 
@@ -7363,44 +7313,53 @@ function ProfilePage({ guildId, settings, onSaved }: { guildId: string; settings
 
       {activeSection === "avatar" && <div className="panel profile-section-panel">
         <div className="panel-title">
-          <h2>Server-Avatar</h2>
-          <span className={settings.bot_avatar_sync_status === "failed" ? "pill danger" : settings.bot_avatar_sync_status === "synced" ? "pill ok" : "pill"}>
-            {syncLabel}
+          <div>
+            <h2>Server-Avatar</h2>
+            <p className="muted">Individuelles Bot-Profilbild nur für diese Guild.</p>
+          </div>
+          <span className="pill premium">
+            <Crown size={13} />
+            Premium
           </span>
         </div>
-        <div className="avatar-editor">
+        <div className="profile-premium-gate">
+          <span className="profile-premium-icon"><Crown size={22} /></span>
+          <div>
+            <strong>Premium-Funktion</strong>
+            <p>Der Server-Avatar ist aktuell für alle Accounts gesperrt. Die Freischaltung über eine Discord-Rolle wird später ergänzt.</p>
+          </div>
+          <span className="pill neutral"><ShieldCheck size={13} /> Gesperrt</span>
+        </div>
+        <div className="avatar-editor is-premium-locked" aria-disabled="true">
           <div className="avatar-preview" aria-label="Vorschau des Server-Avatars">
             {displayedAvatarUrl ? <img src={displayedAvatarUrl} alt="Server-Avatar Vorschau" /> : <Bot size={34} />}
-            {file && <span>Vorschau</span>}
+            <span><Crown size={12} /> Premium</span>
           </div>
           <div className="avatar-editor-copy">
-            <strong>{file ? file.name : settings.bot_avatar_media_key ? "Aktuelles eigenes Profilbild" : "Normales Bot-Profilbild"}</strong>
-            <p>PNG, JPEG, GIF oder WebP bis 512 KiB. Das Bild gilt nur für diese Guild.</p>
-            {file && <small>{Math.round(file.size / 1024)} KiB ausgewählt</small>}
+            <strong>{settings.bot_avatar_media_key ? "Aktuelles eigenes Profilbild" : "Normales Bot-Profilbild"}</strong>
+            <p>PNG, JPEG, GIF oder WebP bis 512 KiB. Upload, Übernahme und Zurücksetzen sind bis zur Premium-Freischaltung deaktiviert.</p>
             <div className="form-actions avatar-actions">
-              <label className="secondary-action inline avatar-file-button">
+              <label className="secondary-action inline avatar-file-button is-disabled" aria-disabled="true">
                 <Upload size={16} />
                 Bild auswählen
                 <input
-                  key={fileInputKey}
                   type="file"
+                  disabled
                   accept="image/png,image/jpeg,image/gif,image/webp"
-                  onChange={(event) => selectAvatar(event.target.files?.[0] ?? null)}
                 />
               </label>
-              <button className="primary-action inline" onClick={uploadAvatar} disabled={!file || avatarBusy}>
-                {avatarBusy && file ? <Loader2 className="spin" size={16} /> : <Save size={16} />}
+              <button className="primary-action inline" disabled>
+                <Save size={16} />
                 Übernehmen
               </button>
-              <button className="secondary-action inline" onClick={resetAvatar} disabled={avatarBusy || (!storedAvatarUrl && !file)}>
-                {avatarBusy && !file ? <Loader2 className="spin" size={16} /> : <RotateCcw size={16} />}
+              <button className="secondary-action inline" disabled>
+                <RotateCcw size={16} />
                 Zurücksetzen
               </button>
             </div>
           </div>
         </div>
-        <ActionStatus status={avatarStatus} />
-        {settings.bot_avatar_sync_error && <Notice tone="danger" text={settings.bot_avatar_sync_error} />}
+        <p className="profile-premium-note"><Crown size={14} /> Für diese Funktion wird künftig die passende Premium-Rolle benötigt.</p>
       </div>}
     </section>
   );
@@ -9841,6 +9800,7 @@ function PageSectionTabs({
         >
           {tab.icon}
           <span>{tab.label}</span>
+          {tab.badge === "premium" && <span className="feature-section-tab-badge"><Crown size={10} /> Premium</span>}
         </div>
       ))}
     </nav>
