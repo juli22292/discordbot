@@ -590,7 +590,7 @@ function httpsRedirect(request: Request): Response | null {
   const url = new URL(request.url);
   const forwardedProto = request.headers.get("x-forwarded-proto");
 
-  if (url.hostname !== "bot.carrothd.de" || (url.protocol !== "http:" && forwardedProto !== "http")) {
+  if (url.protocol !== "http:" && forwardedProto !== "http") {
     return null;
   }
 

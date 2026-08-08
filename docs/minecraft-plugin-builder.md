@@ -146,7 +146,7 @@ vorbereitet.
 
 ## 6. Funktion testen
 
-1. Öffne `https://bot.carrothd.de/ai`.
+1. Öffne `https://bot.modmailmanagerbot.de/ai`.
 2. Melde dich über Discord an. KI-Chats können je nach Admin-Einstellung
    öffentlich sein, das Kompilieren verlangt aus Schutz vor Missbrauch immer
    eine Anmeldung.
