@@ -167,6 +167,40 @@ const userCenterActivitySchema = z.object({
   metadata: z.record(z.unknown()).default({})
 });
 
+const workspaceModuleSchema = z.enum([
+  "overview",
+  "welcome",
+  "logging",
+  "temp-voice",
+  "counting",
+  "level-system",
+  "autorole",
+  "security",
+  "raidmode",
+  "tickets",
+  ...featureModuleNames
+]);
+
+const workspaceItemSchema = z.object({
+  type: z.enum(["draft", "template"]),
+  module: workspaceModuleSchema,
+  name: z.string().trim().min(1).max(100),
+  payload: z.record(z.unknown())
+});
+
+const panelPreferencesSchema = z.object({
+  density: z.enum(["comfortable", "compact"]).default("comfortable"),
+  sidebarCompact: z.boolean().default(false),
+  reduceMotion: z.boolean().default(false),
+  defaultGuildId: z.string().regex(/^\d{17,20}$/).nullable().default(null),
+  defaultSection: z.string().trim().regex(/^[a-z0-9-]{1,40}$/).default("overview")
+});
+
+const workspaceValidationSchema = z.object({
+  module: workspaceModuleSchema,
+  payload: z.record(z.unknown())
+});
+
 const SECURITY_HEADERS: Record<string, string> = {
   "Content-Security-Policy": [
     "default-src 'self'",
@@ -916,6 +950,107 @@ function normalizeUserCenterActivity(row: UserCenterActivityRow) {
     targetPath: row.target_path,
     metadata: parseJson<Record<string, unknown>>(row.metadata, {}),
     read: Boolean(row.is_read),
+    createdAt: row.created_at,
+    updatedAt: row.updated_at
+  };
+}
+
+interface WorkspaceItemRow {
+  id: string;
+  guild_id: string;
+  owner_discord_user_id: string;
+  item_type: "draft" | "template";
+  module: string;
+  name: string;
+  payload: string;
+  created_at: string;
+  updated_at: string;
+}
+
+interface UserPanelPreferencesRow {
+  discord_user_id: string;
+  density: "comfortable" | "compact";
+  sidebar_compact: number;
+  reduce_motion: number;
+  default_guild_id: string | null;
+  default_section: string;
+  updated_at: string;
+}
+
+let workspaceStorageReady: Promise<void> | null = null;
+
+async function ensureWorkspaceStorage(env: Env): Promise<void> {
+  if (!workspaceStorageReady) {
+    const db = requireDb(env);
+    workspaceStorageReady = (async () => {
+      await db.prepare(
+        `CREATE TABLE IF NOT EXISTS guild_workspace_items (
+           id TEXT PRIMARY KEY,
+           guild_id TEXT NOT NULL REFERENCES guilds(id) ON DELETE CASCADE,
+           owner_discord_user_id TEXT NOT NULL,
+           item_type TEXT NOT NULL CHECK (item_type IN ('draft', 'template')),
+           module TEXT NOT NULL,
+           name TEXT NOT NULL,
+           payload TEXT NOT NULL DEFAULT '{}',
+           created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+           updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+         )`
+      ).run();
+      await db.prepare(
+        "CREATE INDEX IF NOT EXISTS idx_workspace_items_owner ON guild_workspace_items(guild_id, owner_discord_user_id, item_type, updated_at DESC)"
+      ).run();
+      await db.prepare(
+        `CREATE TABLE IF NOT EXISTS user_panel_preferences (
+           discord_user_id TEXT PRIMARY KEY,
+           density TEXT NOT NULL DEFAULT 'comfortable',
+           sidebar_compact INTEGER NOT NULL DEFAULT 0,
+           reduce_motion INTEGER NOT NULL DEFAULT 0,
+           default_guild_id TEXT,
+           default_section TEXT NOT NULL DEFAULT 'overview',
+           created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+           updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+         )`
+      ).run();
+    })().catch((error) => {
+      workspaceStorageReady = null;
+      throw error;
+    });
+  }
+  await workspaceStorageReady;
+}
+
+async function ensureUserPanelPreferences(env: Env, discordUserId: string): Promise<UserPanelPreferencesRow> {
+  await ensureWorkspaceStorage(env);
+  const timestamp = nowIso();
+  await requireDb(env).prepare(
+    `INSERT OR IGNORE INTO user_panel_preferences (discord_user_id, created_at, updated_at)
+     VALUES (?, ?, ?)`
+  ).bind(discordUserId, timestamp, timestamp).run();
+  const row = await first<UserPanelPreferencesRow>(
+    requireDb(env).prepare("SELECT * FROM user_panel_preferences WHERE discord_user_id = ?").bind(discordUserId)
+  );
+  if (!row) throw new HttpError(500, "panel_preferences_missing", "Die Panel-Einstellungen konnten nicht geladen werden.");
+  return row;
+}
+
+function normalizePanelPreferences(row: UserPanelPreferencesRow) {
+  return {
+    density: row.density === "compact" ? "compact" as const : "comfortable" as const,
+    sidebarCompact: Boolean(row.sidebar_compact),
+    reduceMotion: Boolean(row.reduce_motion),
+    defaultGuildId: row.default_guild_id,
+    defaultSection: row.default_section || "overview",
+    updatedAt: row.updated_at
+  };
+}
+
+function normalizeWorkspaceItem(row: WorkspaceItemRow) {
+  return {
+    id: row.id,
+    type: row.item_type,
+    module: row.module,
+    name: row.name,
+    payload: parseJson<Record<string, unknown>>(row.payload, {}),
     createdAt: row.created_at,
     updatedAt: row.updated_at
   };
@@ -2884,6 +3019,72 @@ async function setGuildControlPending(
   ).run();
 }
 
+const WORKSPACE_MODULE_LABELS: Record<string, string> = {
+  overview: "Allgemeines",
+  welcome: "Begrüßung",
+  logging: "Logging",
+  "temp-voice": "Temp-Voice",
+  counting: "Counting",
+  "level-system": "Level-System",
+  autorole: "Autorole",
+  security: "Security Center",
+  raidmode: "Raidmode",
+  tickets: "Ticket-System",
+  giveaways: "Giveaways",
+  "reaction-roles": "Reaction Roles",
+  suggestions: "Vorschläge",
+  starboard: "Starboard",
+  birthdays: "Geburtstage",
+  badges: "Badges",
+  "community-tools": "Community Tools",
+  automations: "Automationen",
+  "auto-nickname": "Auto-Nickname",
+  applications: "Bewerbungen",
+  "server-stats": "Server-Statistiken",
+  "youtube-music": "YouTube Musik",
+  games: "Games",
+  minecraft: "Minecraft",
+  onboarding: "Onboarding",
+  "moderation-center": "Moderation"
+};
+
+function validateWorkspaceModulePayload(module: z.infer<typeof workspaceModuleSchema>, payload: Record<string, unknown>) {
+  if (module === "overview") return settingsSchema.parse(payload);
+  if (module === "welcome") return welcomeSettingsSchema.parse(payload);
+  if (module === "logging") return loggingSettingsSchema.parse(payload);
+  if (module === "temp-voice") return tempVoiceSettingsSchema.parse(payload);
+  if (module === "counting") return countingSettingsSchema.parse(payload);
+  if (module === "level-system") return levelSettingsSchema.parse(payload);
+  if (module === "autorole") return autoroleSettingsSchema.parse(payload);
+  if (module === "security") return securitySettingsSchema.parse(payload);
+  if (module === "raidmode") return raidSettingsSchema.parse(payload);
+  if (module === "tickets") return ticketSettingsSchema.parse(payload);
+  if (featureModuleSchema.safeParse(module).success) return featureSettingsSchema.parse(payload);
+  throw new HttpError(400, "workspace_module_unsupported", "Dieses Modul kann nicht als Vorlage oder Entwurf verwendet werden.");
+}
+
+function workspacePayloadReferences(payload: Record<string, unknown>) {
+  const channelIds = new Set<string>();
+  const roleIds = new Set<string>();
+
+  const visit = (value: unknown, key = "") => {
+    if (Array.isArray(value)) {
+      value.forEach((item) => visit(item, key));
+      return;
+    }
+    if (value && typeof value === "object") {
+      Object.entries(value as Record<string, unknown>).forEach(([childKey, childValue]) => visit(childValue, childKey));
+      return;
+    }
+    if (typeof value !== "string" || !/^\d{17,20}$/.test(value)) return;
+    if (/channelids?$|categoryid$/i.test(key)) channelIds.add(value);
+    if (/roleids?$/i.test(key)) roleIds.add(value);
+  };
+
+  visit(payload);
+  return { channelIds, roleIds };
+}
+
 function mediaPreviewUrl(discordGuildId: string, mediaKey: string): string {
   return `/api/guilds/${discordGuildId}/media?key=${encodeURIComponent(mediaKey)}`;
 }
@@ -3897,6 +4098,34 @@ app.get("/api/me", async (c) => {
   });
 });
 
+app.get("/api/user-center/panel-settings", async (c) => {
+  const session = await requireSession(c);
+  const preferences = await ensureUserPanelPreferences(c.env, session.user.discordUserId);
+  return json(c, { preferences: normalizePanelPreferences(preferences) });
+});
+
+app.put("/api/user-center/panel-settings", async (c) => {
+  const session = await requireSession(c);
+  const input = panelPreferencesSchema.parse(await readJsonBody(c));
+  await ensureUserPanelPreferences(c.env, session.user.discordUserId);
+  const timestamp = nowIso();
+  await requireDb(c.env).prepare(
+    `UPDATE user_panel_preferences
+        SET density = ?, sidebar_compact = ?, reduce_motion = ?, default_guild_id = ?,
+            default_section = ?, updated_at = ?
+      WHERE discord_user_id = ?`
+  ).bind(
+    input.density,
+    input.sidebarCompact ? 1 : 0,
+    input.reduceMotion ? 1 : 0,
+    input.defaultGuildId,
+    input.defaultSection,
+    timestamp,
+    session.user.discordUserId
+  ).run();
+  return json(c, { ok: true, preferences: { ...input, updatedAt: timestamp } });
+});
+
 app.get("/api/user-center", async (c) => {
   const session = await requireSession(c);
   const discordUserId = session.user.discordUserId;
@@ -4308,6 +4537,282 @@ app.get("/api/guilds/:guildId", async (c) => {
     },
     settings
   });
+});
+
+app.get("/api/guilds/:guildId/workspace", async (c) => {
+  const access = await requireGuildManagementAccess(c, c.req.param("guildId"));
+  await Promise.all([
+    ensureWorkspaceStorage(c.env),
+    ensureOperationsStorage(c.env),
+    ensureGuildControlStorage(c.env)
+  ]);
+
+  const [
+    settings,
+    welcome,
+    logging,
+    tempVoice,
+    counting,
+    levelSystem,
+    autorole,
+    controlRows,
+    channels,
+    roles,
+    accessRows,
+    itemRows,
+    auditRows,
+    syncRows,
+    preferences
+  ] = await Promise.all([
+    ensureSettings(c.env, access.guild.id),
+    ensureWelcomeSettings(c.env, access.guild.id),
+    ensureLoggingSettings(c.env, access.guild.id),
+    ensureTempVoiceSettings(c.env, access.guild.id),
+    ensureCountingSettings(c.env, access.guild.id),
+    ensureLevelSettings(c.env, access.guild.id),
+    ensureAutoroleSettings(c.env, access.guild.id),
+    all<GuildControlModuleRow>(
+      requireDb(c.env).prepare(
+        `SELECT guild_id, module, configuration, runtime_state, sync_status, sync_error, updated_at
+           FROM guild_control_modules WHERE guild_id = ?`
+      ).bind(access.guild.id)
+    ),
+    all<{ id: string; name: string; type: string; can_send: number; can_view: number }>(
+      requireDb(c.env).prepare(
+        `SELECT discord_channel_id AS id, name, channel_type AS type, can_send, can_view
+           FROM guild_channels WHERE guild_id = ? ORDER BY position ASC, name ASC`
+      ).bind(access.guild.id)
+    ),
+    all<{ id: string; name: string; managed: number; bot_can_manage: number }>(
+      requireDb(c.env).prepare(
+        `SELECT discord_role_id AS id, name, managed, bot_can_manage
+           FROM guild_roles WHERE guild_id = ? ORDER BY position DESC, name ASC`
+      ).bind(access.guild.id)
+    ),
+    all<GuildPanelAccessRow>(
+      requireDb(c.env).prepare(
+        `SELECT id, guild_id, principal_type, principal_id, display_name, access_level,
+                capabilities, enabled, created_by_discord_user_id, created_at, updated_at
+           FROM guild_panel_access WHERE guild_id = ? ORDER BY updated_at DESC`
+      ).bind(access.guild.id)
+    ),
+    all<WorkspaceItemRow>(
+      requireDb(c.env).prepare(
+        `SELECT * FROM guild_workspace_items
+          WHERE guild_id = ? AND owner_discord_user_id = ?
+          ORDER BY updated_at DESC LIMIT 100`
+      ).bind(access.guild.id, access.session.user.discordUserId)
+    ),
+    all<{
+      id: string; actor_discord_user_id: string; action: string; target: string;
+      old_value: string | null; new_value: string | null; created_at: string;
+    }>(
+      requireDb(c.env).prepare(
+        `SELECT id, actor_discord_user_id, action, target, old_value, new_value, created_at
+           FROM audit_logs WHERE guild_id = ? ORDER BY created_at DESC LIMIT 80`
+      ).bind(access.guild.id)
+    ),
+    all<{
+      id: string; action: string; status: string; attempts: number; max_attempts: number;
+      last_error: string | null; created_at: string; updated_at: string; completed_at: string | null;
+    }>(
+      requireDb(c.env).prepare(
+        `SELECT id, action, status, attempts, max_attempts, last_error, created_at, updated_at, completed_at
+           FROM sync_events WHERE guild_id = ? ORDER BY created_at DESC LIMIT 80`
+      ).bind(access.guild.id)
+    ),
+    ensureUserPanelPreferences(c.env, access.session.user.discordUserId)
+  ]);
+
+  const controlMap = new Map(controlRows.map((row) => [row.module, row]));
+  const controlStatus = (module: GuildControlModule) => normalizeGuildControlModule(controlMap.get(module), module);
+  const modules = [
+    { key: "overview", label: WORKSPACE_MODULE_LABELS.overview, enabled: true, configured: true, syncStatus: "synced", syncError: null },
+    { key: "welcome", label: WORKSPACE_MODULE_LABELS.welcome, enabled: welcome.enabled, configured: Boolean(welcome.channelId && (welcome.message || welcome.embed.title)), syncStatus: "synced", syncError: null },
+    { key: "logging", label: WORKSPACE_MODULE_LABELS.logging, enabled: logging.enabled, configured: Object.values(logging.channelMappings).some(Boolean), syncStatus: "synced", syncError: null },
+    { key: "temp-voice", label: WORKSPACE_MODULE_LABELS["temp-voice"], enabled: tempVoice.enabled, configured: tempVoice.creatorChannelIds.length > 0, syncStatus: tempVoice.syncStatus, syncError: tempVoice.syncError },
+    { key: "counting", label: WORKSPACE_MODULE_LABELS.counting, enabled: counting.enabled, configured: Boolean(counting.channelId), syncStatus: counting.syncStatus, syncError: counting.syncError },
+    { key: "level-system", label: WORKSPACE_MODULE_LABELS["level-system"], enabled: levelSystem.enabled, configured: Boolean(levelSystem.announcementChannelId || levelSystem.roleRewards.length), syncStatus: levelSystem.syncStatus, syncError: levelSystem.syncError },
+    { key: "autorole", label: WORKSPACE_MODULE_LABELS.autorole, enabled: autorole.enabled, configured: autorole.humanRoleIds.length + autorole.botRoleIds.length > 0, syncStatus: autorole.syncStatus, syncError: autorole.syncError },
+    ...(["security", "raidmode", "tickets"] as const).map((key) => {
+      const state = controlStatus(key);
+      const enabled = key === "raidmode" ? state.profile !== "off" || Boolean(state.panicEnabled) : Boolean(state.enabled ?? true);
+      return { key, label: WORKSPACE_MODULE_LABELS[key], enabled, configured: Boolean(controlMap.has(key)), syncStatus: state.syncStatus, syncError: state.syncError };
+    }),
+    ...featureModuleNames.map((key) => {
+      const state = controlStatus(key);
+      return {
+        key,
+        label: WORKSPACE_MODULE_LABELS[key] || key,
+        enabled: Boolean(state.enabled),
+        configured: Boolean(controlMap.has(key) && Object.keys(recordValue(state.fields)).length),
+        syncStatus: state.syncStatus,
+        syncError: state.syncError
+      };
+    })
+  ];
+
+  const writableChannels = channels.filter((channel) => Boolean(channel.can_send));
+  const manageableRoles = roles.filter((role) => Boolean(role.bot_can_manage) && !role.managed);
+  const failedModules = modules.filter((module) => module.syncStatus === "failed");
+  const incompleteActiveModules = modules.filter((module) => module.enabled && !module.configured && module.key !== "overview");
+  const activeModules = modules.filter((module) => module.enabled).length;
+  const tasks = [
+    ...(!access.guild.botJoinedAt ? [{ id: "bot-install", tone: "danger", title: "Bot installieren", detail: "Der Bot ist auf dieser Guild nicht bestätigt.", target: "overview" }] : []),
+    ...(!writableChannels.length ? [{ id: "write-channel", tone: "danger", title: "Schreibbaren Kanal bereitstellen", detail: "Der Bot kann aktuell in keinem bekannten Kanal schreiben.", target: "logging" }] : []),
+    ...(!manageableRoles.length ? [{ id: "role-order", tone: "warning", title: "Bot-Rolle höher platzieren", detail: "Keine normale Rolle kann vom Bot verwaltet werden.", target: "autorole" }] : []),
+    ...failedModules.map((module) => ({ id: `failed-${module.key}`, tone: "danger", title: `${module.label} reparieren`, detail: module.syncError || "Die letzte Synchronisierung ist fehlgeschlagen.", target: module.key })),
+    ...incompleteActiveModules.map((module) => ({ id: `incomplete-${module.key}`, tone: "warning", title: `${module.label} fertig einrichten`, detail: "Das Modul ist aktiv, aber noch nicht vollständig konfiguriert.", target: module.key })),
+    ...(activeModules <= 1 ? [{ id: "activate-module", tone: "info", title: "Erstes Modul aktivieren", detail: "Aktiviere eine Funktion, die deine Community direkt nutzen kann.", target: "welcome" }] : [])
+  ].slice(0, 20);
+
+  const setupChecks = [
+    { id: "bot", label: "Bot verbunden", ok: Boolean(access.guild.botJoinedAt), detail: access.guild.botJoinedAt ? "Discord-Verbindung erkannt" : "Bot-Einladung fehlt" },
+    { id: "channels", label: "Kanäle synchronisiert", ok: channels.length > 0, detail: `${channels.length} Kanäle bekannt` },
+    { id: "writable", label: "Nachrichten möglich", ok: writableChannels.length > 0, detail: `${writableChannels.length} beschreibbare Kanäle` },
+    { id: "roles", label: "Rollen verwaltbar", ok: manageableRoles.length > 0, detail: `${manageableRoles.length} verwaltbare Rollen` },
+    { id: "timezone", label: "Zeitzone gesetzt", ok: Boolean(settings.timezone), detail: settings.timezone || "Nicht konfiguriert" },
+    { id: "sync", label: "Synchronisierung sauber", ok: failedModules.length === 0, detail: failedModules.length ? `${failedModules.length} Fehler` : "Keine aktuellen Fehler" }
+  ];
+
+  const timeline = [
+    ...auditRows.map((row) => ({
+      id: `audit-${row.id}`,
+      type: "audit" as const,
+      action: row.action,
+      target: row.target,
+      status: "completed",
+      actorDiscordUserId: row.actor_discord_user_id,
+      detail: null,
+      oldValue: parseJson<unknown>(row.old_value ?? "null", null),
+      newValue: parseJson<unknown>(row.new_value ?? "null", null),
+      createdAt: row.created_at
+    })),
+    ...syncRows.map((row) => ({
+      id: `sync-${row.id}`,
+      type: "sync" as const,
+      action: row.action,
+      target: "Bot-Synchronisierung",
+      status: row.status,
+      actorDiscordUserId: null,
+      detail: row.last_error,
+      oldValue: null,
+      newValue: { attempts: row.attempts, maxAttempts: row.max_attempts },
+      createdAt: row.created_at
+    }))
+  ].sort((a, b) => b.createdAt.localeCompare(a.createdAt)).slice(0, 100);
+
+  return json(c, {
+    guild: { id: access.guild.discordGuildId, name: access.guild.name, icon: access.guild.icon },
+    access: access.authorization,
+    setupChecks,
+    setupProgress: Math.round((setupChecks.filter((check) => check.ok).length / setupChecks.length) * 100),
+    tasks,
+    modules,
+    resources: {
+      channels: channels.map((channel) => ({ id: channel.id, name: channel.name, type: channel.type, canSend: Boolean(channel.can_send), canView: Boolean(channel.can_view) })),
+      roles: roles.map((role) => ({ id: role.id, name: role.name, managed: Boolean(role.managed), botCanManage: Boolean(role.bot_can_manage) }))
+    },
+    delegatedAccess: accessRows.map((row) => ({
+      id: row.id,
+      principalType: row.principal_type,
+      principalId: row.principal_id,
+      displayName: row.display_name,
+      accessLevel: row.access_level,
+      capabilities: normalizeCapabilities(parseJson<unknown>(row.capabilities, []), row.access_level),
+      enabled: Boolean(row.enabled)
+    })),
+    items: itemRows.map(normalizeWorkspaceItem),
+    timeline,
+    preferences: normalizePanelPreferences(preferences),
+    generatedAt: nowIso()
+  });
+});
+
+app.post("/api/guilds/:guildId/workspace/items", async (c) => {
+  const access = await requireGuildManagementAccess(c, c.req.param("guildId"));
+  const input = workspaceItemSchema.parse(await readJsonBody(c));
+  const payload = validateWorkspaceModulePayload(input.module, input.payload);
+  await ensureWorkspaceStorage(c.env);
+  const id = newId(input.type === "draft" ? "draft" : "tpl");
+  const timestamp = nowIso();
+  await requireDb(c.env).prepare(
+    `INSERT INTO guild_workspace_items (
+       id, guild_id, owner_discord_user_id, item_type, module, name, payload, created_at, updated_at
+     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+  ).bind(id, access.guild.id, access.session.user.discordUserId, input.type, input.module, input.name, asJson(payload), timestamp, timestamp).run();
+  await audit(c.env, access.guild.id, access.session.user.discordUserId, `workspace.${input.type}.create`, input.module, null, { id, name: input.name });
+  return json(c, { ok: true, item: { id, ...input, payload, createdAt: timestamp, updatedAt: timestamp } });
+});
+
+app.patch("/api/guilds/:guildId/workspace/items/:itemId", async (c) => {
+  const access = await requireGuildManagementAccess(c, c.req.param("guildId"));
+  const input = workspaceItemSchema.partial().refine((value) => Object.keys(value).length > 0).parse(await readJsonBody(c));
+  await ensureWorkspaceStorage(c.env);
+  const current = await first<WorkspaceItemRow>(
+    requireDb(c.env).prepare(
+      "SELECT * FROM guild_workspace_items WHERE id = ? AND guild_id = ? AND owner_discord_user_id = ?"
+    ).bind(c.req.param("itemId"), access.guild.id, access.session.user.discordUserId)
+  );
+  if (!current) throw new HttpError(404, "workspace_item_not_found", "Dieser Entwurf oder diese Vorlage wurde nicht gefunden.");
+  const type = input.type ?? current.item_type;
+  const module = input.module ?? workspaceModuleSchema.parse(current.module);
+  const name = input.name ?? current.name;
+  const payload = input.payload ? validateWorkspaceModulePayload(module, input.payload) : parseJson<Record<string, unknown>>(current.payload, {});
+  const timestamp = nowIso();
+  await requireDb(c.env).prepare(
+    `UPDATE guild_workspace_items SET item_type = ?, module = ?, name = ?, payload = ?, updated_at = ?
+      WHERE id = ? AND guild_id = ? AND owner_discord_user_id = ?`
+  ).bind(type, module, name, asJson(payload), timestamp, current.id, access.guild.id, access.session.user.discordUserId).run();
+  return json(c, { ok: true, item: { id: current.id, type, module, name, payload, createdAt: current.created_at, updatedAt: timestamp } });
+});
+
+app.delete("/api/guilds/:guildId/workspace/items/:itemId", async (c) => {
+  const access = await requireGuildManagementAccess(c, c.req.param("guildId"));
+  await ensureWorkspaceStorage(c.env);
+  const current = await first<WorkspaceItemRow>(
+    requireDb(c.env).prepare(
+      "SELECT * FROM guild_workspace_items WHERE id = ? AND guild_id = ? AND owner_discord_user_id = ?"
+    ).bind(c.req.param("itemId"), access.guild.id, access.session.user.discordUserId)
+  );
+  if (!current) throw new HttpError(404, "workspace_item_not_found", "Dieser Entwurf oder diese Vorlage wurde nicht gefunden.");
+  await requireDb(c.env).prepare("DELETE FROM guild_workspace_items WHERE id = ?").bind(current.id).run();
+  await audit(c.env, access.guild.id, access.session.user.discordUserId, `workspace.${current.item_type}.delete`, current.module, { id: current.id, name: current.name }, null);
+  return json(c, { ok: true, id: current.id });
+});
+
+app.post("/api/guilds/:guildId/workspace/validate", async (c) => {
+  const access = await requireGuildManagementAccess(c, c.req.param("guildId"));
+  const input = workspaceValidationSchema.parse(await readJsonBody(c));
+  const payload = validateWorkspaceModulePayload(input.module, input.payload);
+  const references = workspacePayloadReferences(payload);
+  const [channelRows, roleRows] = await Promise.all([
+    references.channelIds.size
+      ? all<{ id: string; can_send: number }>(
+          requireDb(c.env).prepare(
+            `SELECT discord_channel_id AS id, can_send FROM guild_channels
+              WHERE guild_id = ? AND discord_channel_id IN (${Array.from(references.channelIds).map(() => "?").join(",")})`
+          ).bind(access.guild.id, ...references.channelIds)
+        )
+      : Promise.resolve([]),
+    references.roleIds.size
+      ? all<{ id: string; managed: number; bot_can_manage: number }>(
+          requireDb(c.env).prepare(
+            `SELECT discord_role_id AS id, managed, bot_can_manage FROM guild_roles
+              WHERE guild_id = ? AND discord_role_id IN (${Array.from(references.roleIds).map(() => "?").join(",")})`
+          ).bind(access.guild.id, ...references.roleIds)
+        )
+      : Promise.resolve([])
+  ]);
+  const channelMap = new Map(channelRows.map((row) => [row.id, row]));
+  const roleMap = new Map(roleRows.map((row) => [row.id, row]));
+  const issues = [
+    ...Array.from(references.channelIds).filter((id) => !channelMap.has(id)).map((id) => ({ tone: "danger", code: "channel_missing", message: `Kanal ${id} gehört nicht zu dieser Guild.` })),
+    ...Array.from(references.channelIds).filter((id) => channelMap.has(id) && !channelMap.get(id)?.can_send).map((id) => ({ tone: "warning", code: "channel_not_writable", message: `Im Kanal ${id} kann der Bot nicht schreiben.` })),
+    ...Array.from(references.roleIds).filter((id) => !roleMap.has(id)).map((id) => ({ tone: "danger", code: "role_missing", message: `Rolle ${id} gehört nicht zu dieser Guild.` })),
+    ...Array.from(references.roleIds).filter((id) => roleMap.has(id) && (!roleMap.get(id)?.bot_can_manage || roleMap.get(id)?.managed)).map((id) => ({ tone: "warning", code: "role_unmanageable", message: `Rolle ${id} kann vom Bot nicht verwaltet werden.` }))
+  ];
+  return json(c, { ok: !issues.some((issue) => issue.tone === "danger"), module: input.module, payload, issues });
 });
 
 app.get("/api/guilds/:guildId/settings", async (c) => {

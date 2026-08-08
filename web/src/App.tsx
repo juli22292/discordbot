@@ -1,5 +1,5 @@
 import "@fontsource-variable/inter";
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { createContext, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import type { AssistantTarget } from "./server/assistant";
 import type { PublicAiMode, ResolvedPublicAiMode } from "./server/public-ai";
@@ -21,6 +21,12 @@ import {
   OperationsAuditLogPage,
   TeamAccessPage
 } from "./operations-pages";
+import {
+  GlobalCommandPalette,
+  OPEN_COMMAND_PALETTE_EVENT,
+  WorkspaceCenterPage,
+  type WorkspaceData
+} from "./workspace-page";
 import {
   Activity,
   AlertTriangle,
@@ -52,6 +58,7 @@ import {
   ExternalLink,
   FileJson,
   Folder,
+  FolderKanban,
   Gauge,
   Gamepad2,
   Gift,
@@ -862,6 +869,8 @@ type User = {
   avatar: string | null;
   ownerAdmin?: boolean;
 };
+
+const GuildModuleStatusContext = createContext<Map<string, WorkspaceData["modules"][number]>>(new Map());
 
 type AssistantAction = {
   type: "navigate";
@@ -2407,6 +2416,22 @@ function App() {
   let page: React.ReactNode;
 
   useEffect(() => {
+    try {
+      const stored = JSON.parse(localStorage.getItem("modmail-panel-preferences") || "null") as {
+        density?: string;
+        sidebarCompact?: boolean;
+        reduceMotion?: boolean;
+      } | null;
+      if (!stored) return;
+      document.documentElement.dataset.density = stored.density === "compact" ? "compact" : "comfortable";
+      document.documentElement.classList.toggle("panel-sidebar-compact", Boolean(stored.sidebarCompact));
+      document.documentElement.classList.toggle("panel-reduce-motion", Boolean(stored.reduceMotion));
+    } catch {
+      localStorage.removeItem("modmail-panel-preferences");
+    }
+  }, []);
+
+  useEffect(() => {
     const reloadAccess = () => void aiAccess.reload();
     window.addEventListener(AI_VISIBILITY_CHANGED_EVENT, reloadAccess);
     return () => window.removeEventListener(AI_VISIBILITY_CHANGED_EVENT, reloadAccess);
@@ -2445,6 +2470,7 @@ function App() {
   return (
     <>
       {page}
+      <GlobalCommandPalette request={api} />
       {cleanPath !== "/ai" && (
         <AiAssistant
           path={cleanPath}
@@ -3677,10 +3703,10 @@ function LoginPage() {
   }, []);
 
   return (
-    <main className="auth-page">
+    <main className="auth-page auth-page-clean">
       <div className="grid-backdrop" aria-hidden="true" />
-      <section className="auth-layout">
-        <section className="auth-panel reveal-card">
+      <section className="auth-layout auth-layout-clean">
+        <section className="auth-panel auth-panel-clean">
           <div className="brand-row">
             <div className="brand-mark">
               <Bot size={28} />
@@ -3698,8 +3724,8 @@ function LoginPage() {
               <Sparkles size={15} />
               Modmail Manager Control
             </p>
-            <h1>Modmail Manager Webpanel</h1>
-            <p>Server verwalten, Slash-Befehle steuern und das Bot-Profil pro Guild sauber synchronisieren.</p>
+            <h1>Dein Discord-Server. Klar verwaltet.</h1>
+            <p>Moderation, Tickets, Automationen und Community-Funktionen zentral und nachvollziehbar konfigurieren.</p>
           </div>
           <div className="auth-action-stack">
             {checkingSession ? (
@@ -3722,7 +3748,7 @@ function LoginPage() {
             )}
             <button className="secondary-action full hero-action demo-entry-action" type="button" onClick={() => navigate(DEMO_GUILD_PATH)}>
               <Eye size={18} />
-              Guild-Panel als Demo ansehen
+              Panel ohne Anmeldung ansehen
               <ArrowRight size={18} />
             </button>
           </div>
@@ -3751,12 +3777,12 @@ function AuthShowcase() {
   ];
 
   return (
-    <section className="auth-showcase reveal-card delay-1" aria-label="Bot Status">
+    <section className="auth-showcase auth-showcase-clean" aria-label="Funktionsübersicht">
       <div className="showcase-top">
         <span className="window-dot" />
         <span className="window-dot amber" />
         <span className="window-dot green" />
-        <strong>Live Console</strong>
+        <strong>Serververwaltung</strong>
       </div>
       <div className="bot-radar" aria-hidden="true">
         <Bot size={34} />
@@ -3847,6 +3873,17 @@ function TopNav({ user, demoMode = false }: { user?: User | null; demoMode?: boo
           <span>Modmail Manager</span>
         </button>
         <nav className="top-links">{navItems.map((item) => renderNavItem(item))}</nav>
+        <button
+          className="nav-command-search"
+          type="button"
+          aria-label="Schnellnavigation öffnen"
+          onClick={() => window.dispatchEvent(new Event(OPEN_COMMAND_PALETTE_EVENT))}
+          title="Schnellnavigation öffnen"
+        >
+          <Search size={16} />
+          <span>Suchen</span>
+          <kbd>Ctrl K</kbd>
+        </button>
         <button className={`mobile-nav-toggle ${mobileOpen ? "active" : ""}`} type="button" onClick={() => setMobileOpen((value) => !value)} aria-label="Navigation öffnen">
           {mobileOpen ? <X size={18} /> : <Menu size={18} />}
         </button>
@@ -7391,10 +7428,15 @@ function Dashboard({ path }: { path: string }) {
   const knownSection = Boolean(
     plannedSection ||
     featureDefinition ||
-    ["overview", "profile", "commands", "custom-commands", "logging", "audit-log", "team-access", "music-live", "welcome", "temp-voice", "counting", "level-system", "autorole", "security", "raidmode", "tickets", "backups"].includes(section)
+    ["overview", "workspace", "profile", "commands", "custom-commands", "logging", "audit-log", "team-access", "music-live", "welcome", "temp-voice", "counting", "level-system", "autorole", "security", "raidmode", "tickets", "backups"].includes(section)
   );
   const me = useApi<{ user: User }>("/api/me", []);
   const detail = useApi<{ guild: GuildDetail; settings: SettingsRow }>(`/api/guilds/${guildId}`, [guildId]);
+  const workspace = useApi<WorkspaceData>(demoMode ? null : `/api/guilds/${guildId}/workspace`, [guildId, demoMode]);
+  const moduleStatusMap = useMemo(
+    () => new Map((workspace.data?.modules ?? []).map((entry) => [entry.key, entry])),
+    [workspace.data]
+  );
 
   if (detail.error?.includes("noch nicht installiert")) {
     return (
@@ -7419,6 +7461,7 @@ function Dashboard({ path }: { path: string }) {
   return (
     <div className="app-shell">
       <TopNav user={me.data?.user} demoMode={demoMode} />
+      <GuildModuleStatusContext.Provider value={moduleStatusMap}>
       <div className="dashboard-layout">
         <aside className="sidebar">
           <div className="sidebar-head">
@@ -7428,6 +7471,7 @@ function Dashboard({ path }: { path: string }) {
           <nav className="sidebar-navigation" aria-label="Guild-Kategorien">
             <SidebarGroup label="Start" tone="blue">
               <SideLink icon={<LayoutDashboard size={17} />} label="Übersicht" section="overview" current={section} guildId={guildId} />
+              <SideLink icon={<FolderKanban size={17} />} label="Workspace Center" section="workspace" current={section} guildId={guildId} isNew />
               <SideLink icon={<Bot size={17} />} label="Bot-Profil" section="profile" current={section} guildId={guildId} badge="premium" />
               <SideLink icon={<UserCog size={17} />} label="Team-Zugänge" section="team-access" current={section} guildId={guildId} isNew />
             </SidebarGroup>
@@ -7512,8 +7556,17 @@ function Dashboard({ path }: { path: string }) {
                   <span className="pill neutral"><ShieldCheck size={13} /> Schreibgeschützt</span>
                 </section>
               )}
-              <fieldset className={`dashboard-page-frame ${demoMode ? "demo-readonly" : ""}`} disabled={demoMode}>
+              <fieldset className={`dashboard-page-frame ${demoMode ? "demo-readonly" : ""}`} disabled={demoMode && section !== "workspace"}>
                 {section === "overview" && <OverviewPage guildId={guildId} initial={detail.data} />}
+                {section === "workspace" && (
+                  <WorkspaceCenterPage
+                    guildId={guildId}
+                    demoMode={demoMode}
+                    request={api}
+                    onNavigate={navigate}
+                    notify={(tone, title, text) => notify({ tone, title, text })}
+                  />
+                )}
                 {section === "profile" && <ProfilePage guildId={guildId} settings={detail.data.settings} onSaved={detail.reload} />}
                 {section === "commands" && <CommandsPage guildId={guildId} />}
                 {section === "custom-commands" && <CustomCommandsPage guildId={guildId} />}
@@ -7547,6 +7600,7 @@ function Dashboard({ path }: { path: string }) {
           )}
         </main>
       </div>
+      </GuildModuleStatusContext.Provider>
     </div>
   );
 }
@@ -7609,10 +7663,18 @@ function SideLink({
   badge?: "beta" | "premium" | "planned";
   isNew?: boolean;
 }) {
+  const moduleStatuses = useContext(GuildModuleStatusContext);
+  const moduleStatus = moduleStatuses.get(section);
   return (
     <button className={`side-link ${current === section ? "active" : ""}`} onClick={() => navigate(`/dashboard/${guildId}/${section}`)}>
       {icon}
       <span className="side-link-label">{label}</span>
+      {moduleStatus && !badge && !isNew && (
+        <span
+          className={`side-module-status ${moduleStatus.syncStatus === "failed" ? "failed" : moduleStatus.enabled ? "enabled" : "disabled"}`}
+          title={moduleStatus.syncError || (moduleStatus.enabled ? "Modul aktiv" : "Modul inaktiv")}
+        />
+      )}
       {isNew && (
         <span className="side-badge is-new">
           <Check size={10} strokeWidth={3} aria-hidden="true" />
