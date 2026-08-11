@@ -281,6 +281,11 @@ type FeatureSettings = {
   updatedAt: string | null;
   configuredFields?: number;
   lastAppliedAt?: string | null;
+  panelChannelId?: string | null;
+  panelMessageId?: string | null;
+  panelPublished?: boolean;
+  roleCount?: number;
+  panelConfiguration?: Record<string, FeatureValue> | null;
 };
 
 type WelcomeSettings = {
@@ -1184,13 +1189,14 @@ const FEATURE_DEFINITIONS: FeatureDefinition[] = [
   {
     module: "reaction-roles",
     section: "reaction-roles",
-    label: "Reaction Roles",
-    kicker: "Self Roles",
-    description: "Rollenpanel, auswählbare Rollen und Mehrfachauswahl für Mitglieder vorbereiten.",
+    label: "Self-Roles",
+    kicker: "Role Studio",
+    description: "Ein klares Rollenpanel gestalten, sicher veröffentlichen und direkt mit Discord synchronisieren.",
     icon: <BadgeCheck size={18} />,
     tabs: [
       { key: "panel", label: "Discord-Panel", description: "Kanal, Überschrift und Erklärung des Rollenpanels.", icon: <MessageSquare size={16} />, fieldKeys: ["panelChannelId", "panelTitle", "panelDescription"] },
       { key: "roles", label: "Rollen", description: "Die Rollen festlegen, die Mitglieder selbst auswählen dürfen.", icon: <BadgeCheck size={16} />, fieldKeys: ["roleIds"] },
+      { key: "design", label: "Design", description: "Embed-Akzent und Discord-Buttonstil aus sicheren Presets wählen.", icon: <Palette size={16} />, fieldKeys: ["embedColor", "buttonStyle"] },
       { key: "behavior", label: "Verhalten", description: "Regeln für die Auswahl im Rollenpanel.", icon: <SlidersHorizontal size={16} />, fieldKeys: ["allowMultiple"] }
     ],
     fields: [
@@ -1198,7 +1204,13 @@ const FEATURE_DEFINITIONS: FeatureDefinition[] = [
       { key: "allowMultiple", label: "Mehrfachauswahl", description: "Mitglieder dürfen mehrere Rollen aus dem Panel wählen.", type: "toggle" },
       { key: "panelTitle", label: "Paneltitel", description: "Überschrift des Rollenpanels.", type: "text", placeholder: "Wähle deine Rollen" },
       { key: "panelDescription", label: "Panelbeschreibung", description: "Kurze Erklärung oberhalb der Rollenauswahl.", type: "textarea", wide: true },
-      { key: "roleIds", label: "Auswählbare Rollen", description: "Rollen, die im Self-Role-Panel angeboten werden.", type: "roles", wide: true }
+      { key: "roleIds", label: "Auswählbare Rollen", description: "Rollen, die im Self-Role-Panel angeboten werden.", type: "roles", wide: true },
+      { key: "embedColor", label: "Embed-Farbe", description: "Farbakzent des Discord-Embeds.", type: "select", options: [
+        { value: "blau", label: "Blau" }, { value: "gruen", label: "Grün" }, { value: "violett", label: "Violett" }, { value: "orange", label: "Orange" }, { value: "rot", label: "Rot" }
+      ] },
+      { key: "buttonStyle", label: "Button-Farbe", description: "Einheitlicher Stil aller Rollenbuttons.", type: "select", options: [
+        { value: "grau", label: "Grau" }, { value: "blau", label: "Blau" }, { value: "gruen", label: "Grün" }, { value: "rot", label: "Rot" }
+      ] }
     ]
   },
   {
@@ -7481,7 +7493,7 @@ function Dashboard({ path }: { path: string }) {
               <SideLink icon={<BarChart3 size={17} />} label="Level-System" section="level-system" current={section} guildId={guildId} />
               <SideLink icon={<ListOrdered size={17} />} label="Counting" section="counting" current={section} guildId={guildId} />
               <SideLink icon={<Trophy size={17} />} label="Giveaways" section="giveaways" current={section} guildId={guildId} />
-              <SideLink icon={<BadgeCheck size={17} />} label="Reaction Roles" section="reaction-roles" current={section} guildId={guildId} />
+              <SideLink icon={<BadgeCheck size={17} />} label="Self-Roles" section="reaction-roles" current={section} guildId={guildId} />
               <SideLink icon={<MessageSquare size={17} />} label="Vorschläge" section="suggestions" current={section} guildId={guildId} isNew />
               <SideLink icon={<Star size={17} />} label="Starboard" section="starboard" current={section} guildId={guildId} isNew />
               <SideLink icon={<Sparkles size={17} />} label="Geburtstage" section="birthdays" current={section} guildId={guildId} />
@@ -7584,7 +7596,8 @@ function Dashboard({ path }: { path: string }) {
                 {section === "tickets" && <TicketSystemPage guildId={guildId} />}
                 {section === "backups" && <BackupsPage guildId={guildId} />}
                 {section === "moderation-center" && <ModerationCenterPage guildId={guildId} />}
-                {featureDefinition && section !== "moderation-center" && <FeatureModulePage guildId={guildId} definition={featureDefinition} />}
+                {section === "reaction-roles" && <ReactionRolesPage guildId={guildId} />}
+                {featureDefinition && section !== "moderation-center" && section !== "reaction-roles" && <FeatureModulePage guildId={guildId} definition={featureDefinition} />}
                 {plannedSection && !featureDefinition && section !== "welcome" && section !== "logging" && section !== "temp-voice" && section !== "counting" && section !== "level-system" && section !== "autorole" && <PlannedPage section={plannedSection} />}
                 {!knownSection && (
                   <section className="control-page">
@@ -10357,6 +10370,353 @@ function PageSectionHeading({ tab }: { tab: PageSectionTab }) {
         <p>{tab.description}</p>
       </div>
     </header>
+  );
+}
+
+const SELF_ROLE_DEFAULT_FIELDS: Record<string, FeatureValue> = {
+  panelChannelId: "",
+  panelTitle: "Rollen auswählen",
+  panelDescription: "Wähle unten die Rollen aus, die zu dir passen.",
+  roleIds: [],
+  allowMultiple: true,
+  embedColor: "blau",
+  buttonStyle: "grau"
+};
+
+const SELF_ROLE_EMBED_PRESETS = [
+  { key: "blau", label: "Blau", color: "#5865f2" },
+  { key: "gruen", label: "Grün", color: "#2fbf7a" },
+  { key: "violett", label: "Violett", color: "#9b59b6" },
+  { key: "orange", label: "Orange", color: "#f0a61a" },
+  { key: "rot", label: "Rot", color: "#ed4245" }
+] as const;
+
+const SELF_ROLE_BUTTON_PRESETS = [
+  { key: "grau", label: "Neutral", color: "#4e5058" },
+  { key: "blau", label: "Blau", color: "#5865f2" },
+  { key: "gruen", label: "Grün", color: "#248046" },
+  { key: "rot", label: "Rot", color: "#da373c" }
+] as const;
+
+function ReactionRolesPage({ guildId }: { guildId: string }) {
+  const settings = useApi<{ feature: FeatureSettings }>(`/api/guilds/${guildId}/features/reaction-roles`, [guildId]);
+  const channels = useApi<{ channels: ChannelOption[] }>(`/api/guilds/${guildId}/channels`, [guildId]);
+  const roles = useApi<{ roles: RoleOption[] }>(`/api/guilds/${guildId}/roles`, [guildId]);
+  const [draft, setDraft] = useState<FeatureSettings>({
+    enabled: false,
+    fields: SELF_ROLE_DEFAULT_FIELDS,
+    syncStatus: "idle",
+    syncError: null,
+    updatedAt: null
+  });
+  const [activeTab, setActiveTab] = useState("panel");
+  const [saving, setSaving] = useState(false);
+  const [publishing, setPublishing] = useState(false);
+  const [status, setStatus] = useState<string | null>(null);
+
+  const tabs: PageSectionTab[] = [
+    { key: "panel", label: "Discord-Panel", description: "Zielkanal und Inhalt des Rollenpanels festlegen.", icon: <MessageSquare size={16} /> },
+    { key: "roles", label: "Rollen", description: "Bis zu 25 Rollen sicher zur Auswahl stellen.", icon: <BadgeCheck size={16} /> },
+    { key: "design", label: "Design", description: "Einheitliche Farben aus Discord-kompatiblen Presets wählen.", icon: <Palette size={16} /> },
+    { key: "behavior", label: "Verhalten", description: "Mehrfachauswahl und sichere Entfernung steuern.", icon: <SlidersHorizontal size={16} /> }
+  ];
+
+  useEffect(() => {
+    if (!settings.data?.feature) return;
+    const savedFields = settings.data.feature.fields && typeof settings.data.feature.fields === "object"
+      ? settings.data.feature.fields
+      : {};
+    const runtimeFields = settings.data.feature.panelConfiguration && typeof settings.data.feature.panelConfiguration === "object"
+      ? settings.data.feature.panelConfiguration
+      : {};
+    const savedRoleIds = Array.isArray(savedFields.roleIds) ? savedFields.roleIds : [];
+    const runtimeRoleIds = Array.isArray(runtimeFields.roleIds) ? runtimeFields.roleIds : [];
+    setDraft({
+      ...settings.data.feature,
+      enabled: Boolean(settings.data.feature.enabled || (settings.data.feature.panelPublished && runtimeRoleIds.length)),
+      fields: {
+        ...SELF_ROLE_DEFAULT_FIELDS,
+        ...(savedRoleIds.length || !runtimeRoleIds.length ? savedFields : runtimeFields)
+      }
+    });
+  }, [settings.data]);
+
+  const fields = useMemo(() => ({ ...SELF_ROLE_DEFAULT_FIELDS, ...draft.fields }), [draft.fields]);
+  const textChannels = useMemo(
+    () => (channels.data?.channels ?? []).filter((channel) => isTextGuildChannel(channel) && channel.canSend !== false),
+    [channels.data]
+  );
+  const manageableRoles = useMemo(
+    () => (roles.data?.roles ?? []).filter((role) => role.botCanManage && !role.managed && role.name !== "@everyone"),
+    [roles.data]
+  );
+  const selectedRoleIds = Array.isArray(fields.roleIds) ? fields.roleIds : [];
+  const selectedRoles = selectedRoleIds
+    .map((roleId) => manageableRoles.find((role) => role.id === roleId))
+    .filter((role): role is RoleOption => Boolean(role));
+  const panelChannelId = typeof fields.panelChannelId === "string" ? fields.panelChannelId : "";
+  const panelTitle = typeof fields.panelTitle === "string" && fields.panelTitle.trim() ? fields.panelTitle : "Rollen auswählen";
+  const panelDescription = typeof fields.panelDescription === "string" ? fields.panelDescription : "";
+  const embedColorKey = typeof fields.embedColor === "string" ? fields.embedColor : "blau";
+  const buttonStyleKey = typeof fields.buttonStyle === "string" ? fields.buttonStyle : "grau";
+  const embedPreset = SELF_ROLE_EMBED_PRESETS.find((preset) => preset.key === embedColorKey) ?? SELF_ROLE_EMBED_PRESETS[0];
+  const buttonPreset = SELF_ROLE_BUTTON_PRESETS.find((preset) => preset.key === buttonStyleKey) ?? SELF_ROLE_BUTTON_PRESETS[0];
+  const activeTabDefinition = tabs.find((tab) => tab.key === activeTab) ?? tabs[0];
+  const panelReady = Boolean(panelChannelId && selectedRoles.length && panelTitle.trim());
+  const loading = (settings.loading && !settings.data) || (channels.loading && !channels.data) || (roles.loading && !roles.data);
+  const loadError = settings.error || channels.error || roles.error;
+
+  function setField(key: string, value: FeatureValue) {
+    setDraft((current) => ({ ...current, fields: { ...current.fields, [key]: value } }));
+  }
+
+  function toggleRole(roleId: string) {
+    const next = selectedRoleIds.includes(roleId)
+      ? selectedRoleIds.filter((entry) => entry !== roleId)
+      : selectedRoleIds.length < 25 ? [...selectedRoleIds, roleId] : selectedRoleIds;
+    if (next === selectedRoleIds) {
+      setStatus("Ein Self-Role-Panel kann maximal 25 Rollen enthalten.");
+      return;
+    }
+    setField("roleIds", next);
+  }
+
+  async function reload() {
+    setStatus(null);
+    await Promise.all([settings.reload(), channels.reload(), roles.reload()]);
+  }
+
+  async function persist(nextDraft: FeatureSettings = draft) {
+    setSaving(true);
+    setStatus(null);
+    try {
+      const response = await api<{ eventId?: string; feature: FeatureSettings }>(`/api/guilds/${guildId}/features/reaction-roles`, {
+        method: "PUT",
+        body: JSON.stringify({ enabled: nextDraft.enabled, fields: { ...SELF_ROLE_DEFAULT_FIELDS, ...nextDraft.fields } })
+      });
+      setDraft({ ...response.feature, fields: { ...SELF_ROLE_DEFAULT_FIELDS, ...response.feature.fields } });
+      setStatus("Self-Roles wurden gespeichert. Der Bot übernimmt die Konfiguration jetzt.");
+      return response;
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : "Self-Roles konnten nicht gespeichert werden.");
+      return null;
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function updateEnabled(enabled: boolean) {
+    const previousDraft = draft;
+    const nextDraft = { ...draft, enabled };
+    setDraft(nextDraft);
+    if (!(await persist(nextDraft))) setDraft(previousDraft);
+  }
+
+  async function publishPanel() {
+    if (!panelChannelId) {
+      setStatus("Wähle zuerst einen Panelkanal aus.");
+      setActiveTab("panel");
+      return;
+    }
+    if (!selectedRoles.length) {
+      setStatus("Wähle mindestens eine verwaltbare Rolle aus.");
+      setActiveTab("roles");
+      return;
+    }
+
+    setPublishing(true);
+    setStatus(null);
+    try {
+      const saved = await persist(draft);
+      if (!saved) return;
+      if (saved.eventId) {
+        setStatus("Konfiguration gespeichert. Der Bot prüft jetzt Rollen und Kanal.");
+        const saveEvent = await waitForGuildSyncEvent(guildId, saved.eventId);
+        if (saveEvent?.status === "failed") {
+          throw new Error(saveEvent.lastError || "Der Bot konnte die Self-Role-Konfiguration nicht übernehmen.");
+        }
+        if (!saveEvent) {
+          setStatus("Die Konfiguration liegt noch in der Bot-Queue. Bitte veröffentliche das Panel gleich erneut.");
+          return;
+        }
+      }
+
+      const response = await api<{ eventId: string }>(`/api/guilds/${guildId}/features/reaction-roles/panel`, { method: "POST" });
+      setStatus("Der Bot veröffentlicht oder aktualisiert jetzt das Self-Role-Panel.");
+      const panelEvent = await waitForGuildSyncEvent(guildId, response.eventId);
+      await settings.reload();
+      if (panelEvent?.status === "failed") {
+        throw new Error(panelEvent.lastError || "Das Self-Role-Panel konnte nicht veröffentlicht werden.");
+      }
+      if (!panelEvent) {
+        setStatus("Das Panel liegt noch in der Bot-Queue. Der aktuelle Zustand erscheint beim nächsten Laden.");
+        return;
+      }
+      setStatus("Self-Role-Panel erfolgreich veröffentlicht und dauerhaft registriert.");
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : "Das Self-Role-Panel konnte nicht veröffentlicht werden.");
+    } finally {
+      setPublishing(false);
+    }
+  }
+
+  const selectedChannel = textChannels.find((channel) => channel.id === panelChannelId);
+
+  return (
+    <section className="control-page selfrole-control">
+      <header className="control-hero feature-hero">
+        <div>
+          <p className="eyebrow"><BadgeCheck size={16} /> Role Studio</p>
+          <h2>Self-Roles</h2>
+          <p>Rollenwahl mit sauberer Vorschau, sicherer Hierarchieprüfung und Bestätigung beim Entfernen.</p>
+        </div>
+        <div className="control-hero-actions">
+          <SyncPill status={draft.syncStatus} />
+          <ModuleStatusToggle checked={draft.enabled} disabled={saving || publishing} onChange={(checked) => void updateEnabled(checked)} />
+          <RefreshButton loading={settings.loading || channels.loading || roles.loading} onClick={() => void reload()} />
+        </div>
+      </header>
+
+      {loading && <LoadingBlock text="Self-Roles werden geladen" />}
+      {loadError && <Notice tone="danger" text={loadError} />}
+      {draft.syncError && <Notice tone="danger" text={draft.syncError} />}
+      <ActionStatus status={status} />
+
+      {!loading && !draft.enabled && (
+        <ModuleInactiveState
+          icon={<BadgeCheck size={18} />}
+          title="Self-Roles sind inaktiv"
+          text="Aktiviere das Modul, um Rollen, Farben und das Discord-Panel zu konfigurieren."
+          onEnable={() => void updateEnabled(true)}
+          disabled={saving}
+        />
+      )}
+
+      {!loading && draft.enabled && (
+        <>
+          <PageSectionTabs tabs={tabs} activeKey={activeTab} onChange={setActiveTab} label="Self-Role Bereiche" />
+          <PageSectionHeading tab={activeTabDefinition} />
+
+          {activeTab === "panel" && (
+            <div className="selfrole-editor-grid">
+              <label className="feature-field">
+                <span><strong>Panelkanal</strong><small>Hier veröffentlicht der Bot das Self-Role-Menü.</small></span>
+                <select value={panelChannelId} onChange={(event) => setField("panelChannelId", event.target.value)}>
+                  <ChannelSelectOptions channels={textChannels} noneLabel="Kanal auswählen" />
+                </select>
+              </label>
+              <label className="feature-field">
+                <span><strong>Paneltitel</strong><small>Kurze, eindeutige Überschrift im Discord-Embed.</small></span>
+                <input type="text" maxLength={100} value={panelTitle} onChange={(event) => setField("panelTitle", event.target.value)} />
+              </label>
+              <label className="feature-field wide">
+                <span><strong>Beschreibung</strong><small>Erkläre Mitgliedern kurz, wie die Rollenauswahl funktioniert.</small></span>
+                <textarea maxLength={1500} value={panelDescription} onChange={(event) => setField("panelDescription", event.target.value)} />
+              </label>
+            </div>
+          )}
+
+          {activeTab === "roles" && (
+            <section className="selfrole-role-editor">
+              <header>
+                <div><strong>Auswählbare Rollen</strong><small>Es werden nur Rollen angezeigt, die der Bot laut aktueller Hierarchie verwalten kann.</small></div>
+                <span className="pill neutral">{selectedRoles.length}/25</span>
+              </header>
+              <RoleChecklist roles={manageableRoles} selected={selectedRoleIds} onToggle={toggleRole} />
+            </section>
+          )}
+
+          {activeTab === "design" && (
+            <div className="selfrole-design-grid">
+              <section>
+                <header><strong>Embed-Farbe</strong><small>Der Akzent am linken Rand des Discord-Embeds.</small></header>
+                <div className="selfrole-preset-row">
+                  {SELF_ROLE_EMBED_PRESETS.map((preset) => (
+                    <button type="button" className={embedColorKey === preset.key ? "selected" : ""} onClick={() => setField("embedColor", preset.key)} key={preset.key}>
+                      <i style={{ background: preset.color }} /><span>{preset.label}</span>{embedColorKey === preset.key && <Check size={14} />}
+                    </button>
+                  ))}
+                </div>
+              </section>
+              <section>
+                <header><strong>Button-Farbe</strong><small>Alle Rollenbuttons verwenden denselben Discord-Stil.</small></header>
+                <div className="selfrole-preset-row buttons">
+                  {SELF_ROLE_BUTTON_PRESETS.map((preset) => (
+                    <button type="button" className={buttonStyleKey === preset.key ? "selected" : ""} onClick={() => setField("buttonStyle", preset.key)} key={preset.key} style={{ "--selfrole-button-color": preset.color } as React.CSSProperties}>
+                      <span>{preset.label}</span>{buttonStyleKey === preset.key && <Check size={14} />}
+                    </button>
+                  ))}
+                </div>
+              </section>
+            </div>
+          )}
+
+          {activeTab === "behavior" && (
+            <div className="selfrole-behavior-list">
+              <ControlToggle
+                icon={<UsersRound size={17} />}
+                title="Mehrfachauswahl"
+                text={Boolean(fields.allowMultiple) ? "Mitglieder dürfen mehrere Rollen aus diesem Panel tragen." : "Eine neue Auswahl ersetzt automatisch die vorherige Rolle aus diesem Panel."}
+                checked={Boolean(fields.allowMultiple)}
+                onChange={(checked) => setField("allowMultiple", checked)}
+              />
+              <div className="selfrole-safety-rule">
+                <span><ShieldCheck size={18} /></span>
+                <div><strong>Entfernung mit Bestätigung</strong><small>Ein zweiter Klick entfernt niemals sofort eine Rolle. Das Mitglied muss die private Sicherheitsabfrage bestätigen.</small></div>
+                <span className="pill ok"><Check size={13} /> Aktiv</span>
+              </div>
+            </div>
+          )}
+
+          <section className="selfrole-preview-section">
+            <header>
+              <div><p className="eyebrow"><Eye size={15} /> Live-Vorschau</p><h3>So erscheint das Panel in Discord</h3></div>
+              <span className="pill neutral">{selectedChannel ? `#${selectedChannel.name}` : "Kein Kanal"}</span>
+            </header>
+            <div className="selfrole-discord-preview">
+              <div className="selfrole-discord-author"><span><Bot size={18} /></span><strong>Modmail Manager</strong><small>APP</small><em>gerade eben</em></div>
+              <article style={{ borderColor: embedPreset.color }}>
+                <h4>{panelTitle}</h4>
+                {panelDescription && <p>{panelDescription}</p>}
+                <div className="selfrole-preview-roles">
+                  {selectedRoles.length ? selectedRoles.map((role) => <span key={role.id}>• <strong>{role.name}:</strong> @{role.name}</span>) : <span>Wähle mindestens eine Rolle aus.</span>}
+                </div>
+              </article>
+              <div className="selfrole-preview-buttons">
+                {selectedRoles.length
+                  ? selectedRoles.map((role) => <button type="button" style={{ background: buttonPreset.color }} key={role.id}>{role.name}</button>)
+                  : <button type="button" style={{ background: buttonPreset.color }} disabled>Rolle auswählen</button>}
+              </div>
+            </div>
+          </section>
+
+          <section className={`selfrole-publish-status ${panelReady ? "ready" : ""}`}>
+            <div className="selfrole-publish-icon">{panelReady ? <Rocket size={19} /> : <AlertTriangle size={19} />}</div>
+            <div>
+              <strong>{draft.panelPublished ? "Panel ist veröffentlicht" : panelReady ? "Panel ist bereit" : "Konfiguration unvollständig"}</strong>
+              <small>{panelReady ? `${selectedRoles.length} Rolle${selectedRoles.length === 1 ? " wird" : "n werden"} in ${selectedChannel ? `#${selectedChannel.name}` : "Discord"} angeboten.` : "Wähle einen Panelkanal und mindestens eine verwaltbare Rolle."}</small>
+            </div>
+            {draft.panelPublished && draft.panelChannelId && draft.panelMessageId && (
+              <a className="secondary-action inline" href={`https://discord.com/channels/${guildId}/${draft.panelChannelId}/${draft.panelMessageId}`} target="_blank" rel="noreferrer">
+                <ExternalLink size={15} /> In Discord öffnen
+              </a>
+            )}
+          </section>
+
+          <footer className="control-savebar">
+            <div><strong>Self-Role-Konfiguration</strong><span>Speichern übernimmt die Regeln; Veröffentlichen erstellt oder aktualisiert das Discord-Panel.</span></div>
+            <div className="form-actions">
+              <button className="secondary-action inline" type="button" onClick={() => void persist()} disabled={saving || publishing}>
+                {saving ? <Loader2 className="spin" size={16} /> : <Save size={16} />}{saving ? "Wird gespeichert" : "Speichern"}
+              </button>
+              <button className="primary-action inline" type="button" onClick={() => void publishPanel()} disabled={saving || publishing || !panelReady}>
+                {publishing ? <Loader2 className="spin" size={16} /> : <Rocket size={16} />}{publishing ? "Wird veröffentlicht" : draft.panelPublished ? "Panel aktualisieren" : "Panel veröffentlichen"}
+              </button>
+            </div>
+          </footer>
+        </>
+      )}
+    </section>
   );
 }
 

@@ -2754,7 +2754,9 @@ const DEFAULT_FEATURE_CONFIGURATIONS: Record<FeatureModule, Record<string, unkno
       roleIds: [],
       panelTitle: "Rollen auswählen",
       panelDescription: "Wähle unten deine Rollen aus.",
-      allowMultiple: true
+      allowMultiple: true,
+      embedColor: "blau",
+      buttonStyle: "grau"
     }
   },
   "automations": {
@@ -2908,7 +2910,18 @@ const DEFAULT_CONTROL_RUNTIME: Record<GuildControlModule, Record<string, unknown
   tickets: { totalTickets: 0, openTickets: 0, closedTickets: 0, deletedTickets: 0, averageRating: null, panelMessageId: null },
   backups: { items: [], lastSavedAt: null },
   ...featureModuleNames.reduce<Record<FeatureModule, Record<string, unknown>>>((runtime, module) => {
-    runtime[module] = { enabled: false, configuredFields: 0, lastAppliedAt: null };
+    runtime[module] = module === "reaction-roles"
+      ? {
+          enabled: false,
+          configuredFields: 0,
+          lastAppliedAt: null,
+          panelChannelId: null,
+          panelMessageId: null,
+          panelPublished: false,
+          roleCount: 0,
+          panelConfiguration: null
+        }
+      : { enabled: false, configuredFields: 0, lastAppliedAt: null };
     return runtime;
   }, {} as Record<FeatureModule, Record<string, unknown>>)
 };
@@ -3031,7 +3044,7 @@ const WORKSPACE_MODULE_LABELS: Record<string, string> = {
   raidmode: "Raidmode",
   tickets: "Ticket-System",
   giveaways: "Giveaways",
-  "reaction-roles": "Reaction Roles",
+  "reaction-roles": "Self-Roles",
   suggestions: "Vorschläge",
   starboard: "Starboard",
   birthdays: "Geburtstage",
@@ -5556,6 +5569,78 @@ app.put("/api/guilds/:guildId/features/:module", async (c) => {
   const saved = { ...oldValue, ...data, syncStatus: "pending", syncError: null };
   await audit(c.env, access.guild.id, access.session.user.discordUserId, `feature.${module}.update`, module, oldValue, saved);
   return json(c, { ok: true, eventId, feature: saved });
+});
+
+app.post("/api/guilds/:guildId/features/reaction-roles/panel", async (c) => {
+  const access = await requireGuildManagementAccess(c, c.req.param("guildId"));
+  const reactionRoles = await ensureGuildControlModule(c.env, access.guild.id, "reaction-roles");
+  const fields = recordValue(reactionRoles.fields);
+  const panelChannelId = String(fields.panelChannelId ?? "").trim();
+  const roleIds = normalizeRoleIds(fields.roleIds).slice(0, 25);
+
+  if (!reactionRoles.enabled) {
+    throw new HttpError(400, "reaction_roles_disabled", "Aktiviere und speichere Self-Roles zuerst.");
+  }
+  if (!snowflakeSchema.safeParse(panelChannelId).success) {
+    throw new HttpError(400, "reaction_roles_channel_required", "Wähle zuerst einen gültigen Panelkanal aus.");
+  }
+  if (!roleIds.length) {
+    throw new HttpError(400, "reaction_roles_roles_required", "Wähle mindestens eine Self-Role aus.");
+  }
+
+  const panelChannel = await first<{ can_send: number }>(
+    c.env.DB.prepare(
+      `SELECT can_send FROM guild_channels
+        WHERE guild_id = ? AND discord_channel_id = ?`
+    ).bind(access.guild.id, panelChannelId)
+  );
+  if (!panelChannel || !panelChannel.can_send) {
+    throw new HttpError(400, "reaction_roles_channel_unavailable", "Der Bot kann im ausgewählten Panelkanal nicht schreiben.");
+  }
+
+  const roleRows = await all<{ id: string; managed: number; bot_can_manage: number }>(
+    c.env.DB.prepare(
+      `SELECT discord_role_id AS id, managed, bot_can_manage
+         FROM guild_roles
+        WHERE guild_id = ? AND discord_role_id IN (${roleIds.map(() => "?").join(", ")})`
+    ).bind(access.guild.id, ...roleIds)
+  );
+  const manageableRoleIds = new Set(
+    roleRows
+      .filter((role) => !role.managed && Boolean(role.bot_can_manage))
+      .map((role) => role.id)
+  );
+  if (roleIds.some((roleId) => !manageableRoleIds.has(roleId))) {
+    throw new HttpError(
+      400,
+      "reaction_roles_role_unmanageable",
+      "Mindestens eine Rolle ist verwaltet oder liegt über der höchsten Bot-Rolle."
+    );
+  }
+
+  const settings = {
+    enabled: true,
+    fields: {
+      ...fields,
+      panelChannelId,
+      roleIds
+    }
+  };
+  const eventId = await enqueueSyncEvent(c.env, access.guild, "reaction_roles.panel.publish", {
+    discordGuildId: access.guild.discordGuildId,
+    requestedBy: access.session.user.discordUserId,
+    settings
+  });
+  await audit(
+    c.env,
+    access.guild.id,
+    access.session.user.discordUserId,
+    "reaction-roles.panel.publish",
+    panelChannelId,
+    null,
+    { eventId, roleCount: roleIds.length }
+  );
+  return json(c, { ok: true, eventId });
 });
 
 app.post("/api/guilds/:guildId/features/applications/panel", async (c) => {
@@ -8102,6 +8187,7 @@ app.post("/api/internal/bot/sync-events/:eventId/complete", async (c) => {
     "raidmode.settings.upsert": "raidmode",
     "ticket.settings.upsert": "tickets",
     "ticket.panel.send": "tickets",
+    "reaction_roles.panel.publish": "reaction-roles",
     "applications.panel.send": "applications",
     "backup.action": "backups"
   };
@@ -8246,6 +8332,7 @@ app.post("/api/internal/bot/sync-events/:eventId/fail", async (c) => {
     "raidmode.settings.upsert": "raidmode",
     "ticket.settings.upsert": "tickets",
     "ticket.panel.send": "tickets",
+    "reaction_roles.panel.publish": "reaction-roles",
     "applications.panel.send": "applications",
     "backup.action": "backups"
   };

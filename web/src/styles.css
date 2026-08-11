@@ -10171,6 +10171,307 @@ textarea {
   font-size: 13px;
 }
 
+.selfrole-editor-grid,
+.selfrole-design-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.selfrole-editor-grid .wide {
+  grid-column: 1 / -1;
+}
+
+.selfrole-role-editor,
+.selfrole-design-grid > section,
+.selfrole-preview-section {
+  min-width: 0;
+  display: grid;
+  gap: 14px;
+  padding: 16px;
+  border: 1px solid var(--border-soft);
+  border-radius: 8px;
+  background: var(--panel-bg-soft);
+}
+
+.selfrole-role-editor > header,
+.selfrole-design-grid > section > header,
+.selfrole-preview-section > header {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.selfrole-role-editor > header > div,
+.selfrole-design-grid > section > header,
+.selfrole-preview-section > header > div {
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+}
+
+.selfrole-role-editor small,
+.selfrole-design-grid small,
+.selfrole-preview-section small {
+  color: var(--muted);
+  line-height: 1.45;
+}
+
+.selfrole-role-editor .control-role-list {
+  max-height: 390px;
+  overflow: auto;
+  padding-right: 3px;
+}
+
+.selfrole-preset-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(105px, 1fr));
+  gap: 8px;
+}
+
+.selfrole-preset-row button {
+  min-width: 0;
+  min-height: 44px;
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr) 16px;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 10px;
+  border: 1px solid var(--border-soft);
+  border-radius: 7px;
+  color: var(--muted-strong);
+  background: var(--field-bg);
+  text-align: left;
+}
+
+.selfrole-preset-row button:hover {
+  border-color: rgba(104, 168, 255, 0.34);
+  color: var(--text);
+}
+
+.selfrole-preset-row button.selected {
+  border-color: rgba(104, 168, 255, 0.55);
+  color: var(--text);
+  background: rgba(104, 168, 255, 0.1);
+  box-shadow: inset 0 0 0 1px rgba(104, 168, 255, 0.08);
+}
+
+.selfrole-preset-row button > i {
+  width: 16px;
+  height: 16px;
+  border: 2px solid rgba(255, 255, 255, 0.48);
+  border-radius: 4px;
+}
+
+.selfrole-preset-row button > svg {
+  color: var(--blue);
+}
+
+.selfrole-preset-row.buttons button {
+  grid-template-columns: minmax(0, 1fr) 16px;
+  border-color: color-mix(in srgb, var(--selfrole-button-color) 52%, var(--border-soft));
+  color: #fff;
+  background: var(--selfrole-button-color);
+  text-align: center;
+}
+
+.selfrole-preset-row.buttons button.selected {
+  box-shadow: 0 0 0 2px var(--panel-bg-soft), 0 0 0 4px color-mix(in srgb, var(--selfrole-button-color) 72%, #fff);
+}
+
+.selfrole-preset-row.buttons button > svg {
+  color: #fff;
+}
+
+.selfrole-behavior-list {
+  display: grid;
+  gap: 10px;
+}
+
+.selfrole-safety-rule {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: 40px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid rgba(47, 191, 122, 0.26);
+  border-radius: 8px;
+  background: rgba(47, 191, 122, 0.06);
+}
+
+.selfrole-safety-rule > span:first-child {
+  width: 40px;
+  height: 40px;
+  display: grid;
+  place-items: center;
+  border-radius: 7px;
+  color: var(--green);
+  background: rgba(47, 191, 122, 0.12);
+}
+
+.selfrole-safety-rule > div {
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+}
+
+.selfrole-safety-rule small {
+  color: var(--muted);
+  line-height: 1.45;
+}
+
+.selfrole-preview-section > header h3,
+.selfrole-preview-section > header p {
+  margin: 0;
+}
+
+.selfrole-discord-preview {
+  min-width: 0;
+  padding: 18px;
+  border: 1px solid #252932;
+  border-radius: 7px;
+  background: #111318;
+}
+
+.selfrole-discord-author {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: #f2f3f5;
+}
+
+.selfrole-discord-author > span {
+  width: 36px;
+  height: 36px;
+  flex: 0 0 36px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  color: #fff;
+  background: #5865f2;
+}
+
+.selfrole-discord-author > small {
+  padding: 2px 4px;
+  border-radius: 3px;
+  color: #fff;
+  background: #5865f2;
+  font-size: 9px;
+  font-weight: 750;
+}
+
+.selfrole-discord-author > em {
+  color: #949ba4;
+  font-size: 11px;
+  font-style: normal;
+}
+
+.selfrole-discord-preview article {
+  min-width: 0;
+  display: grid;
+  gap: 9px;
+  margin: 10px 0 9px 43px;
+  padding: 13px 14px;
+  border-left: 4px solid #5865f2;
+  border-radius: 3px;
+  color: #dbdee1;
+  background: #2b2d31;
+}
+
+.selfrole-discord-preview article h4,
+.selfrole-discord-preview article p {
+  margin: 0;
+}
+
+.selfrole-discord-preview article h4 {
+  color: #f2f3f5;
+  font-size: 16px;
+}
+
+.selfrole-discord-preview article p {
+  color: #dbdee1;
+  line-height: 1.45;
+  white-space: pre-wrap;
+}
+
+.selfrole-preview-roles {
+  display: grid;
+  gap: 4px;
+  color: #b5bac1;
+  font-size: 13px;
+}
+
+.selfrole-preview-roles strong {
+  color: #f2f3f5;
+}
+
+.selfrole-preview-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  margin-left: 43px;
+}
+
+.selfrole-preview-buttons button {
+  min-height: 34px;
+  max-width: 100%;
+  padding: 0 13px;
+  overflow: hidden;
+  border: 0;
+  border-radius: 4px;
+  color: #fff;
+  font-size: 13px;
+  font-weight: 650;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.selfrole-publish-status {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: 42px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 13px;
+  padding: 14px;
+  border: 1px solid rgba(240, 166, 26, 0.26);
+  border-radius: 8px;
+  background: rgba(240, 166, 26, 0.06);
+}
+
+.selfrole-publish-status.ready {
+  border-color: rgba(47, 191, 122, 0.25);
+  background: rgba(47, 191, 122, 0.055);
+}
+
+.selfrole-publish-icon {
+  width: 42px;
+  height: 42px;
+  display: grid;
+  place-items: center;
+  border-radius: 7px;
+  color: #f0a61a;
+  background: rgba(240, 166, 26, 0.12);
+}
+
+.selfrole-publish-status.ready .selfrole-publish-icon {
+  color: var(--green);
+  background: rgba(47, 191, 122, 0.12);
+}
+
+.selfrole-publish-status > div:nth-child(2) {
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+}
+
+.selfrole-publish-status small {
+  color: var(--muted);
+}
+
 @media (max-width: 1180px) {
   .control-columns,
   .ticket-columns {
@@ -10210,11 +10511,17 @@ textarea {
   .control-toggle-settings,
   .control-field-grid,
   .control-field-grid.two,
-  .feature-field-grid {
+  .feature-field-grid,
+  .selfrole-editor-grid,
+  .selfrole-design-grid {
     grid-template-columns: 1fr;
   }
 
   .feature-field.wide {
+    grid-column: auto;
+  }
+
+  .selfrole-editor-grid .wide {
     grid-column: auto;
   }
 
@@ -10289,6 +10596,32 @@ textarea {
 
   .control-savebar .form-actions {
     display: grid;
+  }
+
+  .selfrole-role-editor > header,
+  .selfrole-preview-section > header {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .selfrole-safety-rule,
+  .selfrole-publish-status {
+    grid-template-columns: 40px minmax(0, 1fr);
+  }
+
+  .selfrole-safety-rule > .pill,
+  .selfrole-publish-status > .secondary-action {
+    grid-column: 1 / -1;
+    width: 100%;
+  }
+
+  .selfrole-discord-preview article,
+  .selfrole-preview-buttons {
+    margin-left: 0;
+  }
+
+  .selfrole-preset-row {
+    grid-template-columns: 1fr 1fr;
   }
 
   .ticket-builder-list article {
