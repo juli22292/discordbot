@@ -5514,6 +5514,7 @@ app.put("/api/guilds/:guildId/features/:module", async (c) => {
   const access = await requireGuildManagementAccess(c, c.req.param("guildId"));
   const module = featureModuleSchema.parse(c.req.param("module"));
   const data = featureSettingsSchema.parse(await readJsonBody(c));
+  let normalizedData = data;
   const oldValue = await ensureGuildControlModule(c.env, access.guild.id, module);
   const channelIds = new Set<string>();
   const roleIds = new Set<string>();
@@ -5542,7 +5543,18 @@ app.put("/api/guilds/:guildId/features/:module", async (c) => {
       ).bind(access.guild.id, ...channelIds)
     );
     const found = new Set(rows.map((row) => row.id));
-    if (Array.from(channelIds).some((id) => !found.has(id))) {
+    const missingChannelIds = Array.from(channelIds).filter((id) => !found.has(id));
+    if (missingChannelIds.length && module === "reaction-roles") {
+      normalizedData = {
+        ...normalizedData,
+        fields: {
+          ...normalizedData.fields,
+          panelChannelId: missingChannelIds.includes(String(normalizedData.fields.panelChannelId ?? ""))
+            ? ""
+            : normalizedData.fields.panelChannelId
+        }
+      };
+    } else if (missingChannelIds.length) {
       throw new HttpError(400, "feature_channel_missing", "Mindestens ein ausgewählter Kanal gehört nicht zu dieser Guild.");
     }
   }
@@ -5555,18 +5567,27 @@ app.put("/api/guilds/:guildId/features/:module", async (c) => {
       ).bind(access.guild.id, ...roleIds)
     );
     const found = new Set(rows.map((row) => row.id));
-    if (Array.from(roleIds).some((id) => !found.has(id))) {
+    const missingRoleIds = Array.from(roleIds).filter((id) => !found.has(id));
+    if (missingRoleIds.length && module === "reaction-roles") {
+      normalizedData = {
+        ...normalizedData,
+        fields: {
+          ...normalizedData.fields,
+          roleIds: normalizeRoleIds(normalizedData.fields.roleIds).filter((id) => found.has(id))
+        }
+      };
+    } else if (missingRoleIds.length) {
       throw new HttpError(400, "feature_role_missing", "Mindestens eine ausgewählte Rolle gehört nicht zu dieser Guild.");
     }
   }
 
-  await setGuildControlPending(c.env, access.guild.id, module, data);
+  await setGuildControlPending(c.env, access.guild.id, module, normalizedData);
   const eventId = await enqueueSyncEvent(c.env, access.guild, "feature.settings.upsert", {
     discordGuildId: access.guild.discordGuildId,
     module,
-    settings: data
+    settings: normalizedData
   });
-  const saved = { ...oldValue, ...data, syncStatus: "pending", syncError: null };
+  const saved = { ...oldValue, ...normalizedData, syncStatus: "pending", syncError: null };
   await audit(c.env, access.guild.id, access.session.user.discordUserId, `feature.${module}.update`, module, oldValue, saved);
   return json(c, { ok: true, eventId, feature: saved });
 });

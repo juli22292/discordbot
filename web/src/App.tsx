@@ -10441,6 +10441,18 @@ function ReactionRolesPage({ guildId }: { guildId: string }) {
     });
   }, [settings.data]);
 
+  useEffect(() => {
+    const interval = window.setInterval(() => {
+      if (document.visibilityState === "visible") {
+        void Promise.all([channels.reload(), roles.reload()]);
+      }
+    }, 15_000);
+
+    return () => window.clearInterval(interval);
+    // Reload-Funktionen gehören zu den unveränderten API-Pfaden dieser Guild.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [guildId]);
+
   const fields = useMemo(() => ({ ...SELF_ROLE_DEFAULT_FIELDS, ...draft.fields }), [draft.fields]);
   const textChannels = useMemo(
     () => (channels.data?.channels ?? []).filter((channel) => isTextGuildChannel(channel) && channel.canSend !== false),
@@ -10450,7 +10462,12 @@ function ReactionRolesPage({ guildId }: { guildId: string }) {
     () => (roles.data?.roles ?? []).filter((role) => role.botCanManage && !role.managed && role.name !== "@everyone"),
     [roles.data]
   );
-  const selectedRoleIds = Array.isArray(fields.roleIds) ? fields.roleIds : [];
+  const configuredRoleIds = Array.isArray(fields.roleIds) ? fields.roleIds : [];
+  const manageableRoleIds = useMemo(() => new Set(manageableRoles.map((role) => role.id)), [manageableRoles]);
+  const selectedRoleIds = roles.data
+    ? configuredRoleIds.filter((roleId) => manageableRoleIds.has(roleId))
+    : configuredRoleIds;
+  const staleRoleCount = Math.max(0, configuredRoleIds.length - selectedRoleIds.length);
   const selectedRoles = selectedRoleIds
     .map((roleId) => manageableRoles.find((role) => role.id === roleId))
     .filter((role): role is RoleOption => Boolean(role));
@@ -10490,9 +10507,20 @@ function ReactionRolesPage({ guildId }: { guildId: string }) {
     setSaving(true);
     setStatus(null);
     try {
+      const nextFields = { ...SELF_ROLE_DEFAULT_FIELDS, ...nextDraft.fields };
+      const nextRoleIds = Array.isArray(nextFields.roleIds) ? nextFields.roleIds : [];
+      const normalizedFields = {
+        ...nextFields,
+        panelChannelId: channels.data
+          && String(nextFields.panelChannelId ?? "")
+          && !textChannels.some((channel) => channel.id === String(nextFields.panelChannelId))
+          ? ""
+          : nextFields.panelChannelId,
+        roleIds: roles.data ? nextRoleIds.filter((roleId) => manageableRoleIds.has(roleId)) : nextRoleIds
+      };
       const response = await api<{ eventId?: string; feature: FeatureSettings }>(`/api/guilds/${guildId}/features/reaction-roles`, {
         method: "PUT",
-        body: JSON.stringify({ enabled: nextDraft.enabled, fields: { ...SELF_ROLE_DEFAULT_FIELDS, ...nextDraft.fields } })
+        body: JSON.stringify({ enabled: nextDraft.enabled, fields: normalizedFields })
       });
       setDraft({ ...response.feature, fields: { ...SELF_ROLE_DEFAULT_FIELDS, ...response.feature.fields } });
       setStatus("Self-Roles wurden gespeichert. Der Bot übernimmt die Konfiguration jetzt.");
@@ -10580,6 +10608,12 @@ function ReactionRolesPage({ guildId }: { guildId: string }) {
       {loading && <LoadingBlock text="Self-Roles werden geladen" />}
       {loadError && <Notice tone="danger" text={loadError} />}
       {draft.syncError && <Notice tone="danger" text={draft.syncError} />}
+      {staleRoleCount > 0 && (
+        <Notice
+          tone="warning"
+          text={`${staleRoleCount} nicht mehr verfügbare Self-Role${staleRoleCount === 1 ? " wird" : "s werden"} beim nächsten Speichern automatisch entfernt.`}
+        />
+      )}
       <ActionStatus status={status} />
 
       {!loading && !draft.enabled && (
