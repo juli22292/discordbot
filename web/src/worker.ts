@@ -69,6 +69,12 @@ import {
   serializePremiumRequirement
 } from "./server/premium-features";
 import {
+  THEME_PRANK_SETTING_KEY,
+  parseStoredThemePrank,
+  serializeThemePrank,
+  themePrankSettingsSchema
+} from "./server/theme-prank";
+import {
   DiscordApiError,
   createDiscordChannelInvite,
   deleteDiscordInvite,
@@ -1112,6 +1118,23 @@ async function readPremiumFeaturesSettings(env: Env): Promise<{
 
   return {
     required: parseStoredPremiumRequirement(row?.setting_value),
+    updatedAt: row?.updated_at ?? null
+  };
+}
+
+async function readThemePrankSettings(env: Env): Promise<{
+  enabled: boolean;
+  updatedAt: string | null;
+}> {
+  await ensureAppSettingsStorage(env);
+  const row = await first<{ setting_value: string; updated_at: string }>(
+    requireDb(env).prepare(
+      "SELECT setting_value, updated_at FROM app_settings WHERE setting_key = ?"
+    ).bind(THEME_PRANK_SETTING_KEY)
+  );
+
+  return {
+    enabled: parseStoredThemePrank(row?.setting_value),
     updatedAt: row?.updated_at ?? null
   };
 }
@@ -4008,6 +4031,12 @@ app.get("/api/public/ai/access", async (c) => {
 
 app.get("/api/public/premium-features", async (c) => {
   const response = json(c, { settings: await readPremiumFeaturesSettings(c.env) });
+  response.headers.set("Cache-Control", "no-store");
+  return response;
+});
+
+app.get("/api/public/theme-prank", async (c) => {
+  const response = json(c, { settings: await readThemePrankSettings(c.env) });
   response.headers.set("Cache-Control", "no-store");
   return response;
 });
@@ -6920,6 +6949,13 @@ app.get("/api/admin/premium-features", async (c) => {
   });
 });
 
+app.get("/api/admin/theme-prank", async (c) => {
+  await requireAdminSession(c);
+  return json(c, {
+    settings: await readThemePrankSettings(c.env)
+  });
+});
+
 app.put("/api/admin/premium-features", async (c) => {
   const session = await requireAdminSession(c);
   const data = premiumFeaturesSettingsSchema.parse(await readJsonBody(c));
@@ -6944,6 +6980,35 @@ app.put("/api/admin/premium-features", async (c) => {
     ok: true,
     settings: {
       required: data.required,
+      updatedAt: timestamp
+    }
+  });
+});
+
+app.put("/api/admin/theme-prank", async (c) => {
+  const session = await requireAdminSession(c);
+  const data = themePrankSettingsSchema.parse(await readJsonBody(c));
+  const timestamp = nowIso();
+  await ensureAppSettingsStorage(c.env);
+  await requireDb(c.env).prepare(
+    `INSERT INTO app_settings (
+       setting_key, setting_value, updated_by_discord_user_id, updated_at
+     ) VALUES (?, ?, ?, ?)
+     ON CONFLICT(setting_key) DO UPDATE SET
+       setting_value = excluded.setting_value,
+       updated_by_discord_user_id = excluded.updated_by_discord_user_id,
+       updated_at = excluded.updated_at`
+  ).bind(
+    THEME_PRANK_SETTING_KEY,
+    serializeThemePrank(data.enabled),
+    session.user.discordUserId,
+    timestamp
+  ).run();
+
+  return json(c, {
+    ok: true,
+    settings: {
+      enabled: data.enabled,
       updatedAt: timestamp
     }
   });

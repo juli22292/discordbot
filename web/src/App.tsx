@@ -1050,6 +1050,13 @@ type AdminPremiumFeatures = {
   };
 };
 
+type ThemePrankSettings = {
+  settings: {
+    enabled: boolean;
+    updatedAt: string | null;
+  };
+};
+
 type ThemeMode = "dark" | "light";
 type ToastTone = "success" | "danger" | "warning" | "info";
 type HomeGuildFilter = "all" | "installed" | "missing" | "favorites";
@@ -1690,6 +1697,7 @@ const PUBLIC_AI_STORAGE_KEY = "modmail-manager-public-ai-chat";
 const PUBLIC_AI_MODE_STORAGE_KEY = "modmail-manager-public-ai-mode";
 const PUBLIC_AI_CONVERSATION_ID_KEY = "modmail-manager-public-ai-conversation";
 const AI_VISIBILITY_CHANGED_EVENT = "modmail-manager-ai-visibility-changed";
+const THEME_PRANK_CHANGED_EVENT = "modmail-manager-theme-prank-changed";
 const PublicAiContent = React.lazy(async () => {
   const module = await import("./public-ai-content");
   return { default: module.PublicAiContent };
@@ -1763,27 +1771,97 @@ function useThemeMode() {
 
   return {
     theme,
-    toggleTheme: () => setTheme((current) => (current === "dark" ? "light" : "dark"))
+    setTheme
   };
 }
 
 function ThemeToggle({ compact = false }: { compact?: boolean }) {
-  const { theme, toggleTheme } = useThemeMode();
+  const { theme, setTheme } = useThemeMode();
+  const prank = useApi<ThemePrankSettings>("/api/public/theme-prank", []);
+  const [showPrankWarning, setShowPrankWarning] = useState(false);
   const light = theme === "light";
 
+  useEffect(() => {
+    const reloadPrankSetting = () => void prank.reload();
+    window.addEventListener(THEME_PRANK_CHANGED_EVENT, reloadPrankSetting);
+    return () => window.removeEventListener(THEME_PRANK_CHANGED_EVENT, reloadPrankSetting);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    if (!showPrankWarning) return;
+
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setShowPrankWarning(false);
+    };
+    window.addEventListener("keydown", closeOnEscape);
+    return () => window.removeEventListener("keydown", closeOnEscape);
+  }, [showPrankWarning]);
+
+  function requestThemeChange() {
+    if (light) {
+      setTheme("dark");
+      return;
+    }
+
+    if (prank.data?.settings.enabled) {
+      setShowPrankWarning(true);
+      return;
+    }
+
+    setTheme("light");
+  }
+
+  function confirmLightMode() {
+    setShowPrankWarning(false);
+    setTheme("light");
+  }
+
   return (
-    <button
-      type="button"
-      className={`theme-toggle ${light ? "light" : "dark"} ${compact ? "compact" : ""}`}
-      onClick={toggleTheme}
-      aria-label={light ? "Dark Mode aktivieren" : "Light Mode aktivieren"}
-      title={light ? "Dark Mode aktivieren" : "Light Mode aktivieren"}
-    >
-      <span className="theme-toggle-track" aria-hidden="true">
-        <span className="theme-toggle-thumb">{light ? <Sun size={14} /> : <Moon size={14} />}</span>
-      </span>
-      {!compact && <span>{light ? "Light" : "Dark"}</span>}
-    </button>
+    <>
+      <button
+        type="button"
+        className={`theme-toggle ${light ? "light" : "dark"} ${compact ? "compact" : ""}`}
+        onClick={requestThemeChange}
+        aria-label={light ? "Dark Mode aktivieren" : "Light Mode aktivieren"}
+        title={light ? "Dark Mode aktivieren" : "Light Mode aktivieren"}
+      >
+        <span className="theme-toggle-track" aria-hidden="true">
+          <span className="theme-toggle-thumb">{light ? <Sun size={14} /> : <Moon size={14} />}</span>
+        </span>
+        {!compact && <span>{light ? "Light" : "Dark"}</span>}
+      </button>
+
+      {showPrankWarning && (
+        <div className="theme-prank-backdrop" role="presentation" onMouseDown={() => setShowPrankWarning(false)}>
+          <section
+            className="theme-prank-dialog"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="theme-prank-title"
+            aria-describedby="theme-prank-description"
+            onMouseDown={(event) => event.stopPropagation()}
+          >
+            <span className="theme-prank-icon" aria-hidden="true">
+              <BotCustomEmoji value={botCustomEmojiMarkup("info")} size={32} />
+            </span>
+            <p className="theme-prank-kicker">ACHTUNG</p>
+            <h2 id="theme-prank-title">Bereit für den Light Mode?</h2>
+            <p id="theme-prank-description">Möchtest du wirklich zum Light Mode wechseln, um den fettesten Flashbang deines Lebens zu sehen??</p>
+            <div className="theme-prank-actions">
+              <button type="button" className="theme-prank-confirm" onClick={confirmLightMode}>
+                <Sun size={17} />
+                JA
+              </button>
+              <button type="button" className="theme-prank-cancel" onClick={() => setShowPrankWarning(false)} autoFocus>
+                <X size={17} />
+                Nein, abbrechen
+              </button>
+            </div>
+          </section>
+        </div>
+      )}
+    </>
   );
 }
 
@@ -5635,6 +5713,7 @@ function AdminPageModern() {
   const ownerLogs = useApi<OwnerLogData>("/api/admin/bot/logs", []);
   const aiVisibility = useApi<AdminAiVisibility>("/api/admin/ai-visibility", []);
   const premiumFeatures = useApi<AdminPremiumFeatures>("/api/admin/premium-features", []);
+  const themePrank = useApi<ThemePrankSettings>("/api/admin/theme-prank", []);
   const runtime = admin.data?.runtime ?? null;
   const ownerHasData = Boolean(admin.data);
   const ownerInitialLoading = admin.loading && !ownerHasData;
@@ -5664,6 +5743,7 @@ function AdminPageModern() {
   const [autoRefresh, setAutoRefresh] = useState(true);
   const [savingAiVisibility, setSavingAiVisibility] = useState(false);
   const [savingPremiumFeatures, setSavingPremiumFeatures] = useState(false);
+  const [savingThemePrank, setSavingThemePrank] = useState(false);
 
   function scrollToOwnerSection(sectionId: string) {
     document.getElementById(sectionId)?.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -5958,6 +6038,33 @@ function AdminPageModern() {
     }
   }
 
+  async function saveThemePrank(enabled: boolean) {
+    setSavingThemePrank(true);
+    try {
+      await api<ThemePrankSettings>("/api/admin/theme-prank", {
+        method: "PUT",
+        body: JSON.stringify({ enabled })
+      });
+      await themePrank.reload();
+      window.dispatchEvent(new Event(THEME_PRANK_CHANGED_EVENT));
+      notify({
+        tone: "success",
+        title: enabled ? "Light-Mode-Prank aktiviert" : "Light-Mode-Prank deaktiviert",
+        text: enabled
+          ? "Vor dem Wechsel zu Light Mode erscheint jetzt die Flashbang-Warnung."
+          : "Der Theme-Wechsel funktioniert wieder ohne zusätzliche Warnung."
+      });
+    } catch (error) {
+      notify({
+        tone: "danger",
+        title: "Aprilscherz nicht gespeichert",
+        text: error instanceof Error ? error.message : "Die Prank-Einstellung konnte nicht geändert werden."
+      });
+    } finally {
+      setSavingThemePrank(false);
+    }
+  }
+
   return (
     <div className="app-shell">
       <TopNav user={me.data?.user} />
@@ -6079,6 +6186,39 @@ function AdminPageModern() {
               </small>
             </div>
             {premiumFeatures.error && <Notice tone="danger" text={premiumFeatures.error} />}
+          </section>
+        )}
+
+        {me.data?.user?.ownerAdmin && (
+          <section className="panel owner-ai-visibility-panel owner-theme-prank-panel">
+            <div className="owner-ai-visibility-copy">
+              <span className="owner-ai-visibility-icon is-prank"><AlertTriangle size={20} /></span>
+              <div>
+                <p className="eyebrow">Aprilscherz</p>
+                <h2>Light-Mode Flashbang</h2>
+                <p>Zeigt beim Wechsel von Dark zu Light eine übertriebene Sicherheitswarnung. Zurück zu Dark funktioniert immer ohne Rückfrage.</p>
+              </div>
+            </div>
+            <div className="owner-ai-visibility-control">
+              <span className={`pill ${themePrank.data?.settings.enabled ? "warn" : "ok"}`}>
+                PRANK: {themePrank.data?.settings.enabled ? "AN" : "AUS"}
+              </span>
+              <ModuleStatusToggle
+                checked={themePrank.data?.settings.enabled ?? false}
+                disabled={themePrank.loading || savingThemePrank}
+                activeLabel="Aktiv"
+                inactiveLabel="Deaktiviert"
+                onChange={(value) => void saveThemePrank(value)}
+              />
+              <small>
+                {savingThemePrank
+                  ? "Wird gespeichert..."
+                  : themePrank.data?.settings.updatedAt
+                    ? `Zuletzt geändert: ${formatDateTime(themePrank.data.settings.updatedAt)}`
+                    : "Standard: deaktiviert"}
+              </small>
+            </div>
+            {themePrank.error && <Notice tone="danger" text={themePrank.error} />}
           </section>
         )}
 
