@@ -89,7 +89,7 @@ SHA-512-Prüfsumme, baut den Builder und startet ihn.
 
 Das Builder-Secret darf nicht unverschlüsselt über eine öffentliche
 `http://IP:PORT`-Adresse übertragen werden. Verwende deshalb
-`https://builder.modmailmanagerbot.de`.
+`https://builder.carrothost.de`.
 
 ### Cloudflare-DNS
 
@@ -121,34 +121,33 @@ Pterodactyl-Port** ein:
 
 ```bash
 curl -fsSL \
-  https://raw.githubusercontent.com/juli22292/discordbot/main/plugin-builder/pterodactyl/nginx-builder.modmailmanagerbot.de.conf \
-  -o /etc/nginx/sites-available/builder.modmailmanagerbot.de
+  https://raw.githubusercontent.com/juli22292/discordbot/main/plugin-builder/pterodactyl/nginx-builder.carrothost.de.conf \
+  -o /etc/nginx/sites-available/builder.carrothost.de
 sed -i 's/__BUILDER_PORT__/<NEUER_PORT>/g' \
-  /etc/nginx/sites-available/builder.modmailmanagerbot.de
+  /etc/nginx/sites-available/builder.carrothost.de
 ```
 
 `<NEUER_PORT>` wird dabei einschließlich der spitzen Klammern ersetzt, zum
 Beispiel durch `25610`.
 
-Prüfe zuerst, welche lokale Adresse auf dem Host funktioniert:
+Prüfe zuerst, ob der Builder über die Host-IP erreichbar ist:
 
 ```bash
-curl http://127.0.0.1:<NEUER_PORT>/health
 curl http://77.90.30.197:<NEUER_PORT>/health
 ```
 
-Wenn `127.0.0.1` nicht funktioniert, aber die öffentliche IP schon, ersetze
-in der Nginx-Datei auch `127.0.0.1` durch `77.90.30.197`. Der fertige
-Nginx-VHost sieht beispielsweise so aus:
+Der Builder läuft in einem Pterodactyl-Container. Deshalb leitet Nginx über
+die Host-IP und die Pterodactyl-Allocation weiter. Der fertige Nginx-VHost
+sieht beispielsweise so aus:
 
 ```nginx
 server {
     listen 80;
     listen [::]:80;
-    server_name builder.modmailmanagerbot.de;
+    server_name builder.carrothost.de;
 
     location / {
-        proxy_pass http://127.0.0.1:<NEUER_PORT>;
+        proxy_pass http://77.90.30.197:<NEUER_PORT>;
         proxy_http_version 1.1;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
@@ -164,8 +163,8 @@ server {
 Aktiviere die Konfiguration:
 
 ```bash
-ln -sfn /etc/nginx/sites-available/builder.modmailmanagerbot.de \
-  /etc/nginx/sites-enabled/builder.modmailmanagerbot.de
+ln -sfn /etc/nginx/sites-available/builder.carrothost.de \
+  /etc/nginx/sites-enabled/builder.carrothost.de
 nginx -t
 systemctl reload nginx
 ```
@@ -173,13 +172,13 @@ systemctl reload nginx
 Das Zertifikat wird mit Certbot verwaltet:
 
 ```bash
-certbot --nginx -d builder.modmailmanagerbot.de --redirect
+certbot --nginx -d builder.carrothost.de --redirect
 ```
 
 Prüfe danach:
 
 ```bash
-curl https://builder.modmailmanagerbot.de/health
+curl https://builder.carrothost.de/health
 ```
 
 Erwartet wird JSON mit `"status":"ready"`, `"version":"2.0.0"`,
@@ -191,7 +190,7 @@ In **Workers & Pages > discordbot > Settings > Variables and Secrets**:
 
 | Typ | Name | Wert |
 | --- | --- | --- |
-| Text/Plaintext | `PLUGIN_BUILDER_URL` | `https://builder.modmailmanagerbot.de` |
+| Text/Plaintext | `PLUGIN_BUILDER_URL` | `https://builder.carrothost.de` |
 | Secret | `PLUGIN_BUILDER_API_SECRET` | exakt das Builder-Secret |
 
 Alternativ mit Wrangler im Ordner `web`:
@@ -206,7 +205,7 @@ vorbereitet.
 
 ## 6. Funktion testen
 
-1. Öffne `https://bot.modmailmanagerbot.de/ai`.
+1. Öffne `https://panel.carrothost.de/ai`.
 2. Melde dich über Discord an. KI-Chats können je nach Admin-Einstellung
    öffentlich sein, das Kompilieren verlangt aus Schutz vor Missbrauch immer
    eine Anmeldung.
@@ -267,7 +266,7 @@ Werte neu setzen und Builder sowie Worker neu starten/deployen.
 ### `Der Minecraft-Plugin-Compiler ist gerade nicht erreichbar`
 
 1. Pterodactyl-Konsole auf `[BUILDER] Bereit` prüfen.
-2. `https://builder.modmailmanagerbot.de/health` aufrufen.
+2. `https://builder.carrothost.de/health` aufrufen.
 3. Nginx mit `nginx -t` prüfen und neu laden.
 4. Kontrollieren, ob `proxy_pass` auf den aktuellen primären
    Pterodactyl-Port zeigt.
@@ -278,9 +277,9 @@ Werte neu setzen und Builder sowie Worker neu starten/deployen.
 2. Starte den Builder neu und prüfe in der Konsole
    `[BUILDER] Verwende Pterodactyl-Port <PORT>`.
 3. Ersetze nur den Port hinter `proxy_pass` in
-   `/etc/nginx/sites-available/builder.modmailmanagerbot.de`.
+   `/etc/nginx/sites-available/builder.carrothost.de`.
 4. Führe `nginx -t && systemctl reload nginx` aus.
-5. Teste `curl https://builder.modmailmanagerbot.de/health`.
+5. Teste `curl https://builder.carrothost.de/health`.
 
 Die Cloudflare-Variable `PLUGIN_BUILDER_URL` bleibt unverändert, weil sie auf
 die Domain und nicht auf den Pterodactyl-Port zeigt.
