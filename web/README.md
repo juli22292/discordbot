@@ -69,7 +69,7 @@ Die komplette Einrichtung steht in
 In Cloudflare werden benoetigt:
 
 ```text
-PLUGIN_BUILDER_URL=https://builder.carrothost.de
+PLUGIN_BUILDER_URL=https://builder.modmailmanagerbot.de
 PLUGIN_BUILDER_API_SECRET=<derselbe zufaellige Wert wie im Pterodactyl-Builder>
 ```
 
