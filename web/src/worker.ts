@@ -74,6 +74,7 @@ import {
   serializeThemePrank,
   themePrankSettingsSchema
 } from "./server/theme-prank";
+import { rootSiteResponse } from "./server/site-routing";
 import {
   DiscordApiError,
   createDiscordChannelInvite,
@@ -8692,6 +8693,9 @@ export default {
   async fetch(request: Request, env: Env, ctx: ExecutionContext) {
     const redirect = httpsRedirect(request);
     if (redirect) return redirect;
+
+    const rootResponse = rootSiteResponse(request);
+    if (rootResponse) return withSecurityHeaders(rootResponse);
 
     return withSecurityHeaders(await app.fetch(request, env, ctx));
   },
