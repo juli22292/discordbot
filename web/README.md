@@ -83,7 +83,7 @@ Der Bot ruft Sync-Jobs signiert vom Worker ab. Hochgeladene Dateien werden nach
 erfolgreicher Validierung standardmaessig dauerhaft neben `bot.py` gespeichert:
 
 ```env
-WEBPANEL_INTERNAL_API_URL=https://panel.carrothost.de
+WEBPANEL_INTERNAL_API_URL=https://bot.modmailmanagerbot.de
 WEBPANEL_ASSET_DIR=/home/container/webpanel_assets
 ```
 

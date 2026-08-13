@@ -11,7 +11,7 @@
   },
   "routes": [
     {
-      "pattern": "panel.carrothost.de",
+      "pattern": "bot.modmailmanagerbot.de",
       "custom_domain": true
     }
   ],
@@ -23,8 +23,8 @@
     }
   ],
   "vars": {
-    "APP_URL": "https://panel.carrothost.de",
-    "DISCORD_REDIRECT_URI": "https://panel.carrothost.de/api/auth/discord/callback",
+    "APP_URL": "https://bot.modmailmanagerbot.de",
+    "DISCORD_REDIRECT_URI": "https://bot.modmailmanagerbot.de/api/auth/discord/callback",
     "SESSION_TTL_SECONDS": "604800",
     "BOT_INVITE_PERMISSIONS": "8",
     "PLUGIN_BUILDER_URL": "https://builder.modmailmanagerbot.de"

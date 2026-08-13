@@ -116,7 +116,7 @@ Danach:
 3. Im Discord Developer Portal diese Redirect URL eintragen:
 
 ```text
-https://panel.carrothost.de/api/auth/discord/callback
+https://bot.modmailmanagerbot.de/api/auth/discord/callback
 ```
 
 4. Python-Bot mit `WEBPANEL_INTERNAL_API_URL` und `INTERNAL_BOT_API_SECRET` starten.
