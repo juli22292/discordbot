@@ -8,6 +8,8 @@ describe("verified Discord app badge", () => {
     const markup = renderToStaticMarkup(<VerifiedAppBadge />);
 
     expect(markup).toContain("Verifizierte Discord-App");
+    expect(markup).toContain("lucide-check");
+    expect(markup).not.toContain("lucide-badge-check");
     expect(markup.indexOf("<svg")).toBeLessThan(markup.indexOf("APP"));
   });
 });

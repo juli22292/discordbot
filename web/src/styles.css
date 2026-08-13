@@ -14629,9 +14629,9 @@ span.discord-verified-app-badge {
   flex: 0 0 auto;
   align-items: center;
   justify-content: center;
-  gap: 2px;
+  gap: 1px;
   margin: 0;
-  padding: 0 4px;
+  padding: 0 4px 0 3px;
   border: 0;
   border-radius: 3px;
   color: #fff;
@@ -14648,13 +14648,13 @@ span.discord-verified-app-badge {
 }
 
 span.discord-verified-app-badge svg {
-  width: 11px;
-  height: 11px;
-  flex: 0 0 11px;
+  width: 10px;
+  height: 10px;
+  flex: 0 0 10px;
   padding: 0;
   color: currentColor;
   background: transparent;
-  stroke-width: 2.7;
+  stroke-width: 3.4;
 }
 
 span.discord-verified-app-badge b {
