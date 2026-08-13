@@ -27,6 +27,7 @@ import {
   WorkspaceCenterPage,
   type WorkspaceData
 } from "./workspace-page";
+import { VerifiedAppBadge } from "./verified-app-badge";
 import {
   Activity,
   AlertTriangle,
@@ -8805,7 +8806,7 @@ function LevelSystemPage({ guildId }: { guildId: string }) {
               <div className="level-discord-message">
                 <div className="level-bot-avatar"><Bot size={20} /></div>
                 <div>
-                  <strong>Modmail Manager <small>APP</small></strong>
+                  <strong>Modmail Manager <VerifiedAppBadge /></strong>
                   <div className="level-embed-preview">
                     <h3>🎉 Levelaufstieg</h3>
                     <p><b>@Mitglied</b> ist jetzt Level <strong>{previewReward?.level ?? 5}</strong>.</p>
@@ -9042,7 +9043,7 @@ function CountingPage({ guildId }: { guildId: string }) {
               <div className="counting-chat-preview">
                 {draft.currentNumber >= 2 && <article><div className="counting-avatar">L</div><div><strong>Lena</strong><p>{(draft.currentNumber - 1).toLocaleString("de-DE")}</p><small className="counting-reaction ok"><Check size={12} /> 1</small></div></article>}
                 {draft.currentNumber >= 1 && <article><div className="counting-avatar blue">M</div><div><strong>Max</strong><p>{draft.currentNumber.toLocaleString("de-DE")}</p><small className="counting-reaction ok"><Check size={12} /> 1</small></div></article>}
-                <article className="next"><div className="counting-avatar bot"><Bot size={16} /></div><div><strong>Modmail Manager <small>APP</small></strong><p>Wartet auf <b>{nextNumber.toLocaleString("de-DE")}</b></p></div></article>
+                <article className="next"><div className="counting-avatar bot"><Bot size={16} /></div><div><strong>Modmail Manager <VerifiedAppBadge /></strong><p>Wartet auf <b>{nextNumber.toLocaleString("de-DE")}</b></p></div></article>
               </div>
               <div className="counting-logic-list">
                 <span><Check size={15} /> Exakt nächste Zahl</span>
@@ -9382,7 +9383,7 @@ function TempVoicePage({ guildId }: { guildId: string }) {
               <div className="tempvoice-discord-message">
                 <div className="tempvoice-bot-avatar"><Mic2 size={22} /></div>
                 <div className="tempvoice-message-body">
-                  <strong>TempVoice <small>APP</small></strong>
+                  <strong>TempVoice <VerifiedAppBadge /></strong>
                   <div className="tempvoice-discord-embed">
                     <h3>TempVoice Interface</h3>
                     <p>Mit diesem Interface verwaltest du deinen temporären Sprachkanal. Weitere Optionen stehen mit den `/tempvoice`-Befehlen zur Verfügung.</p>
@@ -10063,7 +10064,7 @@ function WelcomePage({ guildId }: { guildId: string }) {
             <div className="discord-message">
               <div className="discord-avatar">M</div>
               <div className="discord-message-body">
-                <strong>Modmail Manager <small>gerade eben</small></strong>
+                <strong>Modmail Manager <VerifiedAppBadge /> <small>gerade eben</small></strong>
                 <p>{replaceTemplateTokens(draft.message, previewMemberName) || "Keine Nachricht gesetzt."}</p>
                 {draft.embed.useEmbed && (
                   <div className="welcome-embed-preview" style={{ borderLeftColor: draft.embed.color }}>
@@ -10387,7 +10388,7 @@ function CommandEditor({
       </section>
 
       <div className="discord-preview custom-command-preview">
-        <div className="custom-command-preview-author"><Bot size={18} /><strong>Modmail Manager</strong><span>APP</span><small>gerade eben</small></div>
+        <div className="custom-command-preview-author"><Bot size={18} /><strong>Modmail Manager</strong><VerifiedAppBadge /><small>gerade eben</small></div>
         {draft.responseContent && <p>{draft.responseContent}</p>}
         {draft.responseType === "embed" && <div className="custom-command-embed-preview" style={{ borderColor: draft.embedColor }}>
           {draft.embedThumbnailUrl && <img className="custom-command-thumbnail" src={draft.embedThumbnailUrl} alt="" />}
@@ -11005,7 +11006,7 @@ function ReactionRolesPage({ guildId }: { guildId: string }) {
               <span className="pill neutral">{selectedChannel ? `#${selectedChannel.name}` : "Kein Kanal"}</span>
             </header>
             <div className="selfrole-discord-preview">
-              <div className="selfrole-discord-author"><span><Bot size={18} /></span><strong>Modmail Manager</strong><small>APP</small><em>gerade eben</em></div>
+              <div className="selfrole-discord-author"><span><Bot size={18} /></span><strong>Modmail Manager</strong><VerifiedAppBadge /><em>gerade eben</em></div>
               <article style={{ borderColor: embedPreset.color }}>
                 <h4>{panelTitle}</h4>
                 {panelDescription && <p>{panelDescription}</p>}

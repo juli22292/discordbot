@@ -14621,6 +14621,47 @@ html.panel-reduce-motion *,
 html.panel-reduce-motion *::before,
 html.panel-reduce-motion *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
 
+span.discord-verified-app-badge {
+  width: auto;
+  min-width: 0;
+  height: 16px;
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  margin: 0;
+  padding: 0 4px;
+  border: 0;
+  border-radius: 3px;
+  color: #fff;
+  background: #5865f2;
+  box-shadow: none;
+  font-size: 9px;
+  font-style: normal;
+  font-weight: 750;
+  line-height: 1;
+  letter-spacing: 0;
+  text-transform: uppercase;
+  white-space: nowrap;
+  vertical-align: middle;
+}
+
+span.discord-verified-app-badge svg {
+  width: 11px;
+  height: 11px;
+  flex: 0 0 11px;
+  padding: 0;
+  color: currentColor;
+  background: transparent;
+  stroke-width: 2.7;
+}
+
+span.discord-verified-app-badge b {
+  color: inherit;
+  font: inherit;
+}
+
 @media (max-width: 1180px) {
   .nav-command-search span,
   .nav-command-search kbd { display: none; }
