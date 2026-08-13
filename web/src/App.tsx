@@ -4209,8 +4209,8 @@ function PrivacyPage() {
     },
     {
       icon: <Shield size={18} />,
-      title: "Keine Werbung",
-      text: "Das Webpanel nutzt keine Werbefunktionen und erstellt keine Marketingprofile. Cookies werden für Login, OAuth-State und Session benötigt."
+      title: "Google AdSense",
+      text: "Das Webpanel kann Werbung über Google AdSense anzeigen. Google und seine Werbepartner können dabei Cookies, ähnliche Speichertechnologien, IP-Adressen und weitere technische Kennungen verwenden."
     }
   ];
   const privacySections = [
@@ -4265,9 +4265,41 @@ function PrivacyPage() {
       text: "Du kannst dich jederzeit abmelden. Dabei wird deine aktive Session gelöscht. Das Panel zeigt nur Server an, für die dein Discord-Account ausreichende Rechte besitzt, und trennt Einstellungen strikt pro Guild."
     },
     {
-      eyebrow: "Nicht genutzt",
-      title: "Was nicht für Werbung genutzt wird",
-      text: "Das Panel ist ein Verwaltungswerkzeug. Es gibt keine Werbeanzeigen, keine Marketingprofile und keine Funktion, die deine Panel-Daten an Werbenetzwerke weitergibt. Notwendige Cookies dienen nur Login, OAuth-Sicherheit und Session-Verwaltung."
+      eyebrow: "Werbung",
+      title: "Google AdSense und Werbeauslieferung",
+      text: "Zur Finanzierung des Webpanels wird Google AdSense eingesetzt. Anbieter für Nutzer im Europäischen Wirtschaftsraum ist Google Ireland Limited, Gordon House, Barrow Street, Dublin 4, Irland. Beim Laden oder Anzeigen von Werbung können insbesondere die aufgerufene URL, IP-Adresse, ungefähre Region, Browser- und Geräteinformationen, Anzeigeninteraktionen sowie Cookie- oder vergleichbare Kennungen an Google und beteiligte Werbepartner übermittelt werden."
+    },
+    {
+      eyebrow: "Technologien",
+      title: "Cookies, lokale Speicherung und Messpixel",
+      text: "Google AdSense und beteiligte Drittanbieter können Cookies im Browser setzen oder lesen und ähnliche Technologien wie lokale Speicherung, Web Beacons oder IP-Adressen einsetzen. Diese Technologien können der Auslieferung und Messung von Werbung, der Reichweitenmessung, der Begrenzung wiederholter Anzeigen sowie der Erkennung von Betrug und Missbrauch dienen."
+    },
+    {
+      eyebrow: "Einwilligung",
+      title: "Personalisierte und nicht personalisierte Anzeigen",
+      text: "Soweit eine Einwilligung erforderlich ist, werden personalisierte Anzeigen und nicht technisch notwendige Speicherzugriffe nur auf Grundlage deiner Auswahl im Einwilligungsdialog verwendet. Ohne entsprechende Einwilligung kann Google nicht personalisierte oder eingeschränkte Werbung ausliefern; auch diese kann technische Daten zur Auslieferung, Sicherheit und Betrugsprävention verarbeiten. Eine erteilte Einwilligung kann über die auf der Website angebotenen Datenschutzeinstellungen mit Wirkung für die Zukunft geändert oder widerrufen werden."
+    },
+    {
+      eyebrow: "Abgrenzung",
+      title: "Discord- und Panel-Daten bleiben getrennt",
+      text: "Discord-Tokens, interne Session-Inhalte, Guild-Einstellungen, Rollen- und Kanallisten sowie nicht öffentliche Audit- oder Sync-Daten werden von Modmail Manager nicht gezielt an Google AdSense übermittelt, um daraus Werbeprofile zu erstellen. Die technische Werbeverarbeitung erfolgt unabhängig von den geschützten Verwaltungsdaten des Panels."
+    },
+    {
+      eyebrow: "Weitere Informationen",
+      title: "Datenschutz bei Google",
+      text: (
+        <>
+          Weitere Einzelheiten dazu, wie Google Daten auf Websites von Partnern verarbeitet, findest du unter{" "}
+          <a href="https://policies.google.com/technologies/partner-sites?hl=de" target="_blank" rel="noreferrer">
+            „Wie Google Daten von Websites oder Apps verwendet, auf bzw. in denen unsere Dienste genutzt werden“
+          </a>
+          . Informationen zu Werbetechnologien und deinen Einstellungen stellt Google außerdem unter{" "}
+          <a href="https://policies.google.com/technologies/ads?hl=de" target="_blank" rel="noreferrer">
+            Werbung und Datenschutz
+          </a>{" "}
+          bereit.
+        </>
+      )
     }
   ];
 

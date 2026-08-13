@@ -2153,6 +2153,19 @@ b {
   font-size: 20px;
 }
 
+.docs-step p a {
+  color: var(--blue);
+  font-weight: 600;
+  text-decoration: underline;
+  text-decoration-color: rgba(104, 168, 255, 0.42);
+  text-underline-offset: 3px;
+}
+
+.docs-step p a:hover {
+  color: var(--text);
+  text-decoration-color: currentColor;
+}
+
 .counter-page {
   width: min(1180px, calc(100vw - 32px));
   margin: 0 auto;
