@@ -63,6 +63,12 @@ import {
   type PluginBuildResponse
 } from "./server/plugin-builder";
 import {
+  PREMIUM_FEATURES_SETTING_KEY,
+  parseStoredPremiumFeatures,
+  premiumFeaturesSettingsSchema,
+  serializePremiumFeatures
+} from "./server/premium-features";
+import {
   DiscordApiError,
   createDiscordChannelInvite,
   deleteDiscordInvite,
@@ -1091,6 +1097,30 @@ async function readAiVisibilitySettings(env: Env): Promise<{
     publicVisible: parseStoredAiVisibility(row?.setting_value),
     updatedAt: row?.updated_at ?? null
   };
+}
+
+async function readPremiumFeaturesSettings(env: Env): Promise<{
+  enabled: boolean;
+  updatedAt: string | null;
+}> {
+  await ensureAppSettingsStorage(env);
+  const row = await first<{ setting_value: string; updated_at: string }>(
+    requireDb(env).prepare(
+      "SELECT setting_value, updated_at FROM app_settings WHERE setting_key = ?"
+    ).bind(PREMIUM_FEATURES_SETTING_KEY)
+  );
+
+  return {
+    enabled: parseStoredPremiumFeatures(row?.setting_value),
+    updatedAt: row?.updated_at ?? null
+  };
+}
+
+async function requirePremiumFeaturesEnabled(env: Env): Promise<void> {
+  const settings = await readPremiumFeaturesSettings(env);
+  if (!settings.enabled) {
+    throw new HttpError(403, "premium_features_disabled", "Premium-Funktionen sind derzeit vom Owner deaktiviert.");
+  }
 }
 
 async function resolvePublicAiAccess(c: HonoContext): Promise<{
@@ -3976,6 +4006,12 @@ app.get("/api/public/ai/access", async (c) => {
   return response;
 });
 
+app.get("/api/public/premium-features", async (c) => {
+  const response = json(c, { settings: await readPremiumFeaturesSettings(c.env) });
+  response.headers.set("Cache-Control", "no-store");
+  return response;
+});
+
 app.post("/api/public/ai/chat", async (c) => {
   const access = await resolvePublicAiAccess(c);
   if (!access.allowed) {
@@ -4864,13 +4900,78 @@ app.patch("/api/guilds/:guildId/profile", async (c) => {
 });
 
 app.post("/api/guilds/:guildId/profile/avatar", async (c) => {
-  await requireGuildManagementAccess(c, c.req.param("guildId"));
-  throw new HttpError(403, "premium_required", "Der Server-Avatar benötigt künftig eine Premium-Rolle und ist aktuell gesperrt.");
+  const access = await requireGuildManagementAccess(c, c.req.param("guildId"));
+  await requirePremiumFeaturesEnabled(c.env);
+  const previousSettings = await ensureSettings(c.env, access.guild.id);
+  const form = await c.req.formData();
+  const file = form.get("avatar");
+
+  if (!(file instanceof File)) {
+    throw new HttpError(400, "avatar_missing", "Bitte lade eine Bilddatei hoch.");
+  }
+
+  const maxBytes = 512 * 1024;
+  if (file.size > maxBytes) {
+    throw new HttpError(400, "avatar_too_large", "Das Bild darf maximal 512 KiB groß sein.");
+  }
+
+  const bytes = await file.arrayBuffer();
+  const mimeType = detectImageMimeType(bytes);
+  if (!mimeType) {
+    throw new HttpError(400, "avatar_type_invalid", "Die Datei enthält kein gültiges PNG-, JPEG-, GIF- oder WebP-Bild.");
+  }
+
+  const mediaId = newId("med");
+  const mediaKey = `guilds/${access.guild.discordGuildId}/bot-avatar/${mediaId}.${imageExtension(mimeType)}`;
+  await storeGuildMedia(c.env, {
+    id: mediaId,
+    guildId: access.guild.id,
+    mediaKey,
+    mimeType,
+    createdByDiscordUserId: access.session.user.discordUserId
+  }, bytes);
+
+  await c.env.DB.prepare(
+    `UPDATE guild_settings
+        SET bot_avatar_media_key = ?, bot_avatar_sync_status = 'pending', bot_avatar_sync_error = NULL, updated_at = ?
+      WHERE guild_id = ?`
+  ).bind(mediaKey, nowIso(), access.guild.id).run();
+
+  const eventId = await enqueueSyncEvent(c.env, access.guild, "guild.member_avatar.update", {
+    discordGuildId: access.guild.discordGuildId,
+    mediaKey,
+    mimeType,
+    previousMediaKey: previousSettings.bot_avatar_media_key
+  });
+
+  await audit(c.env, access.guild.id, access.session.user.discordUserId, "profile.avatar.update", "bot_avatar", previousSettings.bot_avatar_media_key, {
+    mediaKey,
+    mimeType,
+    sizeBytes: file.size
+  });
+  return json(c, { ok: true, eventId, mediaKey, mimeType });
 });
 
 app.delete("/api/guilds/:guildId/profile/avatar", async (c) => {
-  await requireGuildManagementAccess(c, c.req.param("guildId"));
-  throw new HttpError(403, "premium_required", "Der Server-Avatar benötigt künftig eine Premium-Rolle und ist aktuell gesperrt.");
+  const access = await requireGuildManagementAccess(c, c.req.param("guildId"));
+  await requirePremiumFeaturesEnabled(c.env);
+  const settings = await ensureSettings(c.env, access.guild.id);
+
+  await c.env.DB.prepare(
+    `UPDATE guild_settings
+        SET bot_avatar_media_key = NULL, bot_avatar_sync_status = 'pending', bot_avatar_sync_error = NULL, updated_at = ?
+      WHERE guild_id = ?`
+  ).bind(nowIso(), access.guild.id).run();
+
+  const eventId = await enqueueSyncEvent(c.env, access.guild, "guild.member_avatar.update", {
+    discordGuildId: access.guild.discordGuildId,
+    mediaKey: null,
+    mimeType: null,
+    previousMediaKey: settings.bot_avatar_media_key
+  });
+
+  await audit(c.env, access.guild.id, access.session.user.discordUserId, "profile.avatar.reset", "bot_avatar", settings.bot_avatar_media_key, null);
+  return json(c, { ok: true, eventId });
 });
 
 app.get("/api/guilds/:guildId/channels", async (c) => {
@@ -6123,6 +6224,65 @@ app.patch("/api/guilds/:guildId/commands/:commandName", async (c) => {
   return json(c, { ok: true, eventId, commandName, configuration: data });
 });
 
+const CUSTOM_COMMAND_RESPONSE_PREFIX = "modmail-custom-command:v2:";
+
+type CustomCommandPresentation = Pick<z.infer<typeof customCommandSchema>,
+  | "responseType"
+  | "responseContent"
+  | "embedTitle"
+  | "embedDescription"
+  | "embedColor"
+  | "embedFooter"
+  | "embedThumbnailUrl"
+  | "embedImageUrl"
+  | "buttons"
+>;
+
+function customCommandPresentationDefaults(responseContent = ""): CustomCommandPresentation {
+  return {
+    responseType: "message",
+    responseContent,
+    embedTitle: "",
+    embedDescription: "",
+    embedColor: "#5865F2",
+    embedFooter: "",
+    embedThumbnailUrl: "",
+    embedImageUrl: "",
+    buttons: []
+  };
+}
+
+function serializeCustomCommandPresentation(value: CustomCommandPresentation): string {
+  return CUSTOM_COMMAND_RESPONSE_PREFIX + JSON.stringify(value);
+}
+
+function parseCustomCommandPresentation(responseType: unknown, storedContent: unknown): CustomCommandPresentation {
+  const content = String(storedContent ?? "");
+  if (!content.startsWith(CUSTOM_COMMAND_RESPONSE_PREFIX)) {
+    return { ...customCommandPresentationDefaults(content), responseType: responseType === "embed" ? "embed" : "message" };
+  }
+
+  try {
+    const parsed = JSON.parse(content.slice(CUSTOM_COMMAND_RESPONSE_PREFIX.length)) as Partial<CustomCommandPresentation>;
+    const buttons = Array.isArray(parsed.buttons)
+      ? parsed.buttons.filter((button) => button && typeof button === "object").slice(0, 5)
+      : [];
+    return {
+      responseType: parsed.responseType === "embed" ? "embed" : "message",
+      responseContent: String(parsed.responseContent ?? ""),
+      embedTitle: String(parsed.embedTitle ?? ""),
+      embedDescription: String(parsed.embedDescription ?? ""),
+      embedColor: /^#[0-9A-Fa-f]{6}$/.test(String(parsed.embedColor ?? "")) ? String(parsed.embedColor) : "#5865F2",
+      embedFooter: String(parsed.embedFooter ?? ""),
+      embedThumbnailUrl: String(parsed.embedThumbnailUrl ?? ""),
+      embedImageUrl: String(parsed.embedImageUrl ?? ""),
+      buttons: buttons as CustomCommandPresentation["buttons"]
+    };
+  } catch {
+    return customCommandPresentationDefaults("");
+  }
+}
+
 app.get("/api/guilds/:guildId/custom-commands", async (c) => {
   const access = await requireGuildManagementAccess(c, c.req.param("guildId"));
   const rows = await all<Record<string, unknown>>(
@@ -6141,6 +6301,7 @@ app.get("/api/guilds/:guildId/custom-commands", async (c) => {
   return json(c, {
     customCommands: rows.map((row) => ({
       ...row,
+      ...parseCustomCommandPresentation(row.responseType, row.responseContent),
       enabled: Boolean(row.enabled),
       ephemeral: Boolean(row.ephemeral),
       allowedChannelIds: parseJson(String(row.allowedChannelIds), []),
@@ -6164,14 +6325,15 @@ app.post("/api/guilds/:guildId/custom-commands", async (c) => {
          allowed_channel_ids, denied_channel_ids, allowed_role_ids, denied_role_ids,
          sync_status, created_by_discord_user_id, created_at, updated_at
        )
-       VALUES (?, ?, ?, ?, 'message', ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?)`
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?)`
     )
       .bind(
         id,
         access.guild.id,
         data.name,
         data.description,
-        data.responseContent,
+        data.responseType,
+        serializeCustomCommandPresentation(data),
         data.enabled ? 1 : 0,
         data.ephemeral ? 1 : 0,
         data.cooldownSeconds,
@@ -6207,10 +6369,19 @@ app.patch("/api/guilds/:guildId/custom-commands/:commandId", async (c) => {
   assertSameGuild(access.guild.id, String(oldValue.guild_id));
 
   const data = partialCustomCommandSchema.parse(await readJsonBody(c));
-  const next = {
+  const oldPresentation = parseCustomCommandPresentation(oldValue.response_type, oldValue.response_content);
+  const next = customCommandSchema.parse({
     name: data.name ?? String(oldValue.name),
     description: data.description ?? String(oldValue.description),
-    responseContent: data.responseContent ?? String(oldValue.response_content),
+    responseType: data.responseType ?? oldPresentation.responseType,
+    responseContent: data.responseContent ?? oldPresentation.responseContent,
+    embedTitle: data.embedTitle ?? oldPresentation.embedTitle,
+    embedDescription: data.embedDescription ?? oldPresentation.embedDescription,
+    embedColor: data.embedColor ?? oldPresentation.embedColor,
+    embedFooter: data.embedFooter ?? oldPresentation.embedFooter,
+    embedThumbnailUrl: data.embedThumbnailUrl ?? oldPresentation.embedThumbnailUrl,
+    embedImageUrl: data.embedImageUrl ?? oldPresentation.embedImageUrl,
+    buttons: data.buttons ?? oldPresentation.buttons,
     enabled: data.enabled ?? Boolean(oldValue.enabled),
     ephemeral: data.ephemeral ?? Boolean(oldValue.ephemeral),
     cooldownSeconds: data.cooldownSeconds ?? Number(oldValue.cooldown_seconds ?? 0),
@@ -6218,11 +6389,11 @@ app.patch("/api/guilds/:guildId/custom-commands/:commandId", async (c) => {
     deniedChannelIds: data.deniedChannelIds ?? parseJson<string[]>(String(oldValue.denied_channel_ids), []),
     allowedRoleIds: data.allowedRoleIds ?? parseJson<string[]>(String(oldValue.allowed_role_ids), []),
     deniedRoleIds: data.deniedRoleIds ?? parseJson<string[]>(String(oldValue.denied_role_ids), [])
-  };
+  });
 
   await c.env.DB.prepare(
     `UPDATE custom_commands
-        SET name = ?, description = ?, response_content = ?, enabled = ?, ephemeral = ?, cooldown_seconds = ?,
+        SET name = ?, description = ?, response_type = ?, response_content = ?, enabled = ?, ephemeral = ?, cooldown_seconds = ?,
             allowed_channel_ids = ?, denied_channel_ids = ?, allowed_role_ids = ?, denied_role_ids = ?,
             sync_status = 'pending', sync_error = NULL, updated_at = ?
       WHERE id = ? AND guild_id = ?`
@@ -6230,7 +6401,8 @@ app.patch("/api/guilds/:guildId/custom-commands/:commandId", async (c) => {
     .bind(
       next.name,
       next.description,
-      next.responseContent,
+      next.responseType,
+      serializeCustomCommandPresentation(next),
       next.enabled ? 1 : 0,
       next.ephemeral ? 1 : 0,
       next.cooldownSeconds,
@@ -6738,6 +6910,42 @@ app.get("/api/admin/ai-visibility", async (c) => {
   await requireAdminSession(c);
   return json(c, {
     settings: await readAiVisibilitySettings(c.env)
+  });
+});
+
+app.get("/api/admin/premium-features", async (c) => {
+  await requireAdminSession(c);
+  return json(c, {
+    settings: await readPremiumFeaturesSettings(c.env)
+  });
+});
+
+app.put("/api/admin/premium-features", async (c) => {
+  const session = await requireAdminSession(c);
+  const data = premiumFeaturesSettingsSchema.parse(await readJsonBody(c));
+  const timestamp = nowIso();
+  await ensureAppSettingsStorage(c.env);
+  await requireDb(c.env).prepare(
+    `INSERT INTO app_settings (
+       setting_key, setting_value, updated_by_discord_user_id, updated_at
+     ) VALUES (?, ?, ?, ?)
+     ON CONFLICT(setting_key) DO UPDATE SET
+       setting_value = excluded.setting_value,
+       updated_by_discord_user_id = excluded.updated_by_discord_user_id,
+       updated_at = excluded.updated_at`
+  ).bind(
+    PREMIUM_FEATURES_SETTING_KEY,
+    serializePremiumFeatures(data.enabled),
+    session.user.discordUserId,
+    timestamp
+  ).run();
+
+  return json(c, {
+    ok: true,
+    settings: {
+      enabled: data.enabled,
+      updatedAt: timestamp
+    }
   });
 });
 

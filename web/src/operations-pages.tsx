@@ -579,13 +579,25 @@ export function LiveMusicPage({ guildId }: { guildId: string }) {
   }, [guildId]);
 
   async function control(action: string, extra: Record<string, unknown> = {}) {
+    if (action === "stop" && !window.confirm("Die aktuelle Wiedergabe wirklich stoppen und die Warteschlange leeren?")) return;
+    if (action === "disconnect" && !window.confirm("Den Bot wirklich vom Sprachkanal trennen?")) return;
+
     setBusy(action);
     setStatus(null);
     try {
       const response = await operationApi<{ eventId: string }>(`/api/guilds/${guildId}/music/live/actions`, { method: "POST", body: JSON.stringify({ action, ...extra }) });
       const result = await waitForSync(guildId, response.eventId);
       if (result?.status === "failed") throw new Error(result.lastError || "Der Musikplayer hat die Aktion abgelehnt.");
-      setStatus(result ? "Musikplayer wurde aktualisiert." : "Die Aktion liegt noch in der Bot-Queue.");
+      const successMessages: Record<string, string> = {
+        pause: "Wiedergabe wurde pausiert.",
+        resume: "Wiedergabe wurde fortgesetzt.",
+        skip: "Der nächste Titel wird abgespielt.",
+        stop: "Wiedergabe und Warteschlange wurden gestoppt.",
+        disconnect: "Der Bot wurde vom Sprachkanal getrennt.",
+        loop: player?.loopEnabled ? "Dauerschleife wurde deaktiviert." : "Dauerschleife wurde aktiviert.",
+        volume: `Lautstärke wurde auf ${Number(extra.volume ?? volume)}% gesetzt.`
+      };
+      setStatus(result ? successMessages[action] || "Musikplayer wurde aktualisiert." : "Die Aktion liegt noch in der Bot-Queue.");
       await live.reload();
     } catch (requestError) {
       setStatus(requestError instanceof Error ? requestError.message : "Musikaktion fehlgeschlagen.");

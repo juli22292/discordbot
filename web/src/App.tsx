@@ -183,13 +183,56 @@ type CustomCommand = {
   id: string;
   name: string;
   description: string;
+  responseType: "message" | "embed";
   responseContent: string;
+  embedTitle: string;
+  embedDescription: string;
+  embedColor: string;
+  embedFooter: string;
+  embedThumbnailUrl: string;
+  embedImageUrl: string;
+  buttons: CustomCommandButton[];
   enabled: boolean;
   ephemeral: boolean;
   cooldownSeconds: number;
+  allowedChannelIds: string[];
+  deniedChannelIds: string[];
+  allowedRoleIds: string[];
+  deniedRoleIds: string[];
   syncStatus: string;
   syncError: string | null;
 };
+
+type CustomCommandButton = {
+  label: string;
+  url: string;
+  emoji: string;
+};
+
+type CustomCommandDraft = Omit<CustomCommand, "id" | "syncStatus" | "syncError">;
+
+function emptyCustomCommandDraft(): CustomCommandDraft {
+  return {
+    name: "",
+    description: "",
+    responseType: "message",
+    responseContent: "",
+    embedTitle: "",
+    embedDescription: "",
+    embedColor: "#5865F2",
+    embedFooter: "",
+    embedThumbnailUrl: "",
+    embedImageUrl: "",
+    buttons: [],
+    enabled: true,
+    ephemeral: false,
+    cooldownSeconds: 0,
+    allowedChannelIds: [],
+    deniedChannelIds: [],
+    allowedRoleIds: [],
+    deniedRoleIds: []
+  };
+}
 
 type ChannelOption = {
   id: string;
@@ -994,6 +1037,13 @@ type UserCenterData = {
 type AdminAiVisibility = {
   settings: {
     publicVisible: boolean;
+    updatedAt: string | null;
+  };
+};
+
+type AdminPremiumFeatures = {
+  settings: {
+    enabled: boolean;
     updatedAt: string | null;
   };
 };
@@ -5582,6 +5632,7 @@ function AdminPageModern() {
   const admin = useApi<AdminData>("/api/admin/bot", []);
   const ownerLogs = useApi<OwnerLogData>("/api/admin/bot/logs", []);
   const aiVisibility = useApi<AdminAiVisibility>("/api/admin/ai-visibility", []);
+  const premiumFeatures = useApi<AdminPremiumFeatures>("/api/admin/premium-features", []);
   const runtime = admin.data?.runtime ?? null;
   const ownerHasData = Boolean(admin.data);
   const ownerInitialLoading = admin.loading && !ownerHasData;
@@ -5610,6 +5661,7 @@ function AdminPageModern() {
   const [retryingEventId, setRetryingEventId] = useState<string | null>(null);
   const [autoRefresh, setAutoRefresh] = useState(true);
   const [savingAiVisibility, setSavingAiVisibility] = useState(false);
+  const [savingPremiumFeatures, setSavingPremiumFeatures] = useState(false);
 
   function scrollToOwnerSection(sectionId: string) {
     document.getElementById(sectionId)?.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -5878,6 +5930,32 @@ function AdminPageModern() {
     }
   }
 
+  async function savePremiumFeatures(enabled: boolean) {
+    setSavingPremiumFeatures(true);
+    try {
+      await api<AdminPremiumFeatures>("/api/admin/premium-features", {
+        method: "PUT",
+        body: JSON.stringify({ enabled })
+      });
+      await premiumFeatures.reload();
+      notify({
+        tone: "success",
+        title: enabled ? "Premium-Funktionen aktiviert" : "Premium-Funktionen deaktiviert",
+        text: enabled
+          ? "Premium-markierte Funktionen können jetzt verwendet werden."
+          : "Premium-markierte Funktionen sind zentral gesperrt."
+      });
+    } catch (error) {
+      notify({
+        tone: "danger",
+        title: "Premium-Status nicht gespeichert",
+        text: error instanceof Error ? error.message : "Die Premium-Einstellung konnte nicht geändert werden."
+      });
+    } finally {
+      setSavingPremiumFeatures(false);
+    }
+  }
+
   return (
     <div className="app-shell">
       <TopNav user={me.data?.user} />
@@ -5966,6 +6044,39 @@ function AdminPageModern() {
               </small>
             </div>
             {aiVisibility.error && <Notice tone="danger" text={aiVisibility.error} />}
+          </section>
+        )}
+
+        {me.data?.user?.ownerAdmin && (
+          <section className="panel owner-ai-visibility-panel owner-premium-features-panel">
+            <div className="owner-ai-visibility-copy">
+              <span className="owner-ai-visibility-icon is-premium"><Crown size={20} /></span>
+              <div>
+                <p className="eyebrow">Funktionsfreigabe</p>
+                <h2>Premium-Funktionen</h2>
+                <p>Aktiviere oder sperre Premium-markierte Funktionen zentral. Ohne gespeicherte Einstellung sind sie standardmäßig aktiv.</p>
+              </div>
+            </div>
+            <div className="owner-ai-visibility-control">
+              <span className={`pill ${premiumFeatures.data?.settings.enabled === false ? "warn" : "ok"}`}>
+                PREMIUM: {premiumFeatures.data?.settings.enabled === false ? "AUS" : "AN"}
+              </span>
+              <ModuleStatusToggle
+                checked={premiumFeatures.data?.settings.enabled ?? true}
+                disabled={premiumFeatures.loading || savingPremiumFeatures}
+                activeLabel="Aktiv"
+                inactiveLabel="Gesperrt"
+                onChange={(value) => void savePremiumFeatures(value)}
+              />
+              <small>
+                {savingPremiumFeatures
+                  ? "Wird gespeichert..."
+                  : premiumFeatures.data?.settings.updatedAt
+                    ? `Zuletzt geändert: ${formatDateTime(premiumFeatures.data.settings.updatedAt)}`
+                    : "Standard: aktiviert"}
+              </small>
+            </div>
+            {premiumFeatures.error && <Notice tone="danger" text={premiumFeatures.error} />}
           </section>
         )}
 
@@ -7806,10 +7917,17 @@ function StatusTile({ icon, label, value, tone }: { icon: React.ReactNode; label
 }
 
 function ProfilePage({ guildId, settings, onSaved }: { guildId: string; settings: SettingsRow; onSaved: () => void | Promise<void> }) {
+  const premiumFeatures = useApi<AdminPremiumFeatures>("/api/public/premium-features", []);
   const [nickname, setNickname] = useState(settings.bot_nickname ?? "");
+  const [file, setFile] = useState<File | null>(null);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [nicknameStatus, setNicknameStatus] = useState<string | null>(null);
+  const [avatarStatus, setAvatarStatus] = useState<string | null>(null);
   const [savingNickname, setSavingNickname] = useState(false);
+  const [avatarBusy, setAvatarBusy] = useState(false);
+  const [fileInputKey, setFileInputKey] = useState(0);
   const [activeSection, setActiveSection] = useState("nickname");
+  const premiumEnabled = premiumFeatures.data?.settings.enabled ?? true;
   const sectionTabs: PageSectionTab[] = [
     { key: "nickname", label: "Bot-Nickname", description: "Den sichtbaren Namen des Bots nur für diese Guild anpassen.", icon: <AtSign size={16} /> },
     { key: "avatar", label: "Server-Avatar", description: "Premium-Funktion für ein eigenes Bot-Profilbild auf dieser Guild.", icon: <Bot size={16} />, badge: "premium" }
@@ -7818,11 +7936,57 @@ function ProfilePage({ guildId, settings, onSaved }: { guildId: string; settings
   const storedAvatarUrl = settings.bot_avatar_media_key
     ? `/api/guilds/${guildId}/media?key=${encodeURIComponent(settings.bot_avatar_media_key)}`
     : null;
-  const displayedAvatarUrl = storedAvatarUrl;
+  const displayedAvatarUrl = previewUrl ?? storedAvatarUrl;
+  const syncLabel = settings.bot_avatar_sync_status === "synced"
+    ? "Synchronisiert"
+    : settings.bot_avatar_sync_status === "pending"
+      ? "Wird synchronisiert"
+      : settings.bot_avatar_sync_status === "failed"
+        ? "Synchronisierung fehlgeschlagen"
+        : "Standard-Avatar";
 
   useEffect(() => {
     setNickname(settings.bot_nickname ?? "");
   }, [settings.bot_nickname]);
+
+  useEffect(() => {
+    if (settings.bot_avatar_sync_status !== "pending") return;
+    const timer = window.setInterval(() => void onSaved(), 2500);
+    return () => window.clearInterval(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [guildId, settings.bot_avatar_sync_status]);
+
+  useEffect(() => {
+    if (!file) {
+      setPreviewUrl(null);
+      return;
+    }
+    const objectUrl = URL.createObjectURL(file);
+    setPreviewUrl(objectUrl);
+    return () => URL.revokeObjectURL(objectUrl);
+  }, [file]);
+
+  function selectAvatar(nextFile: File | null) {
+    setAvatarStatus(null);
+    if (!nextFile) {
+      setFile(null);
+      return;
+    }
+    const allowedTypes = new Set(["image/png", "image/jpeg", "image/gif", "image/webp"]);
+    if (!allowedTypes.has(nextFile.type)) {
+      setFile(null);
+      setFileInputKey((value) => value + 1);
+      setAvatarStatus("Erlaubt sind PNG, JPEG, GIF und WebP.");
+      return;
+    }
+    if (nextFile.size > 512 * 1024) {
+      setFile(null);
+      setFileInputKey((value) => value + 1);
+      setAvatarStatus("Das Profilbild darf maximal 512 KiB groß sein.");
+      return;
+    }
+    setFile(nextFile);
+  }
 
   async function saveNickname() {
     setSavingNickname(true);
@@ -7838,6 +8002,42 @@ function ProfilePage({ guildId, settings, onSaved }: { guildId: string; settings
       setNicknameStatus(error instanceof Error ? error.message : "Speichern fehlgeschlagen.");
     } finally {
       setSavingNickname(false);
+    }
+  }
+
+  async function uploadAvatar() {
+    if (!file || !premiumEnabled) return;
+    setAvatarBusy(true);
+    setAvatarStatus(null);
+    const formData = new FormData();
+    formData.set("avatar", file);
+    try {
+      await api(`/api/guilds/${guildId}/profile/avatar`, { method: "POST", body: formData });
+      setAvatarStatus("Profilbild gespeichert. Der Bot übernimmt es jetzt auf dieser Guild.");
+      setFile(null);
+      setFileInputKey((value) => value + 1);
+      await onSaved();
+    } catch (error) {
+      setAvatarStatus(error instanceof Error ? error.message : "Upload fehlgeschlagen.");
+    } finally {
+      setAvatarBusy(false);
+    }
+  }
+
+  async function resetAvatar() {
+    if (!premiumEnabled) return;
+    setAvatarBusy(true);
+    setAvatarStatus(null);
+    try {
+      await api(`/api/guilds/${guildId}/profile/avatar`, { method: "DELETE" });
+      setFile(null);
+      setFileInputKey((value) => value + 1);
+      setAvatarStatus("Der Server-Avatar wird auf das normale Bot-Profilbild zurückgesetzt.");
+      await onSaved();
+    } catch (error) {
+      setAvatarStatus(error instanceof Error ? error.message : "Zurücksetzen fehlgeschlagen.");
+    } finally {
+      setAvatarBusy(false);
     }
   }
 
@@ -7871,49 +8071,51 @@ function ProfilePage({ guildId, settings, onSaved }: { guildId: string; settings
             <h2>Server-Avatar</h2>
             <p className="muted">Individuelles Bot-Profilbild nur für diese Guild.</p>
           </div>
-          <span className="pill premium">
-            <Crown size={13} />
-            Premium
+          <span className={`pill ${premiumEnabled ? "ok" : "premium"}`}>
+            {premiumEnabled ? <Check size={13} /> : <Crown size={13} />}
+            {premiumEnabled ? syncLabel : "Premium gesperrt"}
           </span>
         </div>
-        <div className="profile-premium-gate">
+        {!premiumEnabled && <div className="profile-premium-gate">
           <span className="profile-premium-icon"><Crown size={22} /></span>
-          <div>
-            <strong>Premium-Funktion</strong>
-            <p>Der Server-Avatar ist aktuell für alle Accounts gesperrt. Die Freischaltung über eine Discord-Rolle wird später ergänzt.</p>
-          </div>
+          <div><strong>Premium-Funktionen sind deaktiviert</strong><p>Der Owner hat Premium-markierte Funktionen im Admin Center zentral gesperrt.</p></div>
           <span className="pill neutral"><ShieldCheck size={13} /> Gesperrt</span>
-        </div>
-        <div className="avatar-editor is-premium-locked" aria-disabled="true">
+        </div>}
+        <div className={`avatar-editor ${premiumEnabled ? "" : "is-premium-locked"}`} aria-disabled={!premiumEnabled}>
           <div className="avatar-preview" aria-label="Vorschau des Server-Avatars">
             {displayedAvatarUrl ? <img src={displayedAvatarUrl} alt="Server-Avatar Vorschau" /> : <Bot size={34} />}
-            <span><Crown size={12} /> Premium</span>
+            {file && premiumEnabled && <span>Vorschau</span>}
           </div>
           <div className="avatar-editor-copy">
-            <strong>{settings.bot_avatar_media_key ? "Aktuelles eigenes Profilbild" : "Normales Bot-Profilbild"}</strong>
-            <p>PNG, JPEG, GIF oder WebP bis 512 KiB. Upload, Übernahme und Zurücksetzen sind bis zur Premium-Freischaltung deaktiviert.</p>
+            <strong>{file ? file.name : settings.bot_avatar_media_key ? "Aktuelles eigenes Profilbild" : "Normales Bot-Profilbild"}</strong>
+            <p>PNG, JPEG, GIF oder WebP bis 512 KiB. Das Bild gilt nur für diese Guild.</p>
+            {file && <small>{Math.round(file.size / 1024)} KiB ausgewählt</small>}
             <div className="form-actions avatar-actions">
-              <label className="secondary-action inline avatar-file-button is-disabled" aria-disabled="true">
+              <label className={`secondary-action inline avatar-file-button ${premiumEnabled ? "" : "is-disabled"}`} aria-disabled={!premiumEnabled}>
                 <Upload size={16} />
                 Bild auswählen
                 <input
+                  key={fileInputKey}
                   type="file"
-                  disabled
+                  disabled={!premiumEnabled}
                   accept="image/png,image/jpeg,image/gif,image/webp"
+                  onChange={(event) => selectAvatar(event.target.files?.[0] ?? null)}
                 />
               </label>
-              <button className="primary-action inline" disabled>
-                <Save size={16} />
+              <button className="primary-action inline" onClick={uploadAvatar} disabled={!premiumEnabled || !file || avatarBusy}>
+                {avatarBusy && file ? <Loader2 className="spin" size={16} /> : <Save size={16} />}
                 Übernehmen
               </button>
-              <button className="secondary-action inline" disabled>
-                <RotateCcw size={16} />
+              <button className="secondary-action inline" onClick={resetAvatar} disabled={!premiumEnabled || avatarBusy || (!storedAvatarUrl && !file)}>
+                {avatarBusy && !file ? <Loader2 className="spin" size={16} /> : <RotateCcw size={16} />}
                 Zurücksetzen
               </button>
             </div>
           </div>
         </div>
-        <p className="profile-premium-note"><Crown size={14} /> Für diese Funktion wird künftig die passende Premium-Rolle benötigt.</p>
+        <ActionStatus status={avatarStatus} />
+        {settings.bot_avatar_sync_error && <Notice tone="danger" text={settings.bot_avatar_sync_error} />}
+        <p className="profile-premium-note"><Crown size={14} /> Premium-Funktion · zentral im Admin Center steuerbar.</p>
       </div>}
     </section>
   );
@@ -9991,10 +10193,7 @@ function CommandRow({ command, onSave }: { command: CommandConfig; onSave: (comm
 
 function CustomCommandsPage({ guildId }: { guildId: string }) {
   const commands = useApi<{ customCommands: CustomCommand[] }>(`/api/guilds/${guildId}/custom-commands`, [guildId]);
-  const emptyDraft = useMemo(
-    () => ({ name: "", description: "", responseContent: "", enabled: true, ephemeral: false, cooldownSeconds: 0 }),
-    []
-  );
+  const emptyDraft = useMemo(emptyCustomCommandDraft, []);
   const [draft, setDraft] = useState(emptyDraft);
   const [status, setStatus] = useState<string | null>(null);
   const [activeSection, setActiveSection] = useState("create");
@@ -10011,7 +10210,7 @@ function CustomCommandsPage({ guildId }: { guildId: string }) {
         method: "POST",
         body: JSON.stringify(draft)
       });
-      setDraft(emptyDraft);
+      setDraft(emptyCustomCommandDraft());
       setStatus("Custom Command erstellt.");
       await commands.reload();
     } catch (error) {
@@ -10080,51 +10279,148 @@ function CommandEditor({
   draft,
   onChange
 }: {
-  draft: { name: string; description: string; responseContent: string; enabled: boolean; ephemeral: boolean; cooldownSeconds: number };
-  onChange: (value: { name: string; description: string; responseContent: string; enabled: boolean; ephemeral: boolean; cooldownSeconds: number }) => void;
+  draft: CustomCommandDraft;
+  onChange: (value: CustomCommandDraft) => void;
 }) {
+  function addButton() {
+    if (draft.buttons.length >= 5) return;
+    onChange({ ...draft, buttons: [...draft.buttons, { label: "Mehr erfahren", url: "https://", emoji: "" }] });
+  }
+
+  function updateButton(index: number, patch: Partial<CustomCommandButton>) {
+    onChange({
+      ...draft,
+      buttons: draft.buttons.map((button, buttonIndex) => buttonIndex === index ? { ...button, ...patch } : button)
+    });
+  }
+
+  function removeButton(index: number) {
+    onChange({ ...draft, buttons: draft.buttons.filter((_, buttonIndex) => buttonIndex !== index) });
+  }
+
   return (
-    <div className="form-grid">
-      <label>
-        Name
-        <input value={draft.name} onChange={(event) => onChange({ ...draft, name: event.target.value })} placeholder="status" />
-      </label>
-      <label>
-        Beschreibung
-        <input value={draft.description} onChange={(event) => onChange({ ...draft, description: event.target.value })} maxLength={100} />
-      </label>
-      <label className="wide">
-        Antwort
-        <textarea value={draft.responseContent} onChange={(event) => onChange({ ...draft, responseContent: event.target.value })} maxLength={2000} />
-      </label>
-      <label>
-        Cooldown
-        <input type="number" min={0} max={86400} value={draft.cooldownSeconds} onChange={(event) => onChange({ ...draft, cooldownSeconds: Number(event.target.value) })} />
-      </label>
-      <label className="toggle">
-        <input type="checkbox" checked={draft.enabled} onChange={(event) => onChange({ ...draft, enabled: event.target.checked })} />
-        Aktiv
-      </label>
-      <label className="toggle">
-        <input type="checkbox" checked={draft.ephemeral} onChange={(event) => onChange({ ...draft, ephemeral: event.target.checked })} />
-        Ephemeral
-      </label>
-      <div className="discord-preview wide">
-        <strong>/utility customcommand run {draft.name || "command"}</strong>
-        <p>{draft.responseContent || "Vorschau der Antwort"}</p>
+    <div className="custom-command-editor">
+      <div className="custom-response-mode" role="group" aria-label="Antwortformat">
+        <button type="button" className={draft.responseType === "message" ? "active" : ""} onClick={() => onChange({ ...draft, responseType: "message" })}>
+          <MessageSquare size={16} /> Textnachricht
+        </button>
+        <button type="button" className={draft.responseType === "embed" ? "active" : ""} onClick={() => onChange({ ...draft, responseType: "embed" })}>
+          <Palette size={16} /> Discord-Embed
+        </button>
+      </div>
+
+      <div className="form-grid">
+        <label>
+          Command-Name
+          <input value={draft.name} onChange={(event) => onChange({ ...draft, name: event.target.value })} placeholder="status" maxLength={32} />
+          <small>Aufruf über `!{draft.name || "status"}` oder den Slash-Befehl.</small>
+        </label>
+        <label>
+          Beschreibung
+          <input value={draft.description} onChange={(event) => onChange({ ...draft, description: event.target.value })} maxLength={100} placeholder="Zeigt den Serverstatus" />
+          <small>Wird in Listen und bei der Slash-Ausführung angezeigt.</small>
+        </label>
+        <label className="wide">
+          {draft.responseType === "embed" ? "Text oberhalb des Embeds (optional)" : "Antworttext"}
+          <textarea value={draft.responseContent} onChange={(event) => onChange({ ...draft, responseContent: event.target.value })} maxLength={2000} placeholder="Hallo {user_mention}, willkommen auf {server}!" />
+        </label>
+        <div className="token-bar wide">
+          {["{user}", "{user_mention}", "{server}", "{channel}", "{command}"].map((token) => (
+            <button type="button" className="secondary-action inline" key={token} onClick={() => onChange({ ...draft, responseContent: `${draft.responseContent}${draft.responseContent ? " " : ""}${token}` })}>
+              <Plus size={13} /> {token}
+            </button>
+          ))}
+        </div>
+
+        {draft.responseType === "embed" && <>
+          <label>
+            Embed-Kopfzeile
+            <input value={draft.embedTitle} onChange={(event) => onChange({ ...draft, embedTitle: event.target.value })} maxLength={256} placeholder="Server-Information" />
+          </label>
+          <label>
+            Embed-Farbe
+            <span className="custom-color-input"><input type="color" value={draft.embedColor} onChange={(event) => onChange({ ...draft, embedColor: event.target.value.toUpperCase() })} /><code>{draft.embedColor}</code></span>
+          </label>
+          <label className="wide">
+            Embed-Beschreibung
+            <textarea value={draft.embedDescription} onChange={(event) => onChange({ ...draft, embedDescription: event.target.value })} maxLength={4000} placeholder="Hier steht die eigentliche Embed-Nachricht." />
+          </label>
+          <label className="wide">
+            Footer
+            <input value={draft.embedFooter} onChange={(event) => onChange({ ...draft, embedFooter: event.target.value })} maxLength={2048} placeholder="Modmail Manager · {server}" />
+          </label>
+          <label>
+            Thumbnail-URL
+            <input type="url" value={draft.embedThumbnailUrl} onChange={(event) => onChange({ ...draft, embedThumbnailUrl: event.target.value })} placeholder="https://.../icon.png" />
+          </label>
+          <label>
+            Großes Bild
+            <input type="url" value={draft.embedImageUrl} onChange={(event) => onChange({ ...draft, embedImageUrl: event.target.value })} placeholder="https://.../banner.png" />
+          </label>
+        </>}
+
+        <label>
+          Cooldown in Sekunden
+          <input type="number" min={0} max={86400} value={draft.cooldownSeconds} onChange={(event) => onChange({ ...draft, cooldownSeconds: Number(event.target.value) })} />
+        </label>
+        <div className="custom-command-toggles">
+          <label className="toggle"><input type="checkbox" checked={draft.enabled} onChange={(event) => onChange({ ...draft, enabled: event.target.checked })} /> Aktiv</label>
+          <label className="toggle"><input type="checkbox" checked={draft.ephemeral} onChange={(event) => onChange({ ...draft, ephemeral: event.target.checked })} /> Slash-Antwort nur für Nutzer sichtbar</label>
+        </div>
+      </div>
+
+      <section className="custom-command-buttons">
+        <div className="panel-title compact">
+          <div><h3>Link-Buttons</h3><p className="muted">Bis zu fünf sichere HTTP-/HTTPS-Buttons unter der Antwort.</p></div>
+          <button type="button" className="secondary-action inline" onClick={addButton} disabled={draft.buttons.length >= 5}><Plus size={15} /> Button</button>
+        </div>
+        {draft.buttons.map((button, index) => (
+          <div className="custom-command-button-row" key={index}>
+            <label><span>Emoji</span><input value={button.emoji} onChange={(event) => updateButton(index, { emoji: event.target.value })} maxLength={100} placeholder="🔗" /></label>
+            <label><span>Beschriftung</span><input value={button.label} onChange={(event) => updateButton(index, { label: event.target.value })} maxLength={80} /></label>
+            <label><span>Ziel-URL</span><input type="url" value={button.url} onChange={(event) => updateButton(index, { url: event.target.value })} placeholder="https://example.com" /></label>
+            <button type="button" className="icon-button danger" title="Button entfernen" onClick={() => removeButton(index)}><Trash2 size={16} /></button>
+          </div>
+        ))}
+        {!draft.buttons.length && <p className="custom-command-empty">Keine Buttons hinzugefügt.</p>}
+      </section>
+
+      <div className="discord-preview custom-command-preview">
+        <div className="custom-command-preview-author"><Bot size={18} /><strong>Modmail Manager</strong><span>APP</span><small>gerade eben</small></div>
+        {draft.responseContent && <p>{draft.responseContent}</p>}
+        {draft.responseType === "embed" && <div className="custom-command-embed-preview" style={{ borderColor: draft.embedColor }}>
+          {draft.embedThumbnailUrl && <img className="custom-command-thumbnail" src={draft.embedThumbnailUrl} alt="" />}
+          <strong>{draft.embedTitle || "Embed-Kopfzeile"}</strong>
+          <p>{draft.embedDescription || "Vorschau der Embed-Beschreibung"}</p>
+          {draft.embedImageUrl && <img className="custom-command-image" src={draft.embedImageUrl} alt="" />}
+          {draft.embedFooter && <small>{draft.embedFooter}</small>}
+        </div>}
+        {draft.buttons.length > 0 && <div className="custom-command-preview-buttons">{draft.buttons.map((button, index) => <span key={index}>{button.emoji && `${button.emoji} `}{button.label || "Button"}<ExternalLink size={12} /></span>)}</div>}
       </div>
     </div>
   );
 }
 
 function EditableCustomCommand({ guildId, command, onChanged }: { guildId: string; command: CustomCommand; onChanged: () => Promise<void> }) {
-  const [draft, setDraft] = useState({
+  const [draft, setDraft] = useState<CustomCommandDraft>({
     name: command.name,
     description: command.description,
+    responseType: command.responseType,
     responseContent: command.responseContent,
+    embedTitle: command.embedTitle,
+    embedDescription: command.embedDescription,
+    embedColor: command.embedColor,
+    embedFooter: command.embedFooter,
+    embedThumbnailUrl: command.embedThumbnailUrl,
+    embedImageUrl: command.embedImageUrl,
+    buttons: command.buttons,
     enabled: command.enabled,
     ephemeral: command.ephemeral,
-    cooldownSeconds: command.cooldownSeconds
+    cooldownSeconds: command.cooldownSeconds,
+    allowedChannelIds: command.allowedChannelIds,
+    deniedChannelIds: command.deniedChannelIds,
+    allowedRoleIds: command.allowedRoleIds,
+    deniedRoleIds: command.deniedRoleIds
   });
   const [status, setStatus] = useState<string | null>(null);
 

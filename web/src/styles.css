@@ -659,18 +659,30 @@
 .music-transport {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 8px;
 }
 
 .music-transport button {
-  width: 42px;
+  width: auto;
+  min-width: 108px;
   height: 42px;
-  display: grid;
-  place-items: center;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 0 14px;
   border: 1px solid var(--border);
-  border-radius: 50%;
+  border-radius: 7px;
   background: var(--control-bg);
   color: var(--muted-strong);
+  font: inherit;
+  font-weight: 650;
+  white-space: nowrap;
+}
+
+.music-transport button::after {
+  content: attr(title);
 }
 
 .music-transport button:hover,
@@ -680,8 +692,8 @@
 }
 
 .music-transport button.primary {
-  width: 50px;
-  height: 50px;
+  min-width: 124px;
+  height: 46px;
   border-color: var(--blue);
   background: var(--blue);
   color: var(--bg-strong);
@@ -695,9 +707,16 @@
 .music-volume-control {
   min-width: min(360px, 42vw);
   display: grid;
-  grid-template-columns: auto minmax(100px, 1fr) 48px;
+  grid-template-columns: auto auto minmax(100px, 1fr) 52px;
   gap: 12px;
   align-items: center;
+}
+
+.music-volume-control::before {
+  content: "Lautstärke";
+  color: var(--muted);
+  font-size: 0.82rem;
+  font-weight: 650;
 }
 
 .music-volume-control input[type="range"] {
@@ -4082,6 +4101,211 @@ textarea {
   color: var(--muted);
 }
 
+.custom-command-editor {
+  display: grid;
+  gap: 20px;
+}
+
+.custom-response-mode {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+  padding: 5px;
+  border: 1px solid var(--border-soft);
+  border-radius: 7px;
+  background: var(--field-bg);
+}
+
+.custom-response-mode button {
+  min-height: 42px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border: 1px solid transparent;
+  border-radius: 5px;
+  color: var(--muted);
+  background: transparent;
+}
+
+.custom-response-mode button:hover,
+.custom-response-mode button.active {
+  border-color: rgba(104, 168, 255, 0.32);
+  color: var(--text);
+  background: rgba(104, 168, 255, 0.11);
+}
+
+.custom-color-input {
+  min-height: 44px;
+  display: grid;
+  grid-template-columns: 46px 1fr;
+  align-items: center;
+  gap: 10px;
+}
+
+.custom-color-input input[type="color"] {
+  width: 46px;
+  min-height: 38px;
+  padding: 3px;
+}
+
+.custom-color-input code {
+  color: var(--muted-strong);
+}
+
+.custom-command-toggles {
+  display: grid;
+  align-content: center;
+  gap: 9px;
+  padding-top: 20px;
+}
+
+.custom-command-buttons {
+  display: grid;
+  gap: 10px;
+  padding: 18px 0;
+  border-top: 1px solid var(--border-soft);
+  border-bottom: 1px solid var(--border-soft);
+}
+
+.custom-command-button-row {
+  display: grid;
+  grid-template-columns: 110px minmax(140px, 0.7fr) minmax(220px, 1.3fr) 40px;
+  gap: 10px;
+  align-items: end;
+}
+
+.custom-command-button-row label {
+  display: grid;
+  gap: 6px;
+}
+
+.custom-command-button-row label span,
+.form-grid label > small {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.custom-command-empty {
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.custom-command-preview {
+  display: grid;
+  gap: 10px;
+  border-left: 0;
+  padding: 16px;
+  background: #111318;
+}
+
+.custom-command-preview-author {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: #f2f3f5;
+}
+
+.custom-command-preview-author > svg {
+  width: 34px;
+  height: 34px;
+  padding: 7px;
+  border-radius: 50%;
+  color: #fff;
+  background: #5865f2;
+}
+
+.custom-command-preview-author span {
+  padding: 2px 4px;
+  border-radius: 3px;
+  color: #fff;
+  background: #5865f2;
+  font-size: 9px;
+  font-weight: 700;
+}
+
+.custom-command-preview-author small {
+  color: #949ba4;
+  font-size: 11px;
+}
+
+.custom-command-preview > p {
+  margin: 0 0 0 41px;
+  color: #dbdee1;
+  white-space: pre-wrap;
+}
+
+.custom-command-embed-preview {
+  position: relative;
+  max-width: 620px;
+  display: grid;
+  gap: 7px;
+  margin-left: 41px;
+  padding: 13px 14px;
+  overflow: hidden;
+  border-left: 4px solid #5865f2;
+  border-radius: 4px;
+  color: #dbdee1;
+  background: #2b2d31;
+}
+
+.custom-command-embed-preview > strong {
+  padding-right: 84px;
+  color: #f2f3f5;
+}
+
+.custom-command-embed-preview > p {
+  max-width: 500px;
+  margin: 0;
+  color: #dbdee1;
+  white-space: pre-wrap;
+}
+
+.custom-command-embed-preview > small {
+  padding-top: 8px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  color: #b5bac1;
+}
+
+.custom-command-thumbnail {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  width: 68px;
+  height: 68px;
+  border-radius: 4px;
+  object-fit: cover;
+}
+
+.custom-command-image {
+  width: min(100%, 520px);
+  max-height: 280px;
+  border-radius: 4px;
+  object-fit: cover;
+}
+
+.custom-command-preview-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  margin-left: 41px;
+}
+
+.custom-command-preview-buttons span {
+  min-height: 32px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 12px;
+  border-radius: 4px;
+  color: #f2f3f5;
+  background: #4e5058;
+  font-size: 13px;
+  font-weight: 600;
+}
+
 .audit-table {
   display: grid;
   gap: 8px;
@@ -4324,6 +4548,19 @@ textarea {
   border-radius: 8px;
   color: var(--blue);
   background: rgba(104, 168, 255, 0.1);
+}
+
+.owner-ai-visibility-icon.is-premium {
+  border-color: rgba(244, 189, 99, 0.3);
+  color: var(--amber);
+  background: rgba(244, 189, 99, 0.1);
+}
+
+.owner-premium-features-panel {
+  border-color: rgba(244, 189, 99, 0.22);
+  background:
+    linear-gradient(90deg, rgba(244, 189, 99, 0.065), transparent 58%),
+    var(--panel-bg);
 }
 
 .owner-ai-visibility-copy .eyebrow {
@@ -8653,6 +8890,21 @@ textarea {
 
   .owner-ai-visibility-control .module-status-toggle {
     justify-self: end;
+  }
+
+  .custom-response-mode,
+  .custom-command-button-row {
+    grid-template-columns: 1fr;
+  }
+
+  .custom-command-button-row .icon-button {
+    width: 100%;
+  }
+
+  .custom-command-preview > p,
+  .custom-command-embed-preview,
+  .custom-command-preview-buttons {
+    margin-left: 0;
   }
 
   .owner-current-status em {

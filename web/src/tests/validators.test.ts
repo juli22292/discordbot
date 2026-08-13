@@ -259,4 +259,31 @@ describe("guild-isolated validation", () => {
       fields: { description: "x".repeat(4001) }
     })).toThrow();
   });
+
+  it("validates rich custom command embeds and link buttons", () => {
+    const command = customCommandSchema.parse({
+      name: "regeln",
+      description: "Zeigt die Serverregeln",
+      responseType: "embed",
+      embedTitle: "Serverregeln",
+      embedDescription: "Bitte lies alle Regeln.",
+      embedColor: "#57F287",
+      embedFooter: "Modmail Manager",
+      buttons: [{ label: "Dokumentation", url: "https://example.com/docs", emoji: "📘" }]
+    });
+
+    expect(command.responseType).toBe("embed");
+    expect(command.buttons).toHaveLength(1);
+    expect(() => customCommandSchema.parse({
+      name: "leer",
+      description: "Leeres Embed",
+      responseType: "embed"
+    })).toThrow();
+    expect(() => customCommandSchema.parse({
+      name: "unsicher",
+      description: "Unsicherer Link",
+      responseContent: "Test",
+      buttons: [{ label: "Datei", url: "javascript:alert(1)" }]
+    })).toThrow();
+  });
 });

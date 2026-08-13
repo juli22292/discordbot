@@ -34,6 +34,12 @@ fi
 
 export PLUGIN_BUILDER_MAVEN_BIN="${PLUGIN_BUILDER_MAVEN_BIN:-$MAVEN_ROOT/bin/mvn}"
 export PLUGIN_BUILDER_PORT="${PLUGIN_BUILDER_PORT:-${SERVER_PORT:-8080}}"
+export PLUGIN_BUILDER_BIND_ADDRESS="${PLUGIN_BUILDER_BIND_ADDRESS:-0.0.0.0}"
+
+if ! [[ "$PLUGIN_BUILDER_PORT" =~ ^[0-9]+$ ]] || [ "$PLUGIN_BUILDER_PORT" -lt 1 ] || [ "$PLUGIN_BUILDER_PORT" -gt 65535 ]; then
+  echo "[BUILDER] Ungültiger Port: ${PLUGIN_BUILDER_PORT}. Prüfe die primäre Pterodactyl-Allocation."
+  exit 1
+fi
 
 JAVA_MAJOR="$(java -version 2>&1 | awk -F '[".]' '/version/ {print $2; exit}')"
 if [ -z "$JAVA_MAJOR" ] || [ "$JAVA_MAJOR" -lt 25 ]; then
@@ -45,7 +51,8 @@ fi
 echo "[BUILDER] Baue den Builder-Dienst..."
 "$PLUGIN_BUILDER_MAVEN_BIN" -B -ntp -DskipTests package
 
-echo "[BUILDER] Starte auf Port ${PLUGIN_BUILDER_PORT}..."
+echo "[BUILDER] Verwende Pterodactyl-Port ${PLUGIN_BUILDER_PORT}."
+echo "[BUILDER] Starte auf ${PLUGIN_BUILDER_BIND_ADDRESS}:${PLUGIN_BUILDER_PORT}..."
 exec java \
   -Xms128M \
   -XX:MaxRAMPercentage=70.0 \

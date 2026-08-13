@@ -99,14 +99,35 @@ export const commandConfigSchema = z.object({
   deniedRoleIds: snowflakeArraySchema
 });
 
-export const customCommandSchema = z.object({
+const optionalHttpUrlSchema = z
+  .string()
+  .trim()
+  .max(2048)
+  .refine((value) => !value || /^https?:\/\//i.test(value), "Nutze eine vollständige HTTP- oder HTTPS-URL.")
+  .default("");
+
+const customCommandButtonSchema = z.object({
+  label: z.string().trim().min(1).max(80),
+  url: z.string().trim().url().refine((value) => /^https?:\/\//i.test(value), "Button-Links müssen HTTP oder HTTPS verwenden."),
+  emoji: z.string().trim().max(100).default("")
+});
+
+const customCommandBaseSchema = z.object({
   name: z
     .string()
     .trim()
     .toLowerCase()
     .regex(/^[a-z0-9_-]{1,32}$/, "Command-Namen dürfen nur a-z, 0-9, _ und - enthalten."),
   description: z.string().trim().min(1).max(100),
-  responseContent: z.string().trim().min(1).max(2000),
+  responseType: z.enum(["message", "embed"]).default("message"),
+  responseContent: z.string().trim().max(2000).default(""),
+  embedTitle: z.string().trim().max(256).default(""),
+  embedDescription: z.string().trim().max(4000).default(""),
+  embedColor: z.string().trim().regex(/^#[0-9A-Fa-f]{6}$/, "Die Embed-Farbe muss ein Hex-Wert sein.").default("#5865F2"),
+  embedFooter: z.string().trim().max(2048).default(""),
+  embedThumbnailUrl: optionalHttpUrlSchema,
+  embedImageUrl: optionalHttpUrlSchema,
+  buttons: z.array(customCommandButtonSchema).max(5).default([]),
   enabled: z.boolean().default(true),
   ephemeral: z.boolean().default(false),
   cooldownSeconds: z.number().int().min(0).max(86400).default(0),
@@ -116,9 +137,28 @@ export const customCommandSchema = z.object({
   deniedRoleIds: snowflakeArraySchema
 });
 
-export const partialCustomCommandSchema = customCommandSchema.partial().extend({
-  name: customCommandSchema.shape.name.optional()
-});
+function validateCustomCommandResponse(
+  value: z.infer<typeof customCommandBaseSchema>,
+  context: z.RefinementCtx
+) {
+  const hasMessage = Boolean(value.responseContent.trim());
+  const hasEmbed = Boolean(
+    value.embedTitle.trim()
+    || value.embedDescription.trim()
+    || value.embedImageUrl.trim()
+    || value.embedThumbnailUrl.trim()
+  );
+  if (value.responseType === "message" && !hasMessage) {
+    context.addIssue({ code: z.ZodIssueCode.custom, path: ["responseContent"], message: "Eine Textantwort darf nicht leer sein." });
+  }
+  if (value.responseType === "embed" && !hasMessage && !hasEmbed) {
+    context.addIssue({ code: z.ZodIssueCode.custom, path: ["embedDescription"], message: "Fülle mindestens Text, Titel, Beschreibung oder ein Bild aus." });
+  }
+}
+
+export const customCommandSchema = customCommandBaseSchema.superRefine(validateCustomCommandResponse);
+
+export const partialCustomCommandSchema = customCommandBaseSchema.partial();
 
 export const welcomeSettingsSchema = z.object({
   enabled: z.boolean().default(false),
