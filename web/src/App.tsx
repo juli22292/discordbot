@@ -5015,7 +5015,26 @@ function HomePage() {
   return (
     <div className="app-shell">
       <TopNav user={me.data?.user} />
-      <main className="content narrow">
+      <main className="home-page-layout">
+        <aside className="home-ad-rail" aria-label="Werbung">
+          <div className="home-ad-rail-head">
+            <span>Werbung</span>
+            <small>Anzeige</small>
+          </div>
+          <div
+            id="google-adsense-left-rail"
+            className="home-ad-slot"
+            data-ad-client="ca-pub-6245185799932586"
+          >
+            <div className="home-ad-placeholder" aria-hidden="true">
+              <span>Werbefläche</span>
+              <small>Google AdSense</small>
+            </div>
+          </div>
+          <p>Werbung unterstützt den Betrieb des Webpanels.</p>
+        </aside>
+
+        <div className="home-page-content">
         <section className="home-hero reveal-card">
           <div>
             <p className="eyebrow">
@@ -5153,6 +5172,7 @@ function HomePage() {
             })}
           </section>
         )}
+        </div>
       </main>
     </div>
   );
