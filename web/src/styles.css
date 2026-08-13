@@ -3404,7 +3404,8 @@ b {
   text-transform: uppercase;
 }
 
-.side-badge.is-new {
+.side-badge.is-new,
+.side-badge.is-free {
   min-height: 20px;
   padding: 3px 7px 3px 5px;
   border-color: rgba(57, 220, 142, 0.38);
@@ -3419,7 +3420,8 @@ b {
   text-transform: none;
 }
 
-.side-badge.is-new svg {
+.side-badge.is-new svg,
+.side-badge.is-free svg {
   width: 10px;
   height: 10px;
   flex: 0 0 10px;
@@ -3428,7 +3430,9 @@ b {
 }
 
 .side-link:hover:not(.disabled) .side-badge.is-new,
-.side-link.active .side-badge.is-new {
+.side-link:hover:not(.disabled) .side-badge.is-free,
+.side-link.active .side-badge.is-new,
+.side-link.active .side-badge.is-free {
   border-color: rgba(79, 235, 158, 0.56);
   color: #9af6c7;
   background:
@@ -3445,7 +3449,8 @@ b {
   background: rgba(104, 168, 255, 0.1);
 }
 
-.side-link.active .side-badge.is-new {
+.side-link.active .side-badge.is-new,
+.side-link.active .side-badge.is-free {
   color: #9af6c7;
   border-color: rgba(79, 235, 158, 0.56);
   background:
@@ -4036,6 +4041,18 @@ b {
   background: rgba(255, 170, 64, 0.1);
   font-size: 9px;
   font-weight: 700;
+}
+
+.feature-section-tab-badge.free {
+  border-color: rgba(57, 220, 142, 0.38);
+  color: #79efb3;
+  background: rgba(57, 220, 142, 0.12);
+  box-shadow: 0 0 10px rgba(57, 220, 142, 0.12);
+}
+
+.feature-section-tab-badge.free svg {
+  color: #5cf0a4;
+  filter: drop-shadow(0 0 3px rgba(57, 220, 142, 0.38));
 }
 
 label {

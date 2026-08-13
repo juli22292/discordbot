@@ -315,7 +315,7 @@ type FeatureDefinition = {
 };
 
 type PageSectionTab = Pick<FeatureTabDefinition, "key" | "label" | "description" | "icon"> & {
-  badge?: "premium";
+  badge?: "premium" | "free";
 };
 
 type FeatureSettings = {
@@ -7557,7 +7557,9 @@ function Dashboard({ path }: { path: string }) {
   );
   const me = useApi<{ user: User }>("/api/me", []);
   const detail = useApi<{ guild: GuildDetail; settings: SettingsRow }>(`/api/guilds/${guildId}`, [guildId]);
+  const premiumFeatures = useApi<AdminPremiumFeatures>("/api/public/premium-features", []);
   const workspace = useApi<WorkspaceData>(demoMode ? null : `/api/guilds/${guildId}/workspace`, [guildId, demoMode]);
+  const profileBadge = premiumFeatures.data?.settings.required === false ? "free" : "premium";
   const moduleStatusMap = useMemo(
     () => new Map((workspace.data?.modules ?? []).map((entry) => [entry.key, entry])),
     [workspace.data]
@@ -7597,7 +7599,7 @@ function Dashboard({ path }: { path: string }) {
             <SidebarGroup label="Start" tone="blue">
               <SideLink icon={<LayoutDashboard size={17} />} label="Übersicht" section="overview" current={section} guildId={guildId} />
               <SideLink icon={<FolderKanban size={17} />} label="Workspace Center" section="workspace" current={section} guildId={guildId} isNew />
-              <SideLink icon={<Bot size={17} />} label="Bot-Profil" section="profile" current={section} guildId={guildId} badge="premium" />
+              <SideLink icon={<Bot size={17} />} label="Bot-Profil" section="profile" current={section} guildId={guildId} badge={profileBadge} />
               <SideLink icon={<UserCog size={17} />} label="Team-Zugänge" section="team-access" current={section} guildId={guildId} isNew />
             </SidebarGroup>
             <SidebarGroup label="Community" tone="green">
@@ -7786,7 +7788,7 @@ function SideLink({
   section: string;
   current: string;
   guildId: string;
-  badge?: "beta" | "premium" | "planned";
+  badge?: "beta" | "premium" | "free" | "planned";
   isNew?: boolean;
 }) {
   const moduleStatuses = useContext(GuildModuleStatusContext);
@@ -7817,6 +7819,12 @@ function SideLink({
         <span className="side-badge is-premium">
           <Crown size={10} strokeWidth={2.6} aria-hidden="true" />
           Premium
+        </span>
+      )}
+      {badge === "free" && (
+        <span className="side-badge is-free">
+          <Check size={10} strokeWidth={3} aria-hidden="true" />
+          Gratis
         </span>
       )}
       {badge === "planned" && (
@@ -7933,7 +7941,15 @@ function ProfilePage({ guildId, settings, onSaved }: { guildId: string; settings
   const premiumUnlocked = !premiumRequired;
   const sectionTabs: PageSectionTab[] = [
     { key: "nickname", label: "Bot-Nickname", description: "Den sichtbaren Namen des Bots nur für diese Guild anpassen.", icon: <AtSign size={16} /> },
-    { key: "avatar", label: "Server-Avatar", description: "Premium-Funktion für ein eigenes Bot-Profilbild auf dieser Guild.", icon: <Bot size={16} />, badge: "premium" }
+    {
+      key: "avatar",
+      label: "Server-Avatar",
+      description: premiumRequired
+        ? "Premium-Funktion für ein eigenes Bot-Profilbild auf dieser Guild."
+        : "Gratis freigeschaltet: eigenes Bot-Profilbild für diese Guild.",
+      icon: <Bot size={16} />,
+      badge: premiumRequired ? "premium" : "free"
+    }
   ];
   const activeSectionTab = sectionTabs.find((tab) => tab.key === activeSection) ?? sectionTabs[0];
   const storedAvatarUrl = settings.bot_avatar_media_key
@@ -10653,7 +10669,8 @@ function PageSectionTabs({
         >
           {tab.icon}
           <span>{tab.label}</span>
-          {tab.badge === "premium" && <span className="feature-section-tab-badge"><Crown size={10} /> Premium</span>}
+          {tab.badge === "premium" && <span className="feature-section-tab-badge premium"><Crown size={10} /> Premium</span>}
+          {tab.badge === "free" && <span className="feature-section-tab-badge free"><Check size={10} strokeWidth={3} /> Gratis</span>}
         </div>
       ))}
     </nav>
