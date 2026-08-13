@@ -64,9 +64,9 @@ import {
 } from "./server/plugin-builder";
 import {
   PREMIUM_FEATURES_SETTING_KEY,
-  parseStoredPremiumFeatures,
+  parseStoredPremiumRequirement,
   premiumFeaturesSettingsSchema,
-  serializePremiumFeatures
+  serializePremiumRequirement
 } from "./server/premium-features";
 import {
   DiscordApiError,
@@ -1100,7 +1100,7 @@ async function readAiVisibilitySettings(env: Env): Promise<{
 }
 
 async function readPremiumFeaturesSettings(env: Env): Promise<{
-  enabled: boolean;
+  required: boolean;
   updatedAt: string | null;
 }> {
   await ensureAppSettingsStorage(env);
@@ -1111,15 +1111,15 @@ async function readPremiumFeaturesSettings(env: Env): Promise<{
   );
 
   return {
-    enabled: parseStoredPremiumFeatures(row?.setting_value),
+    required: parseStoredPremiumRequirement(row?.setting_value),
     updatedAt: row?.updated_at ?? null
   };
 }
 
-async function requirePremiumFeaturesEnabled(env: Env): Promise<void> {
+async function requirePremiumFeaturesUnlocked(env: Env): Promise<void> {
   const settings = await readPremiumFeaturesSettings(env);
-  if (!settings.enabled) {
-    throw new HttpError(403, "premium_features_disabled", "Premium-Funktionen sind derzeit vom Owner deaktiviert.");
+  if (settings.required) {
+    throw new HttpError(403, "premium_required", "Für diese Funktion wird Premium benötigt.");
   }
 }
 
@@ -4901,7 +4901,7 @@ app.patch("/api/guilds/:guildId/profile", async (c) => {
 
 app.post("/api/guilds/:guildId/profile/avatar", async (c) => {
   const access = await requireGuildManagementAccess(c, c.req.param("guildId"));
-  await requirePremiumFeaturesEnabled(c.env);
+  await requirePremiumFeaturesUnlocked(c.env);
   const previousSettings = await ensureSettings(c.env, access.guild.id);
   const form = await c.req.formData();
   const file = form.get("avatar");
@@ -4954,7 +4954,7 @@ app.post("/api/guilds/:guildId/profile/avatar", async (c) => {
 
 app.delete("/api/guilds/:guildId/profile/avatar", async (c) => {
   const access = await requireGuildManagementAccess(c, c.req.param("guildId"));
-  await requirePremiumFeaturesEnabled(c.env);
+  await requirePremiumFeaturesUnlocked(c.env);
   const settings = await ensureSettings(c.env, access.guild.id);
 
   await c.env.DB.prepare(
@@ -6935,7 +6935,7 @@ app.put("/api/admin/premium-features", async (c) => {
        updated_at = excluded.updated_at`
   ).bind(
     PREMIUM_FEATURES_SETTING_KEY,
-    serializePremiumFeatures(data.enabled),
+    serializePremiumRequirement(data.required),
     session.user.discordUserId,
     timestamp
   ).run();
@@ -6943,7 +6943,7 @@ app.put("/api/admin/premium-features", async (c) => {
   return json(c, {
     ok: true,
     settings: {
-      enabled: data.enabled,
+      required: data.required,
       updatedAt: timestamp
     }
   });

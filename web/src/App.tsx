@@ -1043,7 +1043,7 @@ type AdminAiVisibility = {
 
 type AdminPremiumFeatures = {
   settings: {
-    enabled: boolean;
+    required: boolean;
     updatedAt: string | null;
   };
 };
@@ -5930,20 +5930,20 @@ function AdminPageModern() {
     }
   }
 
-  async function savePremiumFeatures(enabled: boolean) {
+  async function savePremiumFeatures(required: boolean) {
     setSavingPremiumFeatures(true);
     try {
       await api<AdminPremiumFeatures>("/api/admin/premium-features", {
         method: "PUT",
-        body: JSON.stringify({ enabled })
+        body: JSON.stringify({ required })
       });
       await premiumFeatures.reload();
       notify({
         tone: "success",
-        title: enabled ? "Premium-Funktionen aktiviert" : "Premium-Funktionen deaktiviert",
-        text: enabled
-          ? "Premium-markierte Funktionen können jetzt verwendet werden."
-          : "Premium-markierte Funktionen sind zentral gesperrt."
+        title: required ? "Premium-Schutz aktiviert" : "Premium-Schutz deaktiviert",
+        text: required
+          ? "Premium-markierte Funktionen benötigen jetzt Premium und sind gesperrt."
+          : "Premium-markierte Funktionen sind vorübergehend ohne Premium freigegeben."
       });
     } catch (error) {
       notify({
@@ -6054,18 +6054,18 @@ function AdminPageModern() {
               <div>
                 <p className="eyebrow">Funktionsfreigabe</p>
                 <h2>Premium-Funktionen</h2>
-                <p>Aktiviere oder sperre Premium-markierte Funktionen zentral. Ohne gespeicherte Einstellung sind sie standardmäßig aktiv.</p>
+                <p>Bestimme, ob Premium-markierte Funktionen Premium benötigen. Der Schutz ist standardmäßig aktiv und sperrt diese Funktionen.</p>
               </div>
             </div>
             <div className="owner-ai-visibility-control">
-              <span className={`pill ${premiumFeatures.data?.settings.enabled === false ? "warn" : "ok"}`}>
-                PREMIUM: {premiumFeatures.data?.settings.enabled === false ? "AUS" : "AN"}
+              <span className={`pill ${premiumFeatures.data?.settings.required === false ? "warn" : "premium"}`}>
+                PREMIUM NÖTIG: {premiumFeatures.data?.settings.required === false ? "AUS" : "AN"}
               </span>
               <ModuleStatusToggle
-                checked={premiumFeatures.data?.settings.enabled ?? true}
+                checked={premiumFeatures.data?.settings.required ?? true}
                 disabled={premiumFeatures.loading || savingPremiumFeatures}
-                activeLabel="Aktiv"
-                inactiveLabel="Gesperrt"
+                activeLabel="Premium nötig"
+                inactiveLabel="Freigegeben"
                 onChange={(value) => void savePremiumFeatures(value)}
               />
               <small>
@@ -6073,7 +6073,7 @@ function AdminPageModern() {
                   ? "Wird gespeichert..."
                   : premiumFeatures.data?.settings.updatedAt
                     ? `Zuletzt geändert: ${formatDateTime(premiumFeatures.data.settings.updatedAt)}`
-                    : "Standard: aktiviert"}
+                    : "Standard: Premium nötig"}
               </small>
             </div>
             {premiumFeatures.error && <Notice tone="danger" text={premiumFeatures.error} />}
@@ -7927,7 +7927,8 @@ function ProfilePage({ guildId, settings, onSaved }: { guildId: string; settings
   const [avatarBusy, setAvatarBusy] = useState(false);
   const [fileInputKey, setFileInputKey] = useState(0);
   const [activeSection, setActiveSection] = useState("nickname");
-  const premiumEnabled = premiumFeatures.data?.settings.enabled ?? true;
+  const premiumRequired = premiumFeatures.data?.settings.required ?? true;
+  const premiumUnlocked = !premiumRequired;
   const sectionTabs: PageSectionTab[] = [
     { key: "nickname", label: "Bot-Nickname", description: "Den sichtbaren Namen des Bots nur für diese Guild anpassen.", icon: <AtSign size={16} /> },
     { key: "avatar", label: "Server-Avatar", description: "Premium-Funktion für ein eigenes Bot-Profilbild auf dieser Guild.", icon: <Bot size={16} />, badge: "premium" }
@@ -8006,7 +8007,7 @@ function ProfilePage({ guildId, settings, onSaved }: { guildId: string; settings
   }
 
   async function uploadAvatar() {
-    if (!file || !premiumEnabled) return;
+    if (!file || !premiumUnlocked) return;
     setAvatarBusy(true);
     setAvatarStatus(null);
     const formData = new FormData();
@@ -8025,7 +8026,7 @@ function ProfilePage({ guildId, settings, onSaved }: { guildId: string; settings
   }
 
   async function resetAvatar() {
-    if (!premiumEnabled) return;
+    if (!premiumUnlocked) return;
     setAvatarBusy(true);
     setAvatarStatus(null);
     try {
@@ -8071,42 +8072,42 @@ function ProfilePage({ guildId, settings, onSaved }: { guildId: string; settings
             <h2>Server-Avatar</h2>
             <p className="muted">Individuelles Bot-Profilbild nur für diese Guild.</p>
           </div>
-          <span className={`pill ${premiumEnabled ? "ok" : "premium"}`}>
-            {premiumEnabled ? <Check size={13} /> : <Crown size={13} />}
-            {premiumEnabled ? syncLabel : "Premium gesperrt"}
+          <span className={`pill ${premiumUnlocked ? "ok" : "premium"}`}>
+            {premiumUnlocked ? <Check size={13} /> : <Crown size={13} />}
+            {premiumUnlocked ? syncLabel : "Premium benötigt"}
           </span>
         </div>
-        {!premiumEnabled && <div className="profile-premium-gate">
+        {premiumRequired && <div className="profile-premium-gate">
           <span className="profile-premium-icon"><Crown size={22} /></span>
-          <div><strong>Premium-Funktionen sind deaktiviert</strong><p>Der Owner hat Premium-markierte Funktionen im Admin Center zentral gesperrt.</p></div>
+          <div><strong>Premium wird benötigt</strong><p>Der Server-Avatar ist eine Premium-Funktion und aktuell gesperrt.</p></div>
           <span className="pill neutral"><ShieldCheck size={13} /> Gesperrt</span>
         </div>}
-        <div className={`avatar-editor ${premiumEnabled ? "" : "is-premium-locked"}`} aria-disabled={!premiumEnabled}>
+        <div className={`avatar-editor ${premiumRequired ? "is-premium-locked" : ""}`} aria-disabled={premiumRequired}>
           <div className="avatar-preview" aria-label="Vorschau des Server-Avatars">
             {displayedAvatarUrl ? <img src={displayedAvatarUrl} alt="Server-Avatar Vorschau" /> : <Bot size={34} />}
-            {file && premiumEnabled && <span>Vorschau</span>}
+            {file && premiumUnlocked && <span>Vorschau</span>}
           </div>
           <div className="avatar-editor-copy">
             <strong>{file ? file.name : settings.bot_avatar_media_key ? "Aktuelles eigenes Profilbild" : "Normales Bot-Profilbild"}</strong>
             <p>PNG, JPEG, GIF oder WebP bis 512 KiB. Das Bild gilt nur für diese Guild.</p>
             {file && <small>{Math.round(file.size / 1024)} KiB ausgewählt</small>}
             <div className="form-actions avatar-actions">
-              <label className={`secondary-action inline avatar-file-button ${premiumEnabled ? "" : "is-disabled"}`} aria-disabled={!premiumEnabled}>
+              <label className={`secondary-action inline avatar-file-button ${premiumUnlocked ? "" : "is-disabled"}`} aria-disabled={premiumRequired}>
                 <Upload size={16} />
                 Bild auswählen
                 <input
                   key={fileInputKey}
                   type="file"
-                  disabled={!premiumEnabled}
+                  disabled={premiumRequired}
                   accept="image/png,image/jpeg,image/gif,image/webp"
                   onChange={(event) => selectAvatar(event.target.files?.[0] ?? null)}
                 />
               </label>
-              <button className="primary-action inline" onClick={uploadAvatar} disabled={!premiumEnabled || !file || avatarBusy}>
+              <button className="primary-action inline" onClick={uploadAvatar} disabled={premiumRequired || !file || avatarBusy}>
                 {avatarBusy && file ? <Loader2 className="spin" size={16} /> : <Save size={16} />}
                 Übernehmen
               </button>
-              <button className="secondary-action inline" onClick={resetAvatar} disabled={!premiumEnabled || avatarBusy || (!storedAvatarUrl && !file)}>
+              <button className="secondary-action inline" onClick={resetAvatar} disabled={premiumRequired || avatarBusy || (!storedAvatarUrl && !file)}>
                 {avatarBusy && !file ? <Loader2 className="spin" size={16} /> : <RotateCcw size={16} />}
                 Zurücksetzen
               </button>

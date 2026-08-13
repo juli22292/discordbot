@@ -1,23 +1,23 @@
 import { describe, expect, it } from "vitest";
 import {
-  parseStoredPremiumFeatures,
+  parseStoredPremiumRequirement,
   premiumFeaturesSettingsSchema,
-  serializePremiumFeatures
+  serializePremiumRequirement
 } from "../server/premium-features";
 
-describe("premium feature switch", () => {
-  it("defaults to enabled", () => {
-    expect(parseStoredPremiumFeatures(null)).toBe(true);
-    expect(parseStoredPremiumFeatures(undefined)).toBe(true);
+describe("premium requirement switch", () => {
+  it("requires premium by default", () => {
+    expect(parseStoredPremiumRequirement(null)).toBe(true);
+    expect(parseStoredPremiumRequirement(undefined)).toBe(true);
   });
 
-  it("round-trips enabled and disabled values", () => {
-    expect(parseStoredPremiumFeatures(serializePremiumFeatures(true))).toBe(true);
-    expect(parseStoredPremiumFeatures(serializePremiumFeatures(false))).toBe(false);
+  it("round-trips required and unlocked values", () => {
+    expect(parseStoredPremiumRequirement(serializePremiumRequirement(true))).toBe(true);
+    expect(parseStoredPremiumRequirement(serializePremiumRequirement(false))).toBe(false);
   });
 
   it("accepts only an explicit boolean", () => {
-    expect(premiumFeaturesSettingsSchema.parse({ enabled: true })).toEqual({ enabled: true });
-    expect(premiumFeaturesSettingsSchema.safeParse({ enabled: "true" }).success).toBe(false);
+    expect(premiumFeaturesSettingsSchema.parse({ required: true })).toEqual({ required: true });
+    expect(premiumFeaturesSettingsSchema.safeParse({ required: "true" }).success).toBe(false);
   });
 });
