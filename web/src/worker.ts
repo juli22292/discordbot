@@ -79,6 +79,7 @@ import {
   DiscordApiError,
   createDiscordChannelInvite,
   deleteDiscordInvite,
+  DISCORD_LOGIN_SCOPES,
   discordAvatarUrl,
   discordBotInviteUrl,
   discordGuildIconUrl,
@@ -93,6 +94,7 @@ import {
   fetchDiscordBotGuildRoles,
   fetchDiscordGuilds,
   fetchDiscordUser,
+  hasRequiredDiscordLoginScopes,
   refreshDiscordToken,
   updateDiscordBotGuildNickname
 } from "./server/discord";
@@ -266,6 +268,18 @@ interface GuildRow {
   name: string;
   icon: string | null;
   bot_joined_at: string | null;
+}
+
+interface AdminSessionRow {
+  id: string;
+  expires_at: string;
+  created_at: string;
+  updated_at: string;
+  encrypted_token_data: string;
+  discord_user_id: string;
+  username: string;
+  display_name: string | null;
+  avatar: string | null;
 }
 
 interface GuildPanelAccessRow {
@@ -1695,6 +1709,10 @@ async function getSession(c: HonoContext): Promise<ActiveSession | null> {
         return null;
       }
 
+      if (!hasRequiredDiscordLoginScopes(cookieSession.tokenData.scope)) {
+        return null;
+      }
+
       if (cookieSession.tokenData.expiresAt <= Date.now()) {
         return null;
       }
@@ -1725,6 +1743,11 @@ async function getSession(c: HonoContext): Promise<ActiveSession | null> {
 
   let tokenData = await decryptJson<TokenData>(row.encrypted_token_data, c.env.ENCRYPTION_KEY);
   if (tokenData.clientId !== c.env.DISCORD_CLIENT_ID) {
+    return null;
+  }
+
+  if (!hasRequiredDiscordLoginScopes(tokenData.scope)) {
+    await db.prepare("DELETE FROM sessions WHERE id = ?").bind(row.id).run();
     return null;
   }
 
@@ -4460,6 +4483,9 @@ app.get("/api/auth/discord/callback", async (c) => {
   }
 
   const tokenData = await exchangeDiscordCode(c.env, code);
+  if (!hasRequiredDiscordLoginScopes(tokenData.scope)) {
+    throw new HttpError(403, "oauth_scopes_missing", "Discord hat nicht alle benötigten Berechtigungen freigegeben. Bitte autorisiere die App erneut.");
+  }
   const user = await fetchDiscordUser(tokenData);
   const sessionId = randomToken(32);
   const ttl = sessionTtl(c.env);
@@ -6934,6 +6960,91 @@ app.get("/api/admin/bot", async (c) => {
       maxAttempts: Number(event.maxAttempts ?? 0)
     }))
   });
+});
+
+app.get("/api/admin/sessions", async (c) => {
+  const currentSession = await requireAdminSession(c);
+  const timestamp = nowIso();
+  const rows = await all<AdminSessionRow>(
+    requireDb(c.env).prepare(
+      `SELECT s.id, s.expires_at, s.created_at, s.updated_at, s.encrypted_token_data,
+              u.discord_user_id, u.username, u.display_name, u.avatar
+         FROM sessions s
+         JOIN users u ON u.id = s.user_id
+        WHERE s.expires_at > ?
+        ORDER BY s.updated_at DESC
+        LIMIT 200`
+    ).bind(timestamp)
+  );
+
+  const sessions = await Promise.all(rows.map(async (row) => {
+    let scopes: string[] = [];
+    try {
+      const tokenData = await decryptJson<TokenData>(row.encrypted_token_data, c.env.ENCRYPTION_KEY);
+      scopes = [...new Set(tokenData.scope.split(/\s+/).filter(Boolean))].sort();
+    } catch {
+      scopes = [];
+    }
+
+    return {
+      id: row.id,
+      discordUserId: row.discord_user_id,
+      username: row.username,
+      displayName: row.display_name,
+      avatar: row.avatar,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
+      expiresAt: row.expires_at,
+      current: row.id === currentSession.id,
+      scopes,
+      authorizationCurrent: DISCORD_LOGIN_SCOPES.every((scope) => scopes.includes(scope))
+    };
+  }));
+
+  return json(c, {
+    sessions,
+    summary: {
+      activeSessions: sessions.length,
+      activeUsers: new Set(sessions.map((session) => session.discordUserId)).size,
+      requiredScopes: [...DISCORD_LOGIN_SCOPES]
+    }
+  });
+});
+
+app.delete("/api/admin/sessions/:sessionId", async (c) => {
+  const currentSession = await requireAdminSession(c);
+  const sessionId = c.req.param("sessionId");
+  const existing = await first<{ id: string }>(
+    requireDb(c.env).prepare("SELECT id FROM sessions WHERE id = ?").bind(sessionId)
+  );
+  if (!existing) {
+    throw new HttpError(404, "session_not_found", "Diese Sitzung ist nicht mehr aktiv.");
+  }
+
+  await requireDb(c.env).prepare("DELETE FROM sessions WHERE id = ?").bind(sessionId).run();
+  const response = json(c, { ok: true, currentSession: sessionId === currentSession.id });
+  if (sessionId === currentSession.id) {
+    response.headers.append("Set-Cookie", clearCookieHeader(SESSION_COOKIE, c.env));
+  }
+  return response;
+});
+
+app.post("/api/admin/sessions/logout-all", async (c) => {
+  const currentSession = await requireAdminSession(c);
+  const input = z.object({ includeCurrent: z.boolean().default(false) }).parse(await readJsonBody(c));
+  const result = input.includeCurrent
+    ? await requireDb(c.env).prepare("DELETE FROM sessions").run()
+    : await requireDb(c.env).prepare("DELETE FROM sessions WHERE id <> ?").bind(currentSession.id).run();
+
+  const response = json(c, {
+    ok: true,
+    invalidated: Number(result.meta.changes ?? 0),
+    currentSession: input.includeCurrent
+  });
+  if (input.includeCurrent) {
+    response.headers.append("Set-Cookie", clearCookieHeader(SESSION_COOKIE, c.env));
+  }
+  return response;
 });
 
 app.get("/api/admin/ai-visibility", async (c) => {

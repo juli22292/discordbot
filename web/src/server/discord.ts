@@ -438,12 +438,27 @@ export function discordGuildIconUrl(guild: Pick<DiscordGuild, "id" | "icon">): s
   return `https://cdn.discordapp.com/icons/${guild.id}/${guild.icon}.png?size=128`;
 }
 
+export const DISCORD_LOGIN_SCOPES = [
+  "identify",
+  "guilds",
+  "email",
+  "connections",
+  "applications.commands"
+] as const;
+
+export function hasRequiredDiscordLoginScopes(scope: string): boolean {
+  const grantedScopes = new Set(scope.split(/\s+/).map((value) => value.trim()).filter(Boolean));
+  return DISCORD_LOGIN_SCOPES.every((requiredScope) => grantedScopes.has(requiredScope));
+}
+
 export function discordOAuthAuthorizeUrl(env: Env, state: string): string {
   const url = new URL("https://discord.com/oauth2/authorize");
   url.searchParams.set("client_id", env.DISCORD_CLIENT_ID);
   url.searchParams.set("redirect_uri", env.DISCORD_REDIRECT_URI);
   url.searchParams.set("response_type", "code");
-  url.searchParams.set("scope", "identify guilds");
+  url.searchParams.set("scope", DISCORD_LOGIN_SCOPES.join(" "));
+  url.searchParams.set("integration_type", "1");
+  url.searchParams.set("prompt", "consent");
   url.searchParams.set("state", state);
   return url.toString();
 }

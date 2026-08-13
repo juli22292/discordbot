@@ -1065,6 +1065,27 @@ type ThemePrankSettings = {
   };
 };
 
+type AdminSessionsData = {
+  sessions: Array<{
+    id: string;
+    discordUserId: string;
+    username: string;
+    displayName: string | null;
+    avatar: string | null;
+    createdAt: string;
+    updatedAt: string;
+    expiresAt: string;
+    current: boolean;
+    scopes: string[];
+    authorizationCurrent: boolean;
+  }>;
+  summary: {
+    activeSessions: number;
+    activeUsers: number;
+    requiredScopes: string[];
+  };
+};
+
 type ThemeMode = "dark" | "light";
 type ToastTone = "success" | "danger" | "warning" | "info";
 type HomeGuildFilter = "all" | "installed" | "missing" | "favorites";
@@ -4183,7 +4204,7 @@ function PrivacyPage() {
     {
       icon: <KeyRound size={18} />,
       title: "Discord Login",
-      text: "Die Anmeldung läuft über Discord OAuth mit den Bereichen identify und guilds. Dadurch erkennt das Panel deinen Account und die Server, die du verwalten darfst."
+      text: "Die Anmeldung läuft über Discord OAuth mit identify, guilds, email, connections und applications.commands. Dadurch erkennt das Panel deinen Account und deine verwaltbaren Server; zugleich wird die Nutzerinstallation für globale App-Befehle autorisiert."
     },
     {
       icon: <UserRound size={18} />,
@@ -5774,6 +5795,7 @@ function AdminPageModern() {
   const aiVisibility = useApi<AdminAiVisibility>("/api/admin/ai-visibility", []);
   const premiumFeatures = useApi<AdminPremiumFeatures>("/api/admin/premium-features", []);
   const themePrank = useApi<ThemePrankSettings>("/api/admin/theme-prank", []);
+  const activeSessions = useApi<AdminSessionsData>("/api/admin/sessions", []);
   const runtime = admin.data?.runtime ?? null;
   const ownerHasData = Boolean(admin.data);
   const ownerInitialLoading = admin.loading && !ownerHasData;
@@ -5804,6 +5826,7 @@ function AdminPageModern() {
   const [savingAiVisibility, setSavingAiVisibility] = useState(false);
   const [savingPremiumFeatures, setSavingPremiumFeatures] = useState(false);
   const [savingThemePrank, setSavingThemePrank] = useState(false);
+  const [sessionAction, setSessionAction] = useState<string | null>(null);
 
   function scrollToOwnerSection(sectionId: string) {
     document.getElementById(sectionId)?.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -6132,6 +6155,66 @@ function AdminPageModern() {
     }
   }
 
+  async function invalidateSession(sessionId: string, current: boolean) {
+    const message = current
+      ? "Diese Sitzung wirklich beenden? Du musst dich anschließend erneut mit Discord autorisieren."
+      : "Diese Website-Sitzung wirklich abmelden? Der Nutzer muss sich anschließend erneut autorisieren.";
+    if (!window.confirm(message)) return;
+
+    setSessionAction(sessionId);
+    try {
+      await api(`/api/admin/sessions/${encodeURIComponent(sessionId)}`, { method: "DELETE" });
+      if (current) {
+        window.location.assign("/login");
+        return;
+      }
+      await activeSessions.reload();
+      notify({ tone: "success", title: "Sitzung beendet", text: "Der Nutzer wurde vom Webpanel abgemeldet." });
+    } catch (error) {
+      notify({
+        tone: "danger",
+        title: "Abmeldung fehlgeschlagen",
+        text: error instanceof Error ? error.message : "Die Sitzung konnte nicht beendet werden."
+      });
+    } finally {
+      setSessionAction(null);
+    }
+  }
+
+  async function invalidateAllSessions(includeCurrent: boolean) {
+    const message = includeCurrent
+      ? "Wirklich alle Sitzungen einschließlich deiner eigenen beenden? Alle Nutzer müssen Discord neu autorisieren."
+      : "Wirklich alle anderen Nutzer abmelden? Deine aktuelle Owner-Sitzung bleibt aktiv.";
+    if (!window.confirm(message)) return;
+
+    const actionKey = includeCurrent ? "all" : "others";
+    setSessionAction(actionKey);
+    try {
+      const result = await api<{ invalidated: number }>("/api/admin/sessions/logout-all", {
+        method: "POST",
+        body: JSON.stringify({ includeCurrent })
+      });
+      if (includeCurrent) {
+        window.location.assign("/login");
+        return;
+      }
+      await activeSessions.reload();
+      notify({
+        tone: "success",
+        title: "Nutzer abgemeldet",
+        text: `${result.invalidated} Sitzung${result.invalidated === 1 ? "" : "en"} wurden beendet.`
+      });
+    } catch (error) {
+      notify({
+        tone: "danger",
+        title: "Abmeldung fehlgeschlagen",
+        text: error instanceof Error ? error.message : "Die Sitzungen konnten nicht beendet werden."
+      });
+    } finally {
+      setSessionAction(null);
+    }
+  }
+
   return (
     <div className="app-shell">
       <TopNav user={me.data?.user} />
@@ -6175,6 +6258,10 @@ function AdminPageModern() {
             <ClipboardList size={17} />
             <span><strong>Protokoll</strong><small>Logs & History</small></span>
           </button>
+          <button type="button" onClick={() => scrollToOwnerSection("owner-sessions")}>
+            <UsersRound size={17} />
+            <span><strong>Sitzungen</strong><small>Logins verwalten</small></span>
+          </button>
         </nav>
 
         {me.data?.user?.ownerAdmin && (
@@ -6185,6 +6272,90 @@ function AdminPageModern() {
               <small>Admin-Routen und Owner-API sind per Discord-ID gesperrt. Angemeldet als {me.data.user.displayName || me.data.user.username}{me.data.user.discordUserId ? ` · ${me.data.user.discordUserId}` : ""}.</small>
             </div>
             <em>ID-Lock</em>
+          </section>
+        )}
+
+        {me.data?.user?.ownerAdmin && (
+          <section className="panel owner-session-panel owner-scroll-target" id="owner-sessions">
+            <header className="owner-session-header">
+              <div className="owner-session-heading">
+                <span><UsersRound size={20} /></span>
+                <div>
+                  <p className="eyebrow">Zugriffskontrolle</p>
+                  <h2>Angemeldete Nutzer</h2>
+                  <p>Beende einzelne oder alle Website-Sitzungen. Beim nächsten Login wird die aktuelle Discord-Autorisierung erneut bestätigt.</p>
+                </div>
+              </div>
+              <div className="owner-session-summary">
+                <span><strong>{activeSessions.data?.summary.activeUsers ?? 0}</strong><small>Nutzer</small></span>
+                <span><strong>{activeSessions.data?.summary.activeSessions ?? 0}</strong><small>Sitzungen</small></span>
+              </div>
+            </header>
+
+            <div className="owner-session-scope-strip">
+              <ShieldCheck size={16} />
+              <span>Aktuelle Autorisierung</span>
+              <div>
+                {(activeSessions.data?.summary.requiredScopes ?? []).map((scope) => <code key={scope}>{scope}</code>)}
+              </div>
+            </div>
+
+            <div className="owner-session-toolbar">
+              <RefreshButton loading={activeSessions.loading} onClick={activeSessions.reload} />
+              <button
+                className="secondary-action inline"
+                type="button"
+                disabled={Boolean(sessionAction) || (activeSessions.data?.summary.activeSessions ?? 0) <= 1}
+                onClick={() => void invalidateAllSessions(false)}
+              >
+                {sessionAction === "others" ? <Loader2 className="spin" size={16} /> : <UserMinus size={16} />}
+                Alle anderen abmelden
+              </button>
+              <button
+                className="danger-action inline"
+                type="button"
+                disabled={Boolean(sessionAction) || !activeSessions.data?.summary.activeSessions}
+                onClick={() => void invalidateAllSessions(true)}
+              >
+                {sessionAction === "all" ? <Loader2 className="spin" size={16} /> : <LogOut size={16} />}
+                Alle abmelden
+              </button>
+            </div>
+
+            {activeSessions.error && <Notice tone="danger" text={activeSessions.error} />}
+            {!activeSessions.loading && !activeSessions.error && !activeSessions.data?.sessions.length && (
+              <p className="owner-session-empty">Keine aktiven Website-Sitzungen gefunden.</p>
+            )}
+            <div className="owner-session-list">
+              {(activeSessions.data?.sessions ?? []).map((session) => (
+                <article className={`owner-session-row ${session.current ? "current" : ""}`} key={session.id}>
+                  <span className="owner-session-avatar">
+                    {session.avatar ? <img src={session.avatar} alt="" /> : <UserRound size={19} />}
+                  </span>
+                  <div className="owner-session-user">
+                    <strong>{session.displayName || session.username}</strong>
+                    <small>@{session.username} · {session.discordUserId}</small>
+                  </div>
+                  <div className="owner-session-meta">
+                    <span>{session.current ? "Diese Sitzung" : `Login ${formatDateTime(session.createdAt)}`}</span>
+                    <small>Gültig bis {formatDateTime(session.expiresAt)}</small>
+                  </div>
+                  <span className={`pill ${session.authorizationCurrent ? "ok" : "warn"}`}>
+                    {session.authorizationCurrent ? "Aktuell" : "Neu autorisieren"}
+                  </span>
+                  <button
+                    className="icon-button danger-soft"
+                    type="button"
+                    title={session.current ? "Diese Sitzung abmelden" : "Nutzer abmelden"}
+                    aria-label={session.current ? "Diese Sitzung abmelden" : `${session.displayName || session.username} abmelden`}
+                    disabled={Boolean(sessionAction)}
+                    onClick={() => void invalidateSession(session.id, session.current)}
+                  >
+                    {sessionAction === session.id ? <Loader2 className="spin" size={17} /> : <LogOut size={17} />}
+                  </button>
+                </article>
+              ))}
+            </div>
           </section>
         )}
 

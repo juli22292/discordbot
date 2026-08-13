@@ -3,8 +3,10 @@ import {
   discordAvatarUrl,
   discordBotInviteUrl,
   discordDefaultAvatarUrl,
+  discordOAuthAuthorizeUrl,
   fetchDiscordBotGuild,
-  fetchDiscordGuilds
+  fetchDiscordGuilds,
+  hasRequiredDiscordLoginScopes
 } from "../server/discord";
 import type { Env } from "../server/types";
 
@@ -71,6 +73,24 @@ describe("Discord bot helpers", () => {
     expect(url.searchParams.has("redirect_uri")).toBe(false);
     expect(url.searchParams.has("state")).toBe(false);
     expect(url.searchParams.get("permissions")).toBe("8");
+  });
+
+  it("builds a consented user-install login with the current website scopes", () => {
+    const url = new URL(discordOAuthAuthorizeUrl({
+      DISCORD_CLIENT_ID: "123456789012345678",
+      DISCORD_REDIRECT_URI: "https://panel.example/api/auth/discord/callback"
+    } as Env, "secure-state"));
+
+    expect(url.searchParams.get("scope")).toBe("identify guilds email connections applications.commands");
+    expect(url.searchParams.get("integration_type")).toBe("1");
+    expect(url.searchParams.get("prompt")).toBe("consent");
+    expect(url.searchParams.get("state")).toBe("secure-state");
+  });
+
+  it("invalidates sessions that predate the current Discord authorization", () => {
+    expect(hasRequiredDiscordLoginScopes("guilds applications.commands connections identify email")).toBe(true);
+    expect(hasRequiredDiscordLoginScopes("identify guilds")).toBe(false);
+    expect(hasRequiredDiscordLoginScopes("")).toBe(false);
   });
 
   it("checks bot guild presence with the bot token", async () => {
