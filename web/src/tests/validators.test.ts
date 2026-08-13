@@ -16,6 +16,7 @@ import {
   levelSettingsSchema,
   musicSourceSchema,
   nicknameSchema,
+  presenceSchema,
   raidSettingsSchema,
   safeRedirectPath,
   snowflakeSchema,
@@ -70,6 +71,15 @@ describe("guild-isolated validation", () => {
     expect(safeRedirectPath("https://evil.test")).toBe("/panel");
     expect(safeRedirectPath("//evil.test")).toBe("/panel");
     expect(safeRedirectPath("/api/auth/discord")).toBe("/panel");
+  });
+
+  it("preserves an active statistics presence by default", () => {
+    expect(presenceSchema.parse({ status: "idle" })).toMatchObject({
+      status: "idle",
+      activityType: "none",
+      preserveStats: true
+    });
+    expect(presenceSchema.parse({ status: "dnd", preserveStats: false }).preserveStats).toBe(false);
   });
 
   it("validates owner member moderation actions and Discord limits", () => {

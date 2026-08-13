@@ -7644,7 +7644,7 @@ app.post("/api/admin/bot/presence", async (c) => {
   const session = await requireAdminSession(c);
   const data = presenceSchema.parse(await readJsonBody(c));
 
-  if (data.activityType !== "none" && !data.text) {
+  if (!data.preserveStats && data.activityType !== "none" && !data.text) {
     throw new HttpError(400, "presence_text_required", "Bitte gib einen Text für die Aktivität ein.");
   }
 

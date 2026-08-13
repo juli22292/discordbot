@@ -665,6 +665,14 @@ type AdminRuntime = {
   updatedAt: string | null;
   details: {
     bot?: { id?: string; name?: string; avatar?: string | null };
+    presence?: {
+      status?: string;
+      activityType?: string;
+      activityText?: string;
+      configuredStatus?: string;
+      countStatsEnabled?: boolean;
+      countStatsText?: string;
+    };
     heartbeat?: boolean;
     source?: string;
     pterodactyl?: {
@@ -5781,7 +5789,7 @@ function AdminPageModern() {
       : "spotify";
   const recentBotLogs = ownerLogs.data?.logs ?? runtime?.details.logs ?? [];
 
-  const [presence, setPresence] = useState({ status: "online", activityType: "none", text: "", url: "" });
+  const [presence, setPresence] = useState({ status: "online", activityType: "none", text: "", url: "", preserveStats: false });
   const [saving, setSaving] = useState(false);
   const [saveStatus, setSaveStatus] = useState<string | null>(null);
   const [actionBusy, setActionBusy] = useState<string | null>(null);
@@ -5803,11 +5811,13 @@ function AdminPageModern() {
 
   useEffect(() => {
     if (!runtime) return;
+    const countStatsEnabled = Boolean(runtime.details.presence?.countStatsEnabled);
     setPresence({
-      status: runtime.status || "online",
-      activityType: runtime.activityType || "none",
-      text: runtime.activityText || "",
-      url: ""
+      status: runtime.details.presence?.configuredStatus || runtime.status || "online",
+      activityType: countStatsEnabled ? "none" : runtime.activityType || "none",
+      text: countStatsEnabled ? "" : runtime.activityText || "",
+      url: "",
+      preserveStats: countStatsEnabled
     });
   }, [runtime?.updatedAt]);
 
@@ -5842,6 +5852,8 @@ function AdminPageModern() {
   const knownGuilds = admin.data?.stats.knownGuilds ?? 0;
   const installRate = knownGuilds ? Math.round((installedGuilds / knownGuilds) * 100) : 0;
   const guildUserText = runtime?.userCount !== null && runtime?.userCount !== undefined ? `${compactNumber(runtime.userCount)} Nutzer` : "Nutzer offen";
+  const countStatsEnabled = Boolean(runtime?.details.presence?.countStatsEnabled);
+  const countStatsText = runtime?.details.presence?.countStatsText || (countStatsEnabled ? runtime?.activityText : "") || "Server- und Nutzerzahlen";
 
   const filteredGuilds = useMemo(() => {
     const needle = guildSearch.trim().toLowerCase();
@@ -5917,10 +5929,10 @@ function AdminPageModern() {
   ];
 
   const presencePresets = [
-    { label: "Normal", status: "online", activityType: "none", text: "", url: "" },
-    { label: "Support", status: "online", activityType: "listening", text: "/help", url: "" },
-    { label: "Wartung", status: "dnd", activityType: "watching", text: "Wartung", url: "" },
-    { label: "Idle", status: "idle", activityType: "playing", text: "mit Slash-Commands", url: "" }
+    { label: "Normal", status: "online", activityType: "none", text: "", url: "", preserveStats: false },
+    { label: "Support", status: "online", activityType: "listening", text: "/help", url: "", preserveStats: false },
+    { label: "Wartung", status: "dnd", activityType: "watching", text: "Wartung", url: "", preserveStats: false },
+    { label: "Idle", status: "idle", activityType: "playing", text: "mit Slash-Commands", url: "", preserveStats: false }
   ];
 
   async function savePresence() {
@@ -5931,8 +5943,11 @@ function AdminPageModern() {
         method: "POST",
         body: JSON.stringify(presence)
       });
-      setSaveStatus("Statusänderung wurde an den Bot gesendet.");
-      notify({ tone: "success", title: "Status gesendet", text: "Die Präsenzänderung wurde an den Bot übergeben." });
+      const successText = presence.preserveStats
+        ? "Der Online-Status wird geändert. Die automatische Server-Statistik bleibt aktiv."
+        : "Online-Status und Aktivität wurden an den Bot übergeben.";
+      setSaveStatus(successText);
+      notify({ tone: "success", title: "Präsenz gesendet", text: successText });
       window.setTimeout(() => void admin.reload(), 12000);
     } catch (error) {
       const message = error instanceof Error ? error.message : "Status konnte nicht geändert werden.";
@@ -6409,7 +6424,7 @@ function AdminPageModern() {
                 <div className="panel-title">
                   <div>
                     <h2>Präsenz steuern</h2>
-                    <p className="muted">Status und Aktivität ohne Umwege setzen.</p>
+                    <p className="muted">Online-Status und Aktivität getrennt steuern, ohne laufende Automatik versehentlich zu überschreiben.</p>
                   </div>
                   <span className={`pill ${runtime?.status === "online" ? "ok" : runtime?.status === "dnd" ? "danger" : runtime?.status === "idle" ? "warn" : "neutral"}`}>
                     {statusLabel(runtime?.status)}
@@ -6425,15 +6440,42 @@ function AdminPageModern() {
                   <em>{runtime?.updatedAt ? `gemeldet ${formatDateTime(runtime.updatedAt)}` : "wartet auf Bot-Daten"}</em>
                 </div>
 
+                <div className={`owner-presence-automation ${countStatsEnabled ? "active" : "inactive"}`}>
+                  <span className="owner-presence-automation-icon"><BarChart3 size={18} /></span>
+                  <div>
+                    <small>Automatische Bubble-Statistik</small>
+                    <strong>{countStatsEnabled ? countStatsText : "Nicht aktiv"}</strong>
+                    <p>{countStatsEnabled ? "Online-Status und Statistik laufen unabhängig voneinander." : "Aktivierbar mit /bubble status stats."}</p>
+                  </div>
+                  <span className={`pill ${countStatsEnabled ? "ok" : "neutral"}`}>{countStatsEnabled ? "Geschützt" : "Aus"}</span>
+                </div>
+
+                {countStatsEnabled && (
+                  <label className={`owner-presence-preserve ${presence.preserveStats ? "active" : ""}`}>
+                    <span>
+                      <strong>Server-Statistik beibehalten</strong>
+                      <small>Nur den Online-Status ändern. Server- und Nutzerzahlen bleiben sichtbar und werden weiter aktualisiert.</small>
+                    </span>
+                    <span className="compact-switch">
+                      <input
+                        type="checkbox"
+                        checked={presence.preserveStats}
+                        onChange={(event) => setPresence({ ...presence, preserveStats: event.target.checked })}
+                      />
+                      <span aria-hidden="true" />
+                    </span>
+                  </label>
+                )}
+
                 <div className="owner-presets">
                   {presencePresets.map((preset) => {
-                    const active = presence.status === preset.status && presence.activityType === preset.activityType && presence.text === preset.text;
+                    const active = !presence.preserveStats && presence.status === preset.status && presence.activityType === preset.activityType && presence.text === preset.text;
                     return (
                       <button
                         key={preset.label}
                         type="button"
                         className={`owner-preset-button ${active ? "active" : ""}`}
-                        onClick={() => setPresence({ status: preset.status, activityType: preset.activityType, text: preset.text, url: preset.url })}
+                        onClick={() => setPresence(preset)}
                       >
                         <Sparkles size={15} />
                         {preset.label}
@@ -6454,7 +6496,7 @@ function AdminPageModern() {
                   </label>
                   <label>
                     Aktivität
-                    <select value={presence.activityType} onChange={(event) => setPresence({ ...presence, activityType: event.target.value })}>
+                    <select disabled={presence.preserveStats} value={presence.activityType} onChange={(event) => setPresence({ ...presence, activityType: event.target.value })}>
                       <option value="none">Keine Aktivität</option>
                       <option value="playing">Spielt</option>
                       <option value="watching">Schaut</option>
@@ -6465,12 +6507,12 @@ function AdminPageModern() {
                   </label>
                   <label className="wide">
                     Text
-                    <input value={presence.text} maxLength={128} onChange={(event) => setPresence({ ...presence, text: event.target.value })} placeholder="Minecraft, /help, Wartung..." />
+                    <input disabled={presence.preserveStats} value={presence.text} maxLength={128} onChange={(event) => setPresence({ ...presence, text: event.target.value })} placeholder={presence.preserveStats ? "Wird automatisch aus Server- und Nutzerzahlen erzeugt" : "Minecraft, /help, Wartung..."} />
                   </label>
                   {presence.activityType === "streaming" && (
                     <label className="wide">
                       Streaming-URL
-                      <input value={presence.url} onChange={(event) => setPresence({ ...presence, url: event.target.value })} placeholder="https://twitch.tv/dein-kanal" />
+                      <input disabled={presence.preserveStats} value={presence.url} onChange={(event) => setPresence({ ...presence, url: event.target.value })} placeholder="https://twitch.tv/dein-kanal" />
                     </label>
                   )}
                 </div>

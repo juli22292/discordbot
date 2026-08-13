@@ -192,6 +192,7 @@ export const presenceSchema = z.object({
   status: z.enum(["online", "idle", "dnd", "offline"]).default("online"),
   activityType: z.enum(["none", "playing", "watching", "listening", "streaming", "custom"]).default("none"),
   text: z.string().trim().max(128, "Der Status-Text darf maximal 128 Zeichen lang sein.").default(""),
+  preserveStats: z.boolean().default(true),
   url: z
     .union([z.string().trim().url().max(500), z.literal(""), z.null(), z.undefined()])
     .transform((value) => (typeof value === "string" && value.trim() ? value.trim() : null))
