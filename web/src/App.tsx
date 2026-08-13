@@ -27,6 +27,7 @@ import {
   WorkspaceCenterPage,
   type WorkspaceData
 } from "./workspace-page";
+import { BotProfileAvatar } from "./bot-profile-avatar";
 import { VerifiedAppBadge } from "./verified-app-badge";
 import {
   Activity,
@@ -3772,7 +3773,7 @@ function LoginPage() {
         <section className="auth-panel auth-panel-clean">
           <div className="brand-row">
             <div className="brand-mark">
-              <Bot size={28} />
+              <BotProfileAvatar alt="Modmail Manager" />
             </div>
             <div className="brand-actions">
               <ThemeToggle compact />
@@ -3848,7 +3849,7 @@ function AuthShowcase() {
         <strong>Serververwaltung</strong>
       </div>
       <div className="bot-radar" aria-hidden="true">
-        <Bot size={34} />
+        <BotProfileAvatar />
         <span />
         <span />
       </div>
@@ -3932,7 +3933,7 @@ function TopNav({ user, demoMode = false }: { user?: User | null; demoMode?: boo
     <>
       <header className="top-nav">
         <button className="brand-link" onClick={() => navigate(demoMode ? "/" : "/panel")}>
-          <Bot size={22} />
+          <BotProfileAvatar alt="Modmail Manager" />
           <span>Modmail Manager</span>
         </button>
         <nav className="top-links">{navItems.map((item) => renderNavItem(item))}</nav>
@@ -8085,7 +8086,7 @@ function ProfilePage({ guildId, settings, onSaved }: { guildId: string; settings
         </div>}
         <div className={`avatar-editor ${premiumRequired ? "is-premium-locked" : ""}`} aria-disabled={premiumRequired}>
           <div className="avatar-preview" aria-label="Vorschau des Server-Avatars">
-            {displayedAvatarUrl ? <img src={displayedAvatarUrl} alt="Server-Avatar Vorschau" /> : <Bot size={34} />}
+            {displayedAvatarUrl ? <img src={displayedAvatarUrl} alt="Server-Avatar Vorschau" /> : <BotProfileAvatar alt="Modmail Manager Profilbild" />}
             {file && premiumUnlocked && <span>Vorschau</span>}
           </div>
           <div className="avatar-editor-copy">
@@ -8804,7 +8805,7 @@ function LevelSystemPage({ guildId }: { guildId: string }) {
                 <span className="pill ok">Live</span>
               </div>
               <div className="level-discord-message">
-                <div className="level-bot-avatar"><Bot size={20} /></div>
+                <div className="level-bot-avatar"><BotProfileAvatar /></div>
                 <div>
                   <strong>Modmail Manager <VerifiedAppBadge /></strong>
                   <div className="level-embed-preview">
@@ -9043,7 +9044,7 @@ function CountingPage({ guildId }: { guildId: string }) {
               <div className="counting-chat-preview">
                 {draft.currentNumber >= 2 && <article><div className="counting-avatar">L</div><div><strong>Lena</strong><p>{(draft.currentNumber - 1).toLocaleString("de-DE")}</p><small className="counting-reaction ok"><Check size={12} /> 1</small></div></article>}
                 {draft.currentNumber >= 1 && <article><div className="counting-avatar blue">M</div><div><strong>Max</strong><p>{draft.currentNumber.toLocaleString("de-DE")}</p><small className="counting-reaction ok"><Check size={12} /> 1</small></div></article>}
-                <article className="next"><div className="counting-avatar bot"><Bot size={16} /></div><div><strong>Modmail Manager <VerifiedAppBadge /></strong><p>Wartet auf <b>{nextNumber.toLocaleString("de-DE")}</b></p></div></article>
+                <article className="next"><div className="counting-avatar bot"><BotProfileAvatar /></div><div><strong>Modmail Manager <VerifiedAppBadge /></strong><p>Wartet auf <b>{nextNumber.toLocaleString("de-DE")}</b></p></div></article>
               </div>
               <div className="counting-logic-list">
                 <span><Check size={15} /> Exakt nächste Zahl</span>
@@ -9381,7 +9382,7 @@ function TempVoicePage({ guildId }: { guildId: string }) {
                 <span className="pill neutral">15 Aktionen</span>
               </div>
               <div className="tempvoice-discord-message">
-                <div className="tempvoice-bot-avatar"><Mic2 size={22} /></div>
+                <div className="tempvoice-bot-avatar"><BotProfileAvatar /></div>
                 <div className="tempvoice-message-body">
                   <strong>TempVoice <VerifiedAppBadge /></strong>
                   <div className="tempvoice-discord-embed">
@@ -10062,7 +10063,7 @@ function WelcomePage({ guildId }: { guildId: string }) {
               <span className="pill neutral">Preview</span>
             </div>
             <div className="discord-message">
-              <div className="discord-avatar">M</div>
+              <div className="discord-avatar"><BotProfileAvatar /></div>
               <div className="discord-message-body">
                 <strong>Modmail Manager <VerifiedAppBadge /> <small>gerade eben</small></strong>
                 <p>{replaceTemplateTokens(draft.message, previewMemberName) || "Keine Nachricht gesetzt."}</p>
@@ -10388,7 +10389,7 @@ function CommandEditor({
       </section>
 
       <div className="discord-preview custom-command-preview">
-        <div className="custom-command-preview-author"><Bot size={18} /><strong>Modmail Manager</strong><VerifiedAppBadge /><small>gerade eben</small></div>
+        <div className="custom-command-preview-author"><BotProfileAvatar /><strong>Modmail Manager</strong><VerifiedAppBadge /><small>gerade eben</small></div>
         {draft.responseContent && <p>{draft.responseContent}</p>}
         {draft.responseType === "embed" && <div className="custom-command-embed-preview" style={{ borderColor: draft.embedColor }}>
           {draft.embedThumbnailUrl && <img className="custom-command-thumbnail" src={draft.embedThumbnailUrl} alt="" />}
@@ -11006,7 +11007,7 @@ function ReactionRolesPage({ guildId }: { guildId: string }) {
               <span className="pill neutral">{selectedChannel ? `#${selectedChannel.name}` : "Kein Kanal"}</span>
             </header>
             <div className="selfrole-discord-preview">
-              <div className="selfrole-discord-author"><span><Bot size={18} /></span><strong>Modmail Manager</strong><VerifiedAppBadge /><em>gerade eben</em></div>
+              <div className="selfrole-discord-author"><span><BotProfileAvatar /></span><strong>Modmail Manager</strong><VerifiedAppBadge /><em>gerade eben</em></div>
               <article style={{ borderColor: embedPreset.color }}>
                 <h4>{panelTitle}</h4>
                 {panelDescription && <p>{panelDescription}</p>}
