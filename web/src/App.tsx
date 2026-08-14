@@ -8027,7 +8027,7 @@ function Dashboard({ path }: { path: string }) {
   }
 
   return (
-    <div className="app-shell">
+    <div className="app-shell guild-dashboard-shell">
       <TopNav user={me.data?.user} demoMode={demoMode} />
       <GuildModuleStatusContext.Provider value={moduleStatusMap}>
       <div className="dashboard-layout">
@@ -8301,7 +8301,7 @@ function OverviewPage({ guildId, initial }: { guildId: string; initial: { guild:
   }
 
   return (
-    <section className="section-grid">
+    <section className="section-grid overview-section-grid">
       <div className="overview-tiles wide">
         <StatusTile icon={<Bot size={19} />} label="Bot" value={initial.guild.botInstalled ? "Installiert" : "Fehlt"} tone={initial.guild.botInstalled ? "ok" : "warn"} />
         <StatusTile icon={<Gauge size={19} />} label="Sprache" value={locale === "de" ? "Deutsch" : "English"} />
@@ -8353,6 +8353,7 @@ function OverviewPage({ guildId, initial }: { guildId: string; initial: { guild:
           </button>
         </div>
       </div>
+      <AdvertisementBanner placementId={`google-adsense-guild-overview-${guildId}`} />
     </section>
   );
 }

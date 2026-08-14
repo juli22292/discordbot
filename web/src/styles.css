@@ -1080,15 +1080,42 @@
 
 * {
   box-sizing: border-box;
+  scrollbar-color: rgba(120, 143, 176, 0.58) transparent;
+  scrollbar-width: thin;
 }
 
 html {
   background: var(--bg);
+  scroll-behavior: smooth;
+  scrollbar-color: rgba(120, 143, 176, 0.58) transparent;
+  scrollbar-width: thin;
+}
+
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+*::-webkit-scrollbar-thumb {
+  min-height: 42px;
+  border: 3px solid transparent;
+  border-radius: 999px;
+  background: rgba(120, 143, 176, 0.48);
+  background-clip: padding-box;
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background: rgba(104, 168, 255, 0.72);
+  background-clip: padding-box;
 }
 
 body {
   margin: 0;
-  min-width: 320px;
+  min-width: 0;
   min-height: 100vh;
   background:
     linear-gradient(135deg, var(--page-glow-blue), transparent 34%),
@@ -1145,6 +1172,10 @@ b {
     repeating-linear-gradient(90deg, var(--grid-line-strong) 0 1px, transparent 1px 80px),
     repeating-linear-gradient(0deg, var(--grid-line-soft) 0 1px, transparent 1px 80px),
     transparent;
+}
+
+.guild-dashboard-shell {
+  min-height: 100dvh;
 }
 
 .auth-page {
@@ -1487,7 +1518,7 @@ b {
   top: 0;
   z-index: 10;
   display: grid;
-  grid-template-columns: auto 1fr auto auto auto;
+  grid-template-columns: auto minmax(0, 1fr) auto auto auto auto;
   align-items: center;
   gap: 12px;
   min-height: var(--top-nav-height);
@@ -3489,7 +3520,7 @@ b {
 .dashboard-layout {
   display: block;
   width: 100%;
-  min-height: calc(100vh - var(--top-nav-height));
+  min-height: calc(100dvh - var(--top-nav-height));
 }
 
 .sidebar {
@@ -3943,6 +3974,7 @@ b {
   margin-left: var(--dashboard-sidebar-width);
   padding: 24px clamp(18px, 2.5vw, 40px) 72px;
   animation: fadeUp 420ms ease both;
+  overscroll-behavior-y: contain;
 }
 
 .dashboard-main > * {
@@ -3960,6 +3992,12 @@ b {
 
 .dashboard-page-frame:disabled {
   color: inherit;
+}
+
+.overview-section-grid > .public-ad-banner {
+  grid-column: 1 / -1;
+  width: 100%;
+  margin-top: 10px;
 }
 
 .demo-readonly :is(button, input, select, textarea):disabled {
@@ -9497,7 +9535,7 @@ textarea {
 
 @media (max-width: 1320px) {
   .top-nav {
-    grid-template-columns: 1fr auto auto auto auto;
+    grid-template-columns: minmax(0, 1fr) auto auto auto auto auto;
   }
 
   .top-links {
@@ -9929,6 +9967,10 @@ textarea {
 }
 
 @media (max-width: 440px) {
+  .brand-link > span {
+    display: none;
+  }
+
   .auth-copy h1,
   .docs-hero h1,
   .home-hero h1,
