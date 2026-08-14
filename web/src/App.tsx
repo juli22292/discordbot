@@ -4621,6 +4621,50 @@ function TermsPage() {
 
 const guildCounterNumber = new Intl.NumberFormat("de-DE");
 
+function AdvertisementRail({ placementId }: { placementId: string }) {
+  return (
+    <aside className="home-ad-rail" aria-label="Werbung">
+      <div className="home-ad-rail-head">
+        <span>Werbung</span>
+        <small>Anzeige</small>
+      </div>
+      <div
+        id={placementId}
+        className="home-ad-slot"
+        data-ad-client="ca-pub-6245185799932586"
+      >
+        <div className="home-ad-placeholder" aria-hidden="true">
+          <span>Werbefläche</span>
+          <small>Google AdSense</small>
+        </div>
+      </div>
+      <p>Werbung unterstützt den Betrieb des Webpanels.</p>
+    </aside>
+  );
+}
+
+function AdvertisementBanner({ placementId }: { placementId: string }) {
+  return (
+    <aside className="public-ad-banner" aria-label="Werbung">
+      <div className="home-ad-rail-head">
+        <span>Werbung</span>
+        <small>Anzeige</small>
+      </div>
+      <div
+        id={placementId}
+        className="home-ad-slot public-ad-slot-horizontal"
+        data-ad-client="ca-pub-6245185799932586"
+      >
+        <div className="home-ad-placeholder" aria-hidden="true">
+          <span>Werbefläche</span>
+          <small>Google AdSense</small>
+        </div>
+      </div>
+      <p>Werbung unterstützt den Betrieb des Webpanels.</p>
+    </aside>
+  );
+}
+
 function formatGuildClickCount(value: number): string {
   return `${guildCounterNumber.format(value)} ${value === 1 ? "Klick" : "Klicks"}`;
 }
@@ -4691,7 +4735,9 @@ function DiscordClickerPage() {
   return (
     <div className="app-shell">
       <TopNav />
-      <main className="counter-page">
+      <main className="public-ad-page-layout">
+        <AdvertisementRail placementId="google-adsense-discord-clicker-left" />
+        <div className="counter-page public-ad-page-content">
         <section className="counter-hero reveal-card">
           <div className="counter-hero-copy">
             <p className="eyebrow"><MousePointerClick size={15} /> Community Klick-Wettbewerb</p>
@@ -4812,6 +4858,8 @@ function DiscordClickerPage() {
           <ShieldCheck size={14} />
           Öffentlich sind ausschließlich Guild-Name, Icon, Server-ID und aggregierte Klickzahlen. Mitglieder und Einstellungen bleiben privat.
         </p>
+        <AdvertisementBanner placementId="google-adsense-discord-clicker-bottom" />
+        </div>
       </main>
     </div>
   );
@@ -4855,7 +4903,9 @@ function CountingLeaderboardPage() {
   return (
     <div className="app-shell">
       <TopNav />
-      <main className="counter-page counting-board-page">
+      <main className="public-ad-page-layout">
+        <AdvertisementRail placementId="google-adsense-countings-left" />
+        <div className="counter-page counting-board-page public-ad-page-content">
         <section className="counter-hero counting-board-hero reveal-card">
           <div className="counter-hero-copy">
             <p className="eyebrow"><ListOrdered size={15} /> Community Counting</p>
@@ -5021,6 +5071,8 @@ function CountingLeaderboardPage() {
           <ShieldCheck size={14} />
           Öffentlich sind nur Anzeigename, Discord-Avatar und zusammengefasste Counting-Werte. Nachrichteninhalte und private Servereinstellungen werden nicht veröffentlicht.
         </p>
+        <AdvertisementBanner placementId="google-adsense-countings-bottom" />
+        </div>
       </main>
     </div>
   );
@@ -5077,23 +5129,7 @@ function HomePage() {
     <div className="app-shell">
       <TopNav user={me.data?.user} />
       <main className="home-page-layout">
-        <aside className="home-ad-rail" aria-label="Werbung">
-          <div className="home-ad-rail-head">
-            <span>Werbung</span>
-            <small>Anzeige</small>
-          </div>
-          <div
-            id="google-adsense-left-rail"
-            className="home-ad-slot"
-            data-ad-client="ca-pub-6245185799932586"
-          >
-            <div className="home-ad-placeholder" aria-hidden="true">
-              <span>Werbefläche</span>
-              <small>Google AdSense</small>
-            </div>
-          </div>
-          <p>Werbung unterstützt den Betrieb des Webpanels.</p>
-        </aside>
+        <AdvertisementRail placementId="google-adsense-left-rail" />
 
         <div className="home-page-content">
         <section className="home-hero reveal-card">

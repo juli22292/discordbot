@@ -2172,6 +2172,24 @@ b {
   padding: 34px 0 72px;
 }
 
+.public-ad-page-layout {
+  width: min(1928px, calc(100vw - 48px));
+  display: grid;
+  grid-template-columns: 316px minmax(0, 1180px) minmax(0, 1fr);
+  column-gap: clamp(28px, 2.55vw, 49px);
+  align-items: start;
+  margin: 0 auto;
+  padding: 34px 0 72px;
+}
+
+.public-ad-page-content {
+  width: auto;
+  min-width: 0;
+  grid-column: 2;
+  margin: 0;
+  padding: 0;
+}
+
 .counter-hero {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 330px;
@@ -2821,6 +2839,42 @@ b {
 }
 
 .home-ad-rail > p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.45;
+  text-align: center;
+}
+
+.public-ad-banner {
+  min-height: 126px;
+  display: grid;
+  grid-template-columns: 112px minmax(0, 1fr) 168px;
+  align-items: stretch;
+  gap: 12px;
+  margin-top: 20px;
+  padding: 12px;
+  overflow: hidden;
+  border: 1px solid var(--border-soft);
+  border-radius: 8px;
+  background:
+    linear-gradient(110deg, rgba(104, 168, 255, 0.055), transparent 42%),
+    rgba(8, 12, 20, 0.72);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.035);
+}
+
+.public-ad-banner .home-ad-rail-head {
+  align-self: center;
+  flex-direction: column;
+  justify-content: center;
+}
+
+.public-ad-slot-horizontal {
+  min-height: 100px;
+}
+
+.public-ad-banner > p {
+  align-self: center;
   margin: 0;
   color: var(--muted);
   font-size: 10px;
@@ -8955,6 +9009,7 @@ textarea {
 :root[data-theme="light"] .mobile-nav-menu,
 :root[data-theme="light"] .home-tools,
 :root[data-theme="light"] .home-ad-rail,
+:root[data-theme="light"] .public-ad-banner,
 :root[data-theme="light"] .home-filter-tabs button,
 :root[data-theme="light"] .guild-invite-diagnose,
 :root[data-theme="light"] .role-chip,
@@ -9405,7 +9460,14 @@ textarea {
     gap: 18px;
   }
 
+  .public-ad-page-layout {
+    width: min(1180px, calc(100vw - 32px));
+    grid-template-columns: minmax(0, 1fr);
+    gap: 18px;
+  }
+
   .home-page-content,
+  .public-ad-page-content,
   .home-ad-rail {
     grid-column: 1;
   }
@@ -9461,7 +9523,8 @@ textarea {
     gap: 14px;
   }
 
-  .home-page-layout {
+  .home-page-layout,
+  .public-ad-page-layout {
     width: min(calc(100% - 24px), 1080px);
     padding: 18px 0 64px;
   }
@@ -9480,6 +9543,28 @@ textarea {
   }
 
   .home-ad-rail > p {
+    display: none;
+  }
+
+  .public-ad-banner {
+    min-height: 132px;
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto minmax(0, 1fr);
+    gap: 8px;
+    padding: 10px;
+  }
+
+  .public-ad-banner .home-ad-rail-head {
+    align-self: auto;
+    flex-direction: row;
+    justify-content: space-between;
+  }
+
+  .public-ad-slot-horizontal {
+    min-height: 78px;
+  }
+
+  .public-ad-banner > p {
     display: none;
   }
 
